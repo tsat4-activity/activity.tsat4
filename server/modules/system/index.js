@@ -162,6 +162,13 @@ export default defineModule({
         if (filters.length) query = query.or(filters.join(','));
       }
       const { data, error, count } = await query;
+      // mt_main_user.department is read only: it follows the employee (FK mt_main_user_employee_id_fkey), not a copy
+      if (!error && req.params.name === 'mt_main_user' && data?.length) {
+        const ids = data.map((row) => row.employee_id);
+        const { data: people } = await mx.from('mt_main_employee').select('employee_id,department').in('employee_id', ids);
+        const dept = new Map((people || []).map((p) => [p.employee_id, p.department]));
+        data.forEach((row) => { row.department = dept.get(row.employee_id) ?? row.department; });
+      }
       if (error?.code === 'PGRST205') return fail(res, 400, `ยังไม่มีตาราง ${req.params.name} ในฐานข้อมูล ต้องรัน SQL สร้างตารางก่อน`);
       if (error?.code === '42703') return fail(res, 400, `ตาราง ${req.params.name} ยังไม่มีคอลัมน์ใหม่ ต้องรัน SQL ใน db/ ก่อน (mt_main_*: db/00_main.sql ในฐาน MX · ตารางกิจกรรม: db/act/<กิจกรรม>.sql)`);
       if (error) return fail(res, 400, 'อ่านตารางไม่ได้');

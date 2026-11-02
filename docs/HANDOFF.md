@@ -18,6 +18,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Claude [5S] · FK employee_id → mt_main_employee ใน mt_<act>_team และ owner_id ใน mt_<act>_task (NOT VALID, สร้างเมื่อ mt_main_* อยู่ฐานเดียวกัน) · System > mt_main_user แสดงหน่วยงานจากข้อมูลพนักงาน · สิทธิ์ผู้ใช้ใน inbox/users_access.sql (ผู้ใช้รัน) · ต้องรัน db/act/*.sql ใหม่
+
 - 2026-11-01 · Antigravity [SMF] · เพิ่มระบบบันทึกเป้าหมาย (target) และผลงาน (actual) รายเดือนของโครงการ SMF: ตาราง `tx_smf_project_month` (project_id, month 1..12, target, actual, note) · API GET/PUT `/api/act/:activity/project-months` · หน้า Transaction (`smf-edit`) ตาราง 12 เดือนคำนวณผลต่างและ % บรรลุแบบเรียลไทม์ พร้อมปุ่มคัดลอกเป้าหมายเดือนที่ 1 ไปทุกเดือน · Setting > โครงการ กำหนด KPI และหน่วยได้ · Dashboard แสดงผลงาน KPI ล่าสุดต่อโครงการ · **ผู้ใช้ต้องรัน db/act/smf.sql ใน Tx Data**
 
 - 2026-11-01 · Claude [5S] · CFO Setting > Emission Factor แยก 5 ตาราง: EF ที่ใช้คำนวณ · GWP (เพิ่ม/แก้/ลบ) · EF พลังงาน · GWP สารเคมี · EF IPCC (`mt_cfo_ef_ref` + seed 204 แถวจากแผ่น EF TGO AR5 V2) · ผู้ใช้ต้องรัน db/act/cfo.sql แล้ว db/act/cfo_ef_ref_seed.sql

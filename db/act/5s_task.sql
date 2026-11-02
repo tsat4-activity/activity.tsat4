@@ -24,6 +24,12 @@ create table if not exists public.mt_5s_task (
   constraint mt_5s_task_sub_has_dates check (parent_id is null or start_date is not null)
 );
 create index if not exists mt_5s_task_year on public.mt_5s_task (year, parent_id, sort_no);
+-- owner_id → mt_main_employee when both are in one database (เหมือน team) · NOT VALID: แผนเดิมไม่ถูกตรวจซ้ำ
+do $$ begin
+  if to_regclass('public.mt_main_employee') is not null and not exists (select 1 from pg_constraint where conname = 'mt_5s_task_owner_fkey') then
+    alter table public.mt_5s_task add constraint mt_5s_task_owner_fkey foreign key (owner_id) references public.mt_main_employee (employee_id) on update cascade on delete set null not valid;
+  end if;
+end $$;
 -- วันที่ทำครบ 100% (server ใส่ให้) ใช้บอกเสร็จก่อนแผน / ตามแผน / ช้า เทียบกับ end_date · เพิ่มทีหลัง จึงใช้ add column (รันซ้ำได้)
 alter table public.mt_5s_task add column if not exists done_on date;
 -- โครงการ / ทีมย่อยของข้อหลัก (SMF: mt_smf_project.code) · ข้อรองตามข้อหลัก (ผู้ใช้กำหนด 2026-11-01)

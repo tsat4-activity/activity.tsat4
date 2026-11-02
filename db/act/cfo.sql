@@ -34,6 +34,13 @@ alter table public.mt_cfo_team
   add constraint mt_cfo_team_member_has_dept check (case when role = 'member' then department is not null or unit is not null else department is null end),
   add constraint mt_cfo_team_unique unique nulls not distinct (year, employee_id, role, unit, team, area_id, department);
 create index if not exists mt_cfo_team_lookup on public.mt_cfo_team (year, employee_id);
+-- employee_id → mt_main_employee when both are in one database (MX = TX = activity01, ผู้ใช้กำหนด 2026-11-02)
+-- NOT VALID: rows saved earlier are not re-checked, new rows must be a real employee · skipped where mt_main_* is elsewhere
+do $$ begin
+  if to_regclass('public.mt_main_employee') is not null and not exists (select 1 from pg_constraint where conname = 'mt_cfo_team_employee_fkey') then
+    alter table public.mt_cfo_team add constraint mt_cfo_team_employee_fkey foreign key (employee_id) references public.mt_main_employee (employee_id) on update cascade not valid;
+  end if;
+end $$;
 create unique index if not exists mt_cfo_team_one_owner on public.mt_cfo_team (year, area_id) where role = 'owner';
 
 create table if not exists public.mt_cfo_setting (

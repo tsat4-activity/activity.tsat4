@@ -34,6 +34,13 @@ alter table public.mt_5s_team
   add constraint mt_5s_team_member_has_dept check (case when role = 'member' then department is not null or unit is not null else department is null end),
   add constraint mt_5s_team_unique unique nulls not distinct (year, employee_id, role, unit, team, area_id, department);
 create index if not exists mt_5s_team_lookup on public.mt_5s_team (year, employee_id);
+-- employee_id → mt_main_employee when both are in one database (MX = TX = activity01, ผู้ใช้กำหนด 2026-11-02)
+-- NOT VALID: rows saved earlier are not re-checked, new rows must be a real employee · skipped where mt_main_* is elsewhere
+do $$ begin
+  if to_regclass('public.mt_main_employee') is not null and not exists (select 1 from pg_constraint where conname = 'mt_5s_team_employee_fkey') then
+    alter table public.mt_5s_team add constraint mt_5s_team_employee_fkey foreign key (employee_id) references public.mt_main_employee (employee_id) on update cascade not valid;
+  end if;
+end $$;
 create unique index if not exists mt_5s_team_one_owner on public.mt_5s_team (year, area_id) where role = 'owner';
 
 create table if not exists public.mt_5s_setting (
@@ -74,6 +81,12 @@ create table if not exists public.mt_5s_task (
   constraint mt_5s_task_sub_has_dates check (parent_id is null or start_date is not null)
 );
 create index if not exists mt_5s_task_year on public.mt_5s_task (year, parent_id, sort_no);
+-- owner_id → mt_main_employee when both are in one database (เหมือน team) · NOT VALID: แผนเดิมไม่ถูกตรวจซ้ำ
+do $$ begin
+  if to_regclass('public.mt_main_employee') is not null and not exists (select 1 from pg_constraint where conname = 'mt_5s_task_owner_fkey') then
+    alter table public.mt_5s_task add constraint mt_5s_task_owner_fkey foreign key (owner_id) references public.mt_main_employee (employee_id) on update cascade on delete set null not valid;
+  end if;
+end $$;
 -- วันที่ทำครบ 100% (server ใส่ให้) ใช้บอกเสร็จก่อนแผน / ตามแผน / ช้า เทียบกับ end_date · เพิ่มทีหลัง จึงใช้ add column (รันซ้ำได้)
 alter table public.mt_5s_task add column if not exists done_on date;
 -- โครงการ / ทีมย่อยของข้อหลัก (SMF: mt_smf_project.code) · ข้อรองตามข้อหลัก (ผู้ใช้กำหนด 2026-11-01)
