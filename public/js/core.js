@@ -624,7 +624,13 @@ const DASH_ROW_MAX = 44;
     if (free < 24) return;
     // Other pages (Transaction / Setting lists): the main table frame reaches the bottom of the page.
     if (!document.body.dataset.dash) {
-      if (sheet && sheet.offsetParent) sheet.style.minHeight = `${Math.floor(sheet.getBoundingClientRect().height + free)}px`;
+      if (sheet && sheet.offsetParent) {
+        sheet.style.minHeight = `${Math.floor(sheet.getBoundingClientRect().height + free)}px`;
+        // a margin that escapes the last block (e.g. the note under the table) is not in its rect: take back what
+        // overflows, so the page itself never scrolls and only the table frame has a scrollbar (ผู้ใช้กำหนด 2026-11-02)
+        const over = box.scrollHeight - box.clientHeight;
+        if (over > 0) sheet.style.minHeight = `${Math.floor(sheet.getBoundingClientRect().height - over)}px`;
+      }
       return;
     }
     if (!plots.length && !dashTables.length) return;
