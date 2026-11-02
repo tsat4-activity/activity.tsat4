@@ -734,6 +734,8 @@ export function mountCfo(app) {
     const current = must(await tx.from(t.activity).select('*').eq('id', Number(req.params.id)).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบกิจกรรม');
     must(await tx.from(t.activity).update(row).eq('id', current.id));
+    // a 3-3 line added to an activity also counts for the months already recorded without one (ผู้ใช้กำหนด 2026-11-03)
+    if (row.ef3_id && row.ef3_id !== current.ef3_id) must(await tx.from(t.entry).update({ ef3_id: row.ef3_id }).eq('activity_id', current.id).is('ef3_id', null));
     await logRev(t, req, 'กิจกรรม', `${current.department} · ${current.name}`, changes(current, row, Object.keys(row)));
     res.json({ ok: true });
   });

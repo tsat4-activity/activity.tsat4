@@ -433,9 +433,9 @@ const APL_DASH_TABS = { schedule: 'Schedule', team: 'Team' };
 // SMF Dashboard opens on ภาพรวม of its own projects of the year (Smart OEE, Vision Camera, Work Flow Automation);
 // the overview of every activity (5S · CFO · SMF) is the home page (ผู้ใช้กำหนด 2026-11-01).
 const APL_DASH_TABS_OF = { smf: { overview: 'ภาพรวม', ...APL_DASH_TABS } };
-const APL_SET_TABS = { team: 'ทีม', plan: 'แผนงาน' };
+const APL_SET_TABS = { team: 'Team', plan: 'Plan' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 // SMF: its projects of the year come between ทีม and แผนงาน (ผู้ใช้กำหนด 2026-11-01)
-const APL_SET_TABS_OF = { smf: { team: 'ทีม', project: 'โครงการ', plan: 'แผนงาน' } };
+const APL_SET_TABS_OF = { smf: { team: 'Team', project: 'Project', plan: 'Plan' } };
 const APL_PROJECTS_ON = ['smf'];
 const APL_ROLE_LABEL = { ...ACT_TEAM_ROLES, auditor: 'ผู้ตรวจประเมิน' };
 // Team per activity (ผู้ใช้กำหนด 2026-10-29, docs/specs/act-teams.md); others use APL_ROLE_LABEL.

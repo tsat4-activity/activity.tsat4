@@ -19,7 +19,7 @@ const a5RolesOf = (unit) => ['chairman', 'vice', 'advisor', 'admin', ...(unit ==
 const A5_UNITS_OF = { '5s': A5_UNITS };
 const A5_DASH_TABS = { summary: 'Summary', ranking: 'Ranking', schedule: 'Schedule', audit: 'Audit Plan', team: 'Team' };
 // Setting tabs: ทีม, แผนงาน, then the activity's own tables (ผู้ใช้กำหนด 2026-10-29)
-const A5_SET_TABS = { team: 'ทีม', gantt: 'แผนงาน', areas: 'พื้นที่', checklist: 'หัวข้อตรวจ', plan: 'แผนตรวจ' };
+const A5_SET_TABS = { team: 'Team', gantt: 'Plan', areas: 'Areas', checklist: 'Checklist', plan: 'Audit plan' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 let a5Year = new Date().getFullYear();
 let a5DashTab = 'summary';
 let a5SetTab = 'team';

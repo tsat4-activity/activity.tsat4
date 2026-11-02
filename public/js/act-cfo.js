@@ -8,7 +8,7 @@ const CFO_SCOPE_COLORS = CHART_THEMES.cool.series.slice(0, 3);
 const CFO_BASE_COLORS = CHART_THEMES.cool.base;
 const CFO_ROLE_LABEL = { ...ACT_TEAM_ROLES, admin: 'ผู้ประสานงาน (ผู้จัดทำ)', member: 'สมาชิก (ตัวแทนหน่วยงาน)' }; // TGO forms call the coordinator ผู้จัดทำ
 const CFO_DASH_TABS = { summary: 'Summary', scope: 'Scope', usage: 'Usage (SAP)', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
-const CFO_SET_TABS = { team: 'ทีม', activities: 'กิจกรรม', ef: 'Emission Factor', material: 'วัสดุ (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'บริษัท' };
+const CFO_SET_TABS = { team: 'Team', activities: 'Activities', ef: 'Emission Factor', material: 'Materials (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'Company' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 // TGO Fr-03.2 weighted criteria (server s3Rule, ผู้ใช้กำหนด 2026-11-02): level 1–5 per issue · Magnitude comes from the data
 const CFO_S3_LEVELS = [
   ['magnitude', 'Magnitude', '% GHG ของหมวด เทียบ Scope 1+2+3 (ระบบคิดจากข้อมูลจริง)'],
@@ -958,7 +958,11 @@ function cfoSetActivities(body, m, rerender) {
       const [kind, id] = $('cfo-a-ef').value.split(':');
       const unit = kind === 'ref' ? m.refs.find((r) => String(r.id) === id)?.unit : kind === 'ef' ? current?.unit : null;
       const type = $('cfo-a-type').value;
-      const show = (type === '1' && $('cfo-a-calc').value !== 'septic' && ['1-1', '1-2'].includes($('cfo-a-scope').value)) || type === '2';
+      // Scope 3 fuel too (รถผู้บริหาร 3-6 ใช้ B7 / E85, ผู้ใช้กำหนด 2026-11-03): the fuel bought also has its 3-3 การได้มาของเชื้อเพลิง
+      const mainRef = kind === 'ref' ? m.refs.find((r) => String(r.id) === id) : null;
+      const fuel = mainRef ? mainRef.sheet === 'energy' && mainRef.grp !== 'Electricity' : kind === 'ef' && current?.source_type === 'tgo' && current?.kind !== 'Electricity' && !current?.hfc;
+      const show = (type === '1' && $('cfo-a-calc').value !== 'septic' && ['1-1', '1-2'].includes($('cfo-a-scope').value)) || type === '2'
+        || (type === '3' && $('cfo-a-scope').value !== '3-3' && fuel);
       $('cfo-a-up').hidden = !show;
       if (!show) return;
       const box = $('cfo-a-ef3');
@@ -969,9 +973,10 @@ function cfoSetActivities(body, m, rerender) {
       const groups = unit ? cfoEfGroups((r) => (r.sheet === 'cfp' || r.sheet === 'energy') && !cfoBio(r) && fits(r) && r.id !== Number(id)) : '';
       box.innerHTML = `<option value="">- ไม่คิด 3-3 -</option>${own ? `<optgroup label="EF ที่ใช้อยู่"><option value="ef:${own.id}">${esc(cfoEfLabel(own))}</option></optgroup>` : ''}${groups}`;
       if (keep && box.querySelector(`option[value="${keep}"]`)) box.value = keep;
-      else if (kind === 'ref') {
-        // grid mix "(CFO Scope2)" → its "SCOPE 3" row of the same years (e.g. 2022-2024: 0.475 → 0.0812)
-        const main = m.refs.find((r) => String(r.id) === id);
+      else if (kind === 'ref' || (kind === 'ef' && !a?.ef3_id)) {
+        // grid mix "(CFO Scope2)" → its "SCOPE 3" row of the same years (e.g. 2022-2024: 0.475 → 0.0812) · an activity saved
+        // before 3-3 existed (EF copy) gets the same pick through its reference row, so opening it and saving adds 3-3
+        const main = kind === 'ref' ? m.refs.find((r) => String(r.id) === id) : m.refs.find((r) => r.id === current?.ref_id);
         const years = /ปี (\d{4}-\d{4})/.exec(main?.name || '')?.[1];
         const pair = years && m.refs.find((r) => r.sheet === main.sheet && r.grp === main.grp && r.name.includes(years) && /SCOPE 3/i.test(r.name));
         if (pair && box.querySelector(`option[value="ref:${pair.id}"]`)) box.value = `ref:${pair.id}`;
