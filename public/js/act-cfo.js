@@ -616,7 +616,7 @@ async function cfoEntries(target) {
   const scope = Number(cfoTx.scope) || 1;
   const all = d.rows.filter((r) => String(r.scope_code || '').startsWith(`${scope}-`));
   const categories = [...new Set(all.map((r) => r.category))];
-  if (!categories.includes(cfoTx.category)) cfoTx.category = '';
+  if (!categories.includes(cfoTx.category) && cfoTx.category !== 'Usage (SAP)') cfoTx.category = '';
   const inCategory = all.filter((r) => !cfoTx.category || r.category === cfoTx.category);
   if (!inCategory.some((r) => String(r.id) === cfoTx.activity)) cfoTx.activity = '';
   const list = inCategory.filter((r) => !cfoTx.activity || String(r.id) === cfoTx.activity);
@@ -629,6 +629,16 @@ async function cfoEntries(target) {
     return e ? `<span class="badge ${e.status === 'CONFIRMED' ? 'badge-success' : 'badge-warning'}">${e.status === 'CONFIRMED' ? 'ยืนยันแล้ว' : 'ร่าง'}</span>` : '<span class="sum-meta">ยังไม่บันทึก</span>';
   };
   const groups = [...new Set(list.map((r) => r.category))];
+  // Scope 3: SAP Usage by section (read only, from Setting > วัสดุ) · bar = share of the Usage tCO2e · biggest first
+  const USAGE = 'Usage (SAP)';
+  const usage = scope === 3 && (!cfoTx.category || cfoTx.category === USAGE) && !cfoTx.activity
+    ? d.materials.map((x) => ({ ...x, value: m ? Number(x.months[m] || 0) : x.tco2e, items: m ? x.items[m] || 0 : Math.max(0, ...Object.values(x.items)) })).filter((x) => x.value > 0).sort((a, b) => b.value - a.value) : [];
+  const usageTotal = usage.reduce((sum, x) => sum + x.value, 0);
+  const usageRows = usage.length ? `<tr class="cfo-group"><td colspan="10">${USAGE} · ตาม Section</td></tr>${usage.map((x) => {
+    const share = usageTotal ? Math.round((x.value / usageTotal) * 100) : 0;
+    return `<tr><td>${USAGE}</td><td>${esc(x.department)}</td><td>${x.items.toLocaleString()} รายการ</td><td class="num">-</td>
+      <td><div class="cfo-prog" title="สัดส่วนของ Usage ทั้งหมด"><span><i style="width:${share}%"></i></span>${share}%</div></td><td class="num"></td><td></td><td class="num">${cfoT(x.value)}</td><td><span class="sum-meta">SAP</span></td><td></td></tr>`;
+  }).join('')}` : '';
   const row = (r) => `<tr data-pick="${r.id}"${r.canEdit ? '' : ' class="is-muted"'}><td>${esc(r.name)}</td><td>${esc(r.detail || '')}</td><td>${esc(r.source || '')}</td><td class="num">${r.kgco2e == null ? '-' : cfoT(r.kgco2e)}</td>
     <td><div class="cfo-prog"><span><i style="width:${r.percent}%"></i></span>${r.percent}%<b class="cfo-freq" title="รายเดือน">M</b></div></td>
     <td class="num">${cfoT(value(r, 'qty'))}</td><td>${esc(r.unit || '')}</td><td class="num">${cfoT(value(r, 'tco2e'))}</td><td>${status(r)}</td>
@@ -637,13 +647,13 @@ async function cfoEntries(target) {
     <div class="toolbar a5-filters">
       ${field('Scope', `<select id="cfo-s-scope">${options(['1', '2', '3'], String(scope), (v) => `Scope ${v}`)}</select>`)}
       ${field('เดือน', `<select id="cfo-s-month">${options(['', ...Array.from({ length: 12 }, (_, i) => String(i + 1))], cfoTx.month, (v) => (v ? ACT_MONTHS[v - 1] : 'ทั้งปี'))}</select>`)}
-      ${field('category', `<select id="cfo-s-cat">${options(['', ...categories], cfoTx.category, (v) => v || 'ทั้งหมด')}</select>`)}
+      ${field('category', `<select id="cfo-s-cat">${options(['', ...categories, ...(scope === 3 && d.materials.length ? [USAGE] : [])], cfoTx.category, (v) => v || 'ทั้งหมด')}</select>`)}
       ${field('Activity', `<select id="cfo-s-act"><option value="">ทั้งหมด</option>${inCategory.map((r) => `<option value="${r.id}"${String(r.id) === cfoTx.activity ? ' selected' : ''}>${esc(r.name)} · ${esc(r.detail || '')}</option>`).join('')}</select>`)}
       <div class="action-bar">${button('cfo-record', 'บันทึกกิจกรรม', 'primary', 'disabled')}${d.admin ? `${button('cfo-confirm', confirmed ? 'เปิดให้แก้เดือนนี้' : 'ยืนยันเดือนนี้', 'secondary', m ? '' : 'disabled title="เลือกเดือนก่อน"')}${button('cfo-year', 'ปิดทั้งปี', 'secondary')}` : ''}</div>
     </div>
     <div class="table-wrap sheet" id="cfo-rows"><table class="mo-data-table cfo-scope-table"><thead><tr><th>Activity</th><th>Description</th><th>emission source</th><th class="num">kgCO₂e/unit</th><th>Progress</th><th class="num">Amount</th><th>Unit</th><th class="num">tCO₂e</th><th>สถานะ</th><th></th></tr></thead>
-      <tbody>${groups.map((g) => `<tr class="cfo-group"><td colspan="10">${esc(g)}</td></tr>${list.filter((r) => r.category === g).map(row).join('')}`).join('') || '<tr><td colspan="10" class="empty">ไม่มีกิจกรรม</td></tr>'}</tbody></table></div>
-    <p class="sum-meta">รวม ${cfoT(list.reduce((t, r) => t + value(r, 'tco2e'), 0))} tCO₂e · ${list.length} กิจกรรม${m ? ` · ${ACT_MONTHS[m - 1]} ${a5Year} บันทึกแล้ว ${list.filter((r) => r.byMonth[m]).length}` : ` · ปี ${a5Year}`}${a5Year === new Date().getFullYear() ? ` · เดือนนี้หน่วยงานคุณยังไม่บันทึก ${all.filter((r) => r.canEdit && !r.byMonth[new Date().getMonth() + 1]).length} กิจกรรม` : ''}</p>`;
+      <tbody>${(cfoTx.category === USAGE ? '' : groups.map((g) => `<tr class="cfo-group"><td colspan="10">${esc(g)}</td></tr>${list.filter((r) => r.category === g).map(row).join('')}`).join('')) + usageRows || '<tr><td colspan="10" class="empty">ไม่มีกิจกรรม</td></tr>'}</tbody></table></div>
+    <p class="sum-meta">รวม ${cfoT((cfoTx.category === USAGE ? 0 : list.reduce((t, r) => t + value(r, 'tco2e'), 0)) + usageTotal)} tCO₂e · ${list.length} กิจกรรม${usage.length ? ` + ${USAGE} ${usage.length} Section` : ''}${m ? ` · ${ACT_MONTHS[m - 1]} ${a5Year} บันทึกแล้ว ${list.filter((r) => r.byMonth[m]).length}` : ` · ปี ${a5Year}`}${a5Year === new Date().getFullYear() ? ` · เดือนนี้หน่วยงานคุณยังไม่บันทึก ${all.filter((r) => r.canEdit && !r.byMonth[new Date().getMonth() + 1]).length} กิจกรรม` : ''}</p>`;
   a5Lift(body);
   $('cfo-s-scope').onchange = () => { cfoTx.scope = $('cfo-s-scope').value; cfoTx.category = ''; cfoTx.activity = ''; rerender(); };
   $('cfo-s-month').onchange = () => { cfoTx.month = $('cfo-s-month').value; rerender(); };
@@ -1086,7 +1096,7 @@ const cfoMatFilter = { ef: '', kind: '', q: '' };
 // ประเภทวัสดุ (server MAT_KINDS): Usage = ของใช้สิ้นเปลือง (Store) · วัตถุดิบ · อื่นๆ
 const CFO_MAT_KINDS = { usage: 'Usage', raw: 'วัตถุดิบ', other: 'อื่นๆ' };
 async function cfoSetMaterial(body, m, rerender) {
-  const d = await a5Api(CFO, 'cfo/materials');
+  const d = await a5Api(CFO, `cfo/materials?year=${a5Year}`);
   const refs = new Map(m.refs.map((r) => [r.id, r]));
   const s3 = m.scopes.filter((sc) => sc.scope === 3).sort((x, y) => Number(x.code.split('-')[1]) - Number(y.code.split('-')[1]));
   const efOf = (row) => refs.get(row.ef_ref_id);
@@ -1119,8 +1129,11 @@ async function cfoSetMaterial(body, m, rerender) {
     </div>
     <div class="table-wrap sheet cfo-efgrid" id="cfo-rows"></div>
     <p class="sum-meta" id="cfo-mat-count"></p>
+    ${d.sections.length ? `<div class="cfo-mat-months"><strong class="plan-label">Usage ตาม Section ปี ${a5Year} (tCO₂e · มากไปน้อย)</strong>
+      <div class="table-wrap cfo-efgrid"><table class="mo-data-table"><thead><tr><th class="c-unit">Section</th>${ACT_MONTHS_SHORT.map((n) => `<th class="num">${esc(n)}</th>`).join('')}<th class="num">รวม</th><th class="num">%</th></tr></thead>
+      <tbody>${(() => { const all = d.sections.reduce((t, x) => t + x.tco2e, 0); return d.sections.map((x) => `<tr><td class="c-unit">${esc(x.department)}</td>${ACT_MONTHS.map((_, i) => `<td class="num">${x.months[i + 1] ? cfoT(x.months[i + 1]) : ''}</td>`).join('')}<td class="num"><b>${cfoT(x.tco2e)}</b></td><td class="num">${all ? Math.round((x.tco2e / all) * 100) : 0}%</td></tr>`).join(''); })()}</tbody></table></div></div>` : ''}
     <div class="cfo-mat-months"><strong class="plan-label">Usage ที่บันทึกแล้ว</strong>
-      ${months.length ? `<div class="table-wrap cfo-efgrid"><table class="mo-data-table"><thead><tr><th class="c-unit">เดือน</th><th class="num c-num">รายการ</th><th class="num c-num">tCO₂e</th>${d.admin ? '<th class="c-unit"></th>' : ''}</tr></thead>
+      ${months.length ? `<div class="table-wrap cfo-efgrid cfo-mat-saved"><table class="mo-data-table"><thead><tr><th class="c-unit">เดือน</th><th class="num c-num">รายการ</th><th class="num c-num">tCO₂e</th>${d.admin ? '<th class="c-unit"></th>' : ''}</tr></thead>
         <tbody>${months.map((x) => `<tr><td class="c-unit">${esc(x.month.slice(0, 7))}</td><td class="num c-num">${x.rows.toLocaleString()}</td><td class="num c-num">${cfoT(x.tco2e)}</td>${d.admin ? `<td class="c-unit"><button class="apl-link" type="button" data-mat-del="${esc(x.month.slice(0, 7))}">ลบเดือนนี้</button></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '<p class="sum-meta">ยังไม่มี กด "วาง Usage" แล้วคัดลอกจาก SAP มาวาง</p>'}</div>`;
   $('cfo-f-q').value = cfoMatFilter.q;
   draw();
@@ -1202,7 +1215,7 @@ async function cfoSetMaterial(body, m, rerender) {
     const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     openPopup('วาง Usage จาก SAP', `
       ${field('เดือน', `<input id="cfo-u-month" type="month" value="${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}">`)}
-      ${field('คัดลอกจาก Excel 4 คอลัมน์ตามลำดับ: Material · ปริมาณ · หน่วย · หน่วยงาน หรือ Cost center (มีหัวตารางได้)', '<textarea id="cfo-u-text" rows="8" placeholder="70053608&#9;12&#9;ROL&#9;QSM"></textarea>')}
+      ${field('คัดลอกจาก Excel ทั้งแผ่นพร้อมหัวตาราง (costcenter · material · unit · current) หรือ 4 คอลัมน์ Material · ปริมาณ · หน่วย · Cost center', '<textarea id="cfo-u-text" rows="8" placeholder="costcenter&#9;material&#9;material_description&#9;unit&#9;price&#9;currency&#9;total&#9;min&#9;current"></textarea>')}
       ${button('cfo-u-check', 'ตรวจ')}
       <div id="cfo-u-result" class="sum-meta">วางข้อมูลแล้วกด ตรวจ ก่อนบันทึก · บันทึกเดือนเดิมซ้ำ = แทนที่ทั้งเดือน</div>`, async () => {
       const r = await send(true);
@@ -1210,9 +1223,20 @@ async function cfoSetMaterial(body, m, rerender) {
       closePopup();
       rerender();
     }, 'บันทึกเดือนนี้');
-    const parse = () => $('cfo-u-text').value.replace(/\r/g, '').split('\n').map((line) => line.split('\t'))
-      .filter((c) => c[0]?.trim() && Number.isFinite(Number(String(c[1] ?? '').replace(/,/g, ''))) && String(c[1] ?? '').trim() !== '')
-      .map(([material, qty, unit, department]) => ({ material, qty, unit, department }));
+    // a header row picks the columns by name (SAP Usage sheet: costcenter · material · unit · current = ปริมาณ);
+    // without one the order is Material · ปริมาณ · หน่วย · หน่วยงาน / Cost center
+    const parse = () => {
+      const lines = $('cfo-u-text').value.replace(/\r/g, '').split('\n').filter((l) => l.trim()).map((l) => l.split('\t').map((c) => c.trim()));
+      const head = (lines[0] || []).map((c) => c.toLowerCase());
+      const at = (...names) => head.findIndex((h) => names.includes(h));
+      const col = head.includes('material')
+        ? { material: at('material'), qty: at('current', 'qty', 'quantity', 'usage', 'ปริมาณ'), unit: at('unit', 'bun', 'หน่วย'), department: at('costcenter', 'cost center', 'section', 'department', 'หน่วยงาน') }
+        : { material: 0, qty: 1, unit: 2, department: 3 };
+      if (col.qty < 0) throw new Error('ไม่พบคอลัมน์ปริมาณ (current / qty)');
+      const num = (v) => String(v ?? '').replace(/,/g, '');
+      return lines.slice(head.includes('material') ? 1 : 0).filter((c) => c[col.material] && num(c[col.qty]) !== '' && Number.isFinite(Number(num(c[col.qty]))))
+        .map((c) => ({ material: c[col.material].replace(/\.0+$/, ''), qty: num(c[col.qty]), unit: col.unit >= 0 ? c[col.unit] : '', department: col.department >= 0 ? String(c[col.department] || '').replace(/\.0+$/, '') : '' }));
+    };
     const send = async (save) => {
       const rows = parse();
       if (!rows.length) throw new Error('ยังไม่มีข้อมูล (คอลัมน์ 2 ต้องเป็นตัวเลข)');
@@ -1220,7 +1244,7 @@ async function cfoSetMaterial(body, m, rerender) {
     };
     const list = (title, part, extra) => (part.count ? `<details><summary>${title} ${part.count.toLocaleString()} รายการ</summary><ul class="cfo-u-list">${part.top.map((x) => `<li>${esc(x.material)} ${esc(x.name || '')} · ${cfoT(x.qty)} ${esc(x.unit || '')}${extra ? extra(x) : ''}${x.department ? ` · ${esc(x.department)}` : ''}</li>`).join('')}</ul></details>` : '');
     $('cfo-u-check').onclick = () => send(false).then((r) => {
-      $('cfo-u-result').innerHTML = `<b>${r.lines.toLocaleString()} บรรทัด → คิดได้ ${r.counted.toLocaleString()} รายการ = ${cfoT(r.tco2e)} tCO₂e</b>
+      $('cfo-u-result').innerHTML = `<b>${r.lines.toLocaleString()} บรรทัด → คิดได้ ${r.counted.toLocaleString()} รายการ = ${cfoT(r.tco2e)} tCO₂e</b>${r.skipped ? ` · ข้าม ${r.skipped.toLocaleString()} บรรทัดที่ปริมาณ 0 หรือติดลบ` : ''}
         ${list('ยังไม่มี EF (ไม่คิด)', r.noEf)}${list('หน่วยไม่ตรงกับที่จับคู่ (ไม่คิด)', r.unitWrong, (x) => ` (จับคู่ไว้ ${esc(x.sap_unit)})`)}${list('ไม่มีในรายการวัสดุ (ไม่คิด)', r.unknown)}`;
     }).catch(onErr);
   };

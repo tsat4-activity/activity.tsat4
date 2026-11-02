@@ -114,6 +114,21 @@ export function mountCfo(app) {
 
   // Every activity of a year with its months (Dashboard > Scope and transaction): months recorded / months due
   // (this year: up to this month) as TSATP4-CFO getScopeAccount, plus what this user may record (canEdit).
+  // SAP Usage per section × month (ผู้ใช้กำหนด 2026-11-02): section = department of the cost center · [] before db/act/cfo.sql
+  const usageBySection = async (t, year) => {
+    const list = await fetchAll(() => tx.from(t.materialUse).select('department,month,tco2e,material,kind').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`)).catch(() => []);
+    const out = {};
+    for (const u of list) {
+      const key = u.department || '(ไม่ระบุ)';
+      const sec = (out[key] = out[key] || { department: key, months: {}, items: {}, tco2e: 0 });
+      const mo = Number(u.month.slice(5, 7));
+      sec.months[mo] = Math.round(((sec.months[mo] || 0) + Number(u.tco2e)) * 1e6) / 1e6;
+      (sec.items[mo] = sec.items[mo] || new Set()).add(u.material);
+      sec.tco2e += Number(u.tco2e);
+    }
+    return Object.values(out).map((x) => ({ ...x, tco2e: Math.round(x.tco2e * 1e6) / 1e6, items: Object.fromEntries(Object.entries(x.items).map(([k, v]) => [k, v.size])) }))
+      .sort((a, b) => b.tco2e - a.tco2e);
+  };
   route('get', '/api/act/:activity/cfo/progress', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
@@ -140,6 +155,7 @@ export function mountCfo(app) {
       admin: access.admin,
       departments: access.departments,
       septic: Object.fromEntries(Object.entries(settings).filter(([k]) => k.startsWith('septic_'))),
+      materials: await usageBySection(t, year),
       rows: activities.filter((a) => a.status === 'Active' || entries.some((e) => e.activity_id === a.id)).map((a) => {
         const list = entries.filter((e) => e.activity_id === a.id);
         const months = [...new Set(list.map((e) => Number(e.month.slice(5, 7))))];
@@ -394,7 +410,7 @@ export function mountCfo(app) {
       m.tco2e += Number(u.tco2e);
       return acc;
     }, {})).map((m) => ({ ...m, tco2e: Math.round(m.tco2e * 1000) / 1000 }));
-    res.json({ admin: (await accessOf(req, activity, thisYear())).admin, rows, months });
+    res.json({ admin: (await accessOf(req, activity, thisYear())).admin, rows, months, sections: await usageBySection(t, yearOf(req.query.year) || thisYear()) });
   });
   // partial (grid paste): a blank cell keeps what the material already has, so pasting only EF + factor does not
   // wipe the SAP unit that the Usage check compares against
@@ -483,10 +499,12 @@ export function mountCfo(app) {
     const unitKey = (u) => String(u || '').trim().toUpperCase();
     // one line per department × material × unit
     const lines = new Map();
+    let skipped = 0;
     for (const r of input) {
       const code = matCode(r.material);
       const qty = Number(String(r.qty ?? '').replace(/,/g, ''));
       if (!code || !Number.isFinite(qty)) continue;
+      if (qty <= 0) { skipped += 1; continue; }
       const raw = text(r.department, 80);
       const department = raw ? dept.get(raw.toUpperCase()) || raw : null;
       const key = `${department}|${code}|${unitKey(r.unit)}`;
@@ -516,7 +534,7 @@ export function mountCfo(app) {
       for (let i = 0; i < counted.length; i += 500) must(await tx.from(t.materialUse).insert(counted.slice(i, i + 500)));
       await logRev(t, req, 'Usage วัสดุ (SAP)', month.slice(0, 7), `วาง Usage ${input.length} บรรทัด คิดได้ ${counted.length} รายการ ${total} tCO2e`);
     }
-    res.json({ ok: true, saved: req.body?.save === true, month, lines: lines.size, counted: counted.length, tco2e: total,
+    res.json({ ok: true, saved: req.body?.save === true, month, lines: lines.size, skipped, counted: counted.length, tco2e: total,
       noEf: { count: noEf.length, top: byQty(noEf) }, unknown: { count: unknown.length, top: byQty(unknown) }, unitWrong: { count: unitWrong.length, top: byQty(unitWrong) } });
   });
   route('delete', '/api/act/:activity/cfo/material-usage/:month', async (req, res, activity, t) => {

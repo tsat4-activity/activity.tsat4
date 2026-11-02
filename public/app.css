@@ -725,7 +725,7 @@ td.cfo-ref{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:no
 .cfo-reftab thead{position:sticky;top:0;z-index:5}.cfo-reftab thead th{position:static;height:auto;padding:4px 8px;text-align:center;white-space:nowrap}
 .cfo-reftab thead th.cfo-unit{font-size:11px;font-weight:500}
 /* Setting > วัสดุ (SAP): months saved + check result of a pasted Usage */
-.cfo-mat-months{margin-top:14px}.cfo-mat-months .table-wrap{max-width:560px}.cfo-u-list{max-height:180px;overflow:auto;margin:4px 0 8px;padding-left:18px}.cfo-paper{margin:4px 0 8px}
+.cfo-mat-months{margin-top:14px}.cfo-mat-months .cfo-mat-saved{max-width:560px}.cfo-u-list{max-height:180px;overflow:auto;margin:4px 0 8px;padding-left:18px}.cfo-paper{margin:4px 0 8px}
 .cfo-reftab .cfo-band td{background:color-mix(in srgb,var(--mo-primary) 10%,transparent);font-weight:700}
 .cfo-reftab .cfo-head{font-weight:600}.cfo-reftab .cfo-child{padding-left:26px}.cfo-reftab tr.is-muted td{opacity:.55}
 .cfo-inv .cfo-group td{background:var(--mo-surface-2);font-weight:600}.cfo-inv .cfo-sub-total td{font-weight:600;background:color-mix(in srgb,var(--mo-text-muted) 7%,var(--mo-surface))}
