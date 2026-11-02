@@ -431,7 +431,13 @@ function openPopup(title, body, onSave, saveLabel = 'บันทึก') {
   document.addEventListener('keydown', popupKey);
   $('popup-cancel').onclick = closePopup;
   node.addEventListener('click', (event) => { if (event.target === node) closePopup(); });
-  $('popup-save').onclick = () => Promise.resolve(onSave()).catch(onErr);
+  // one save at a time: a double click must not send it twice (audit 2026-11-03)
+  $('popup-save').onclick = async () => {
+    const save = $('popup-save');
+    if (save.disabled) return;
+    save.disabled = true;
+    try { await onSave(); } catch (err) { onErr(err); } finally { if (save.isConnected) save.disabled = false; }
+  };
   node.querySelector('input:not([readonly]):not([disabled]),select,textarea')?.focus();
 }
 
@@ -605,7 +611,7 @@ const DASH_ROW_MAX = 44;
       const rect = wrap.getBoundingClientRect();
       const after = Math.max(0, (box.lastElementChild || wrap).getBoundingClientRect().bottom - rect.bottom);
       const room = bottom - rect.top - after;
-      if (room >= 240 && wrap.scrollHeight > room + 2) wrap.style.maxHeight = `${Math.floor(room)}px`;
+      if (room >= 120 && wrap.scrollHeight > room + 2) wrap.style.maxHeight = `${Math.floor(room)}px`; // short screens too (audit 2026-11-03)
     });
   };
   const fit = () => {
@@ -739,7 +745,9 @@ const DMY = (() => {
       text.value = digits.length > 4 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}` : digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
       const iso = toIso(text.value);
       text.classList.toggle('is-bad', text.value.length === 10 && !iso);
-      if (!iso && text.value) return;
+      // a date typed half way is no date: the old value must not be saved silently (audit 2026-11-03) · no event until
+      // it is whole, so filters do not reload on every key
+      if (!iso && text.value) { valueOf.set.call(input, ''); return; }
       valueOf.set.call(input, iso || '');
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));

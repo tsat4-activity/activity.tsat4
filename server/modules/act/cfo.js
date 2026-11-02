@@ -120,6 +120,15 @@ export function mountCfo(app) {
     });
   });
 
+  // CFO master data (EF, activities, materials) has no year: the admin of this year, or of last year while this year's
+  // team is not set up yet (early January), may edit it (audit 2026-11-03)
+  const requireAdminNow = async (req, res, activity) => {
+    const now = thisYear();
+    if ((await accessOf(req, activity, now)).admin) return true;
+    if ((await accessOf(req, activity, now - 1)).admin) return true;
+    fail(res, 403, `แก้ได้เฉพาะ admin ของกิจกรรมนี้ปี ${now}`);
+    return null;
+  };
   // Every activity of a year with its months (Dashboard > Scope and transaction): months recorded / months due
   // (this year: up to this month) as TSATP4-CFO getScopeAccount, plus what this user may record (canEdit).
   // SAP Usage per section × month (ผู้ใช้กำหนด 2026-11-02): section = department of the cost center · [] before db/act/cfo.sql
@@ -314,7 +323,7 @@ export function mountCfo(app) {
     return must(u1).length + must(u2).length > 0;
   };
   route('post', '/api/act/:activity/cfo/gwp', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const { row, error } = gwpInput(req.body || {});
     if (error) return fail(res, 400, error);
     if (must(await tx.from(t.gwp).select('code').eq('code', row.code).maybeSingle())) return fail(res, 400, `มี GWP ${row.code} แล้ว`);
@@ -323,7 +332,7 @@ export function mountCfo(app) {
     res.status(201).json({ ok: true });
   });
   route('patch', '/api/act/:activity/cfo/gwp/:code', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const current = must(await tx.from(t.gwp).select('*').eq('code', req.params.code).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบ GWP');
     const { row, error } = gwpInput({ ...req.body, code: current.code });
@@ -334,7 +343,7 @@ export function mountCfo(app) {
     res.json({ ok: true });
   });
   route('delete', '/api/act/:activity/cfo/gwp/:code', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     if (await gwpUsed(t, req.params.code)) return fail(res, 400, 'GWP นี้ถูกใช้แล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
     const gone = must(await tx.from(t.gwp).delete().eq('code', req.params.code).select('code'));
     if (gone[0]) await logRev(t, req, 'GWP', gone[0].code, 'ลบ GWP');
@@ -367,7 +376,7 @@ export function mountCfo(app) {
   };
   const codeTaken = async (t, code, id) => code && must(await tx.from(t.efRef).select('id').eq('code', code)).some((r) => r.id !== id);
   route('post', '/api/act/:activity/cfo/ref', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const { row, error } = await refInput(t, req.body || {});
     if (error) return fail(res, 400, error);
     if (await codeTaken(t, row.code)) return fail(res, 400, `id ${row.code} มีอยู่แล้ว`);
@@ -380,7 +389,7 @@ export function mountCfo(app) {
     res.status(201).json({ ok: true });
   });
   route('patch', '/api/act/:activity/cfo/ref/:id', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const current = must(await tx.from(t.efRef).select('id,sort_no').eq('id', Number(req.params.id)).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบรายการ');
     const { row, error } = await refInput(t, req.body || {});
@@ -394,7 +403,7 @@ export function mountCfo(app) {
   // Import a reference table from Excel / CSV (ผู้ใช้กำหนด 2026-11-02): a row with id of this table = update, without id = add.
   // Every row is checked first; nothing is saved when one fails (the reply names the row numbers of the file).
   route('post', '/api/act/:activity/cfo/ref/import', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const sheet = REF_SHEETS.includes(req.body?.sheet) ? req.body.sheet : null;
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
     if (!sheet) return fail(res, 400, 'เลือกตาราง');
@@ -429,7 +438,7 @@ export function mountCfo(app) {
     res.json({ ok: true, saved: true, add: adds.length, update: updates.length });
   });
   route('delete', '/api/act/:activity/cfo/ref/:id', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     must(await tx.from(t.efRef).delete().eq('id', Number(req.params.id)));
     res.json({ ok: true });
   });
@@ -494,7 +503,7 @@ export function mountCfo(app) {
   };
   // Add or update many at once (grid paste): material · name · SAP unit · EF name · factor · category
   route('post', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [req.body || {}];
     const needRefs = list.some((b) => b.ef_name !== undefined && String(b.ef_name || '').trim());
     const [refs, existingList] = await Promise.all([
@@ -525,7 +534,7 @@ export function mountCfo(app) {
     res.status(201).json({ ok: true, count: list.length });
   });
   route('patch', '/api/act/:activity/cfo/materials/:material', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const current = must(await tx.from(t.material).select('*').eq('material', req.params.material).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบวัสดุ');
     const { row, error } = await matInput(t, { ...req.body, material: current.material });
@@ -536,7 +545,7 @@ export function mountCfo(app) {
     res.json({ ok: true });
   });
   route('delete', '/api/act/:activity/cfo/materials/:material', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     if (must(await tx.from(t.materialUse).select('id').eq('material', req.params.material).limit(1)).length) return fail(res, 400, 'วัสดุนี้มี Usage แล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
     must(await tx.from(t.material).delete().eq('material', req.params.material));
     res.json({ ok: true });
@@ -545,7 +554,7 @@ export function mountCfo(app) {
   // Usage of one month pasted from SAP: rows [{ material, qty, unit, department }] (department may be a cost center).
   // save = false only checks: counted / unit not matching / no EF / not in the list. save = true replaces that month.
   route('post', '/api/act/:activity/cfo/material-usage', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const month = monthOf(req.body?.month);
     const input = Array.isArray(req.body?.rows) ? req.body.rows : [];
     if (!month) return fail(res, 400, 'เลือกเดือน');
@@ -645,7 +654,7 @@ export function mountCfo(app) {
       total: { tco2e: r6(list.reduce((s, r) => s + Number(r.tco2e), 0)), amount: r2(list.reduce((s, r) => s + Number(r.amount || 0), 0)), lines: list.length } });
   });
   route('delete', '/api/act/:activity/cfo/material-usage/:month', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const month = monthOf(req.params.month);
     if (!month) return fail(res, 400, 'เดือนไม่ถูกต้อง');
     must(await tx.from(t.materialUse).delete().eq('month', month));
@@ -729,7 +738,7 @@ export function mountCfo(app) {
     return { row };
   };
   route('post', '/api/act/:activity/cfo/activities', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const { row, error } = await activityInput(t, req.body || {});
     if (error) return fail(res, 400, error);
     must(await tx.from(t.activity).insert(row));
@@ -737,7 +746,7 @@ export function mountCfo(app) {
     res.status(201).json({ ok: true });
   });
   route('patch', '/api/act/:activity/cfo/activities/:id', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const { row, error } = await activityInput(t, req.body || {});
     if (error) return fail(res, 400, error);
     const current = must(await tx.from(t.activity).select('*').eq('id', Number(req.params.id)).maybeSingle());
@@ -755,7 +764,7 @@ export function mountCfo(app) {
   const fuelOf = (name) => (/diesel|ดีเซล|\bB\d+\b/i.test(name) ? 'Diesel' : /gasohol|gasoline|เบนซิน|โซฮอล|\bE\d+\b/i.test(name) ? 'Gasoline' : /LPG|ก๊าซหุงต้ม/i.test(name) ? 'LPG' : null);
   const litre = (u) => /^(l|liter|litre|ลิตร)$/i.test(String(u || '').trim());
   route('post', '/api/act/:activity/cfo/activities/fill-ef3', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const [acts, efs, refs] = await Promise.all([
       fetchAll(() => tx.from(t.activity).select('*').order('id')),
       fetchAll(() => tx.from(t.ef).select('*')),
@@ -788,7 +797,7 @@ export function mountCfo(app) {
     res.json({ ok: true, filled: done.length, skipped });
   });
   route('delete', '/api/act/:activity/cfo/activities/:id', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const id = Number(req.params.id);
     if (must(await tx.from(t.entry).select('id').eq('activity_id', id).limit(1)).length) return fail(res, 400, 'กิจกรรมนี้มีข้อมูลแล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
     const gone = must(await tx.from(t.activity).delete().eq('id', id).select('department,name'));
@@ -797,7 +806,7 @@ export function mountCfo(app) {
   });
 
   route('post', '/api/act/:activity/cfo/photo', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const slot = [1, 2].includes(Number(req.body?.slot)) ? Number(req.body.slot) : 0;
     const bytes = imageBytes(req.body?.image);
     if (!slot || !bytes) return fail(res, 400, 'รูปต้องเป็น JPEG ไม่เกิน 700 KB');
@@ -810,7 +819,7 @@ export function mountCfo(app) {
   });
 
   route('put', '/api/act/:activity/cfo/settings', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const rows = Object.entries(req.body || {}).filter(([k]) => settingKey(k)).map(([key, value]) => ({ key, value: String(value ?? '').trim().slice(0, 1000) }));
     if (!rows.length) return fail(res, 400, 'ไม่มีข้อมูลให้บันทึก');
     const before = await settingsOf(t);
@@ -973,7 +982,7 @@ export function mountCfo(app) {
     });
   });
   route('post', '/api/act/:activity/cfo/revisions', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    if (!(await requireAdminNow(req, res, activity))) return;
     const area = text(req.body?.area, 120);
     const detail = text(req.body?.detail, 2000);
     if (!area || !detail) return fail(res, 400, 'ระบุส่วนที่แก้และรายละเอียด');

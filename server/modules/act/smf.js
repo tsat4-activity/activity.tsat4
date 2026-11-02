@@ -110,7 +110,10 @@ export function mountSmf(app) {
     ]);
     const project = must(projectResult);
     if (!project) return fail(res, 404, 'ไม่พบโครงการ');
-    if (!access.admin && !access.member) return fail(res, 403, 'ไม่มีสิทธิ์บันทึกข้อมูลโครงการนี้');
+    // an SMF project is led by its own team (common.js accessOf): a member of another project may not write it (audit 2026-11-03)
+    const inProject = !access.admin && must(await tx.from(t.team).select('id').eq('year', year).eq('employee_id', req.user.employeeId)
+      .eq('status', 'Active').eq('unit', project.code).limit(1)).length > 0;
+    if (!access.admin && !inProject) return fail(res, 403, 'บันทึกได้เฉพาะ admin หรือทีมของโครงการนี้');
 
     const rawList = Array.isArray(req.body?.months) ? req.body.months : [req.body];
     const rows = [];

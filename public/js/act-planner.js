@@ -481,7 +481,7 @@ async function aplDrawOverview(body) {
     chartKpi({ label: 'Issue 5ส ที่ยังเปิด', value: ovNum(sumOf((p) => p.results?.openIssues)), unit: 'รายการ', icon: 'report', note: `เลยกำหนด ${ovNum(sumOf((p) => p.results?.overdueIssues))}`, color: CHART.series[1] }),
     chartKpi({ label: 'คนในทีมทุกโครงการ', value: ovNum(sumOf((p) => p.team?.people)), unit: 'คน', icon: 'groups', note: `ปี ${data.year} · คนเดียวอยู่หลายโครงการนับแยก`, color: CHART.series[3] })
   ].join('');
-  const row = (label, value) => `<div class="ov-row"><span>${label}</span><b>${value}</b></div>`;
+  const row = (label, value) => `<div class="ov-row"><span>${esc(label)}</span><b>${value}</b></div>`; // label = text (SMF project name)
   const section = (title, html) => `<div class="ov-sec"><div class="ov-sec-title">${title}</div>${html}</div>`;
   // SMF: one line per project of the year (progress bar · items · overdue · team)
   const projectHtml = (p) => {
@@ -836,7 +836,7 @@ async function aplDrawSmfOverview(body, activity) {
     chartKpi({ label: 'หัวข้อเลยกำหนด', value: ovNum(p.plan?.overdue), unit: 'รายการ', icon: 'event_busy', note: 'ทุกโครงการ', color: CHART.series[2] }),
     chartKpi({ label: 'คนในทีม', value: ovNum(p.team?.people), unit: 'คน', icon: 'groups', note: `คณะกรรมการ ${ovNum(p.team?.committee)} · Smart Team ${ovNum(p.team?.smart)}`, color: CHART.series[3] })
   ].join('');
-  const row = (label, value) => `<div class="ov-row"><span>${label}</span><b>${value}</b></div>`;
+  const row = (label, value) => `<div class="ov-row"><span>${esc(label)}</span><b>${value}</b></div>`; // label = text (SMF project name)
 
   const kpiSection = (u) => {
     const list = (pmData.months || []).filter((m) => m.project_id === u.id);

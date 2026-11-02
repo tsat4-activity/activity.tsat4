@@ -580,13 +580,19 @@ export function mountAudit(app) {
     throwIf(readError);
     if (!current) return fail(res, 404, 'ไม่พบหัวข้อ');
     if (!(await requireAdmin(req, res, activity, current.year))) return;
-    const used = await tx.from(tablesOf(activity).score).select('audit_id', { count: 'exact', head: true }).eq('checklist_id', current.id);
-    throwIf(used.error);
-    const { error } = used.count
+    // scores and issues both point at the item (FK): used by either = set Inactive, not delete (audit 2026-11-03)
+    const [scores, issues] = await Promise.all([
+      tx.from(tablesOf(activity).score).select('audit_id', { count: 'exact', head: true }).eq('checklist_id', current.id),
+      tx.from(tablesOf(activity).issue).select('id', { count: 'exact', head: true }).eq('checklist_id', current.id)
+    ]);
+    throwIf(scores.error);
+    throwIf(issues.error);
+    const used = (scores.count || 0) + (issues.count || 0);
+    const { error } = used
       ? await tx.from(tablesOf(activity).checklist).update({ status: 'Inactive' }).eq('id', current.id)
       : await tx.from(tablesOf(activity).checklist).delete().eq('id', current.id);
     throwIf(error);
-    res.json({ ok: true, inactive: Boolean(used.count) });
+    res.json({ ok: true, inactive: Boolean(used) });
   });
 
   // One cell of the committee plan: area x month x week. Empty team = remove the cell.
@@ -616,7 +622,8 @@ export function mountAudit(app) {
     const year = yearOf(req.body?.year);
     if (!year) return fail(res, 400, 'ระบุปีให้ถูกต้อง');
     const access = await accessOf(req, activity, year);
-    if (!access.admin && !access.chairman && !access.auditor && !access.member && !req.user?.creator) {
+    // admin / ประธาน only, as the page shows the button (act-5s.js canEditTarget) · audit 2026-11-03
+    if (!access.admin && !access.chairman && !req.user?.creator) {
       return fail(res, 403, `ไม่มีสิทธิ์ปรับเป้าหมายของกิจกรรมนี้ปี ${year}`);
     }
 

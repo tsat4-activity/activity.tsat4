@@ -14,8 +14,8 @@ export function mountAuth(app) {
 
   app.post('/api/login', wrap(async (req, res) => {
     if (!mx || !process.env.SESSION_SECRET) return fail(res, 503, 'ยังไม่ได้ตั้งค่าการเชื่อมฐานข้อมูล');
-    const employeeId = String(req.body.employeeId || '').trim();
-    const password = String(req.body.password || '');
+    const employeeId = String(req.body?.employeeId || '').trim();
+    const password = String(req.body?.password || '');
     const row = employeeId ? await loadUser(employeeId) : null;
     const match = row && await bcrypt.compare(password, row.password_hash);
     if (!row || row.status !== 'Active' || row.mt_main_employee?.status !== 'Active' || !match) {
@@ -35,8 +35,8 @@ export function mountAuth(app) {
   }));
 
   app.post('/api/password', wrap(requireUser), wrap(async (req, res) => {
-    const current = String(req.body.current || '');
-    const next = String(req.body.password || '');
+    const current = String(req.body?.current || '');
+    const next = String(req.body?.password || '');
     if (next.length < 8) return fail(res, 400, 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัว');
     if (!(await bcrypt.compare(current, req.userHash))) return fail(res, 401, 'รหัสผ่านเดิมไม่ถูกต้อง');
     if (await bcrypt.compare(next, req.userHash)) return fail(res, 400, 'รหัสผ่านใหม่ต้องไม่ซ้ำรหัสเดิม');
