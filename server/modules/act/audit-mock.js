@@ -154,6 +154,10 @@ export async function seed5sMockAudits(areas) {
     }
   }
 
+  // Clear existing 2026 audits (cascades to scores) and plans to avoid duplicate accumulations
+  await tx.from('tx_5s_audit').delete().eq('year', 2026);
+  await tx.from('mt_5s_audit_plan').delete().eq('year', 2026);
+
   // Upsert plans
   for (let i = 0; i < plans.length; i += 100) {
     const chunk = plans.slice(i, i + 100);

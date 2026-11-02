@@ -222,11 +222,14 @@ def generate_all():
     # Build SQL
     out = []
     out.append("-- Mock 5S Plans and Audits for 2026")
-    out.append("-- 1. Audit Plan (mt_5s_audit_plan): 3 rounds (Mar, Jun, Sep) x 34 areas scheduled in Weeks 1-4 with assigned teams A-I")
-    out.append("-- 2. Self Audit (tx_5s_audit): Months 1-11 (Jan-Nov), before 10th of each month, spread 82%-93% for all 34 areas")
-    out.append("-- 3. Committee Audit (tx_5s_audit): Months 3, 6, 9 (Mar, Jun, Sep), strictly following the audit plan weeks and teams, spread 82%-90%")
+    out.append("-- 1. Audit Plan (mt_5s_audit_plan): 3 rounds (Mar, Jun, Sep) x 34 areas scheduled in Weeks 1-4 with assigned teams A-I (102 rows total)")
+    out.append("-- 2. Self Audit (tx_5s_audit): Months 1-11 (Jan-Nov), before 10th of each month, spread 82%-93% for all 34 areas (34 per month = 374 rows)")
+    out.append("-- 3. Committee Audit (tx_5s_audit): Months 3, 6, 9 (Mar, Jun, Sep), strictly following the audit plan weeks and teams, spread 82%-90% (34 per month = 102 rows)")
     out.append("-- (December excluded per user request)")
     out.append("begin;\n")
+    out.append("-- Reset existing 2026 audits and plans to ensure exact counts (34 areas per month, no duplicates)")
+    out.append("delete from public.tx_5s_audit where year = 2026;")
+    out.append("delete from public.mt_5s_audit_plan where year = 2026;\n")
 
     # 1. Insert plans
     out.append("-- 1. Insert committee audit plan")
