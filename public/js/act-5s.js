@@ -182,23 +182,23 @@ async function a5DrawSummary(body, activity, me) {
     }, 50);
   };
   if ($('a5-target-btn')) $('a5-target-btn').onclick = () => editTarget('self');
-  if (canEditTarget) {
-    const plots = body.querySelectorAll('.ch-plot');
-    if (plots[0]) {
-      plots[0].querySelectorAll('.ch-target').forEach((el) => {
-        el.style.cursor = 'pointer';
-        el.title = `คลิกเพื่อปรับเป้าหมาย Self Audit ปี ${a5Year} (ปัจจุบัน ${passSelf}%)`;
-        el.onclick = () => editTarget('self');
-      });
-    }
-    if (plots[1]) {
-      plots[1].querySelectorAll('.ch-target').forEach((el) => {
-        el.style.cursor = 'pointer';
-        el.title = `คลิกเพื่อปรับเป้าหมาย Committee Audit ปี ${a5Year} (ปัจจุบัน ${passCommittee}%)`;
-        el.onclick = () => editTarget('comm');
-      });
-    }
-  }
+  const plots = body.querySelectorAll('.ch-plot');
+  plots.forEach((plot, idx) => {
+    const isComm = idx === 1;
+    const passVal = isComm ? passCommittee : passSelf;
+    const label = isComm ? 'Committee Audit' : 'Self Audit';
+    plot.querySelectorAll('.ch-target, .ch-target-line').forEach((el) => {
+      el.classList.add('is-clickable');
+      el.style.pointerEvents = 'auto';
+      el.style.cursor = 'pointer';
+      el.title = `คลิกเพื่อปรับเป้าหมาย ${label} ปี ${a5Year} (ปัจจุบัน ${passVal}%)`;
+      el.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        editTarget(isComm ? 'comm' : 'self');
+      };
+    });
+  });
   $('a5-type').onchange = () => { a5Summary.type = $('a5-type').value; redraw(); };
   $('a5-atype').onchange = () => { a5Summary.areaType = $('a5-atype').value; a5Summary.area = ''; redraw(); };
   $('a5-area').onchange = () => { a5Summary.area = $('a5-area').value; redraw(); };

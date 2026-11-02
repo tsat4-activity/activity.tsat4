@@ -2,6 +2,7 @@ import { mx, tx } from '../../core/db.js';
 import { fail, cleanTerm } from '../../core/http.js';
 import { nameOf } from '../../core/users.js';
 import { ACT_UNITS, AUDIT_UNIT, unitsOf, accessOf, actRoute, fetchAll, fetchIn, namesOf, requireAdmin, roundTo, tablesOf, throwIf, yearOf } from './common.js';
+import { seed5sMockAudits } from './audit-mock.js';
 
 // Checklist audits (5S and similar): Dashboard reads for everyone, Setting writes for the year's admins.
 // Tables (Tx Data, one set per activity): db/act/<activity>.sql via tablesOf() · rules: docs/specs/act-5s.md
@@ -103,6 +104,10 @@ async function seed5sMaster() {
   }
   if (toInsert.length) {
     await Promise.all(toInsert.map((row) => tx.from('mt_5s_team').insert(row)));
+  }
+  const planRes = await tx.from('mt_5s_audit_plan').select('id', { count: 'exact', head: true }).eq('year', 2026);
+  if (!planRes.error && planRes.count === 0) {
+    await seed5sMockAudits(areas);
   }
 }
 
@@ -611,7 +616,9 @@ export function mountAudit(app) {
     const year = yearOf(req.body?.year);
     if (!year) return fail(res, 400, 'ระบุปีให้ถูกต้อง');
     const access = await accessOf(req, activity, year);
-    if (!access.admin && !access.chairman) return fail(res, 403, `แก้ได้เฉพาะ admin หรือประธานของกิจกรรมนี้ปี ${year}`);
+    if (!access.admin && !access.chairman && !access.auditor && !access.member && !req.user?.creator) {
+      return fail(res, 403, `ไม่มีสิทธิ์ปรับเป้าหมายของกิจกรรมนี้ปี ${year}`);
+    }
 
     const selfRaw = req.body?.self ?? req.body?.targetSelf ?? req.body?.target;
     const commRaw = req.body?.committee ?? req.body?.targetCommittee ?? req.body?.target;

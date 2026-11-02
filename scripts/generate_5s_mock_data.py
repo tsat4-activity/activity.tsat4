@@ -4,7 +4,6 @@ from datetime import datetime
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# 34 Areas and their owners (from master_5s.xlsx / inbox/import_5s_setup.sql)
 AREAS = [
     ('A01', 'โรงงาน', 'HDF', '2103918'),
     ('A02', 'โรงงาน', 'SHOP DIE', '2103411'),
@@ -42,8 +41,7 @@ AREAS = [
     ('B15', 'สำนักงาน', 'WH,DEL', '2103433'),
 ]
 
-# Committee team assignments and auditors
-AREA_TEAM = {
+AREA_TEAMS = {
     'A01': ('H', ['2102901', '2103906']),
     'A02': ('D', ['2101990', '2103396']),
     'A03': ('D', ['2101990', '2103396']),
@@ -80,131 +78,179 @@ AREA_TEAM = {
     'B15': ('B', ['2102899']),
 }
 
-def generate_item_scores(target_total):
-    """Generate 25 scores between 1 and 5 that sum exactly to target_total."""
-    # Start with all 4s (sum = 100)
+# Assign each area to a week (1..4) for Committee audits
+WEEKS_BY_CODE = {code: (i % 4) + 1 for i, (code, *_) in enumerate(AREAS)}
+
+# Base averages per month to create natural spread across 82% - 93% (Self)
+# Month 1..11
+SELF_MONTH_BASE = [
+    84.6,  # Jan ~84-85%
+    87.2,  # Feb ~87%
+    90.5,  # Mar ~90-91%
+    83.5,  # Apr ~83-84%
+    91.8,  # May ~91-92%
+    88.4,  # Jun ~88%
+    85.2,  # Jul ~85%
+    92.5,  # Aug ~92-93%
+    87.6,  # Sep ~87-88%
+    84.2,  # Oct ~84%
+    89.8,  # Nov ~89-90%
+]
+
+# Committee rounds: 3 rounds (Month 3, 6, 9)
+# Spread across 82% - 90%
+COMM_ROUNDS = {
+    3: (1, 83.6),  # Mar (Round 1) ~83-84%
+    6: (2, 89.2),  # Jun (Round 2) ~89%
+    9: (3, 86.4),  # Sep (Round 3) ~86-87%
+}
+
+def generate_item_scores(target_total, rng):
     scores = [4] * 25
     diff = target_total - 100
+    indices = list(range(25))
+    rng.shuffle(indices)
     if diff > 0:
-        # Increase some 4s to 5s
-        indices = list(range(25))
-        random.shuffle(indices)
         for i in range(diff):
             scores[indices[i]] = 5
     elif diff < 0:
-        # Decrease some 4s to 3s
-        indices = list(range(25))
-        random.shuffle(indices)
         for i in range(abs(diff)):
             scores[indices[i]] = 3
-    # Add slight natural jitter if possible while keeping exact sum
-    for _ in range(random.randint(1, 3)):
+    # Add small jitter keeping sum exact
+    for _ in range(rng.randint(1, 3)):
         cand_plus = [i for i in range(25) if scores[i] < 5]
         cand_minus = [i for i in range(25) if scores[i] > 3]
         if cand_plus and cand_minus:
-            p = random.choice(cand_plus)
-            m = random.choice(cand_minus)
+            p = rng.choice(cand_plus)
+            m = rng.choice(cand_minus)
             if p != m:
                 scores[p] += 1
                 scores[m] -= 1
     assert sum(scores) == target_total
     return scores
 
-def generate_sql():
-    random.seed(20261102)
-    audits = [] # (audit_no, year, audit_type, code, team, auditors_sql, receivers_sql, audited_at, total, percent, result, status)
-    scores = [] # (audit_no, item_no, score)
+def generate_all():
+    rng = random.Random(20261102)
 
-    # 1. Self Audit: months 1 to 11 (January to November 2026)
-    # Taught: before 10th of the month, score 83% - 92% (total 104 to 115)
-    for m in range(1, 12):
+    plans = []   # (year, code, month, week, round, team)
+    audits = []  # (audit_no, year, audit_type, code, team, auditors_sql, receivers_sql, audited_at, total, percent, result, status)
+    scores = []  # (audit_no, item_no, score)
+
+    # 1. Committee Plans for months 3, 6, 9
+    for m, (round_no, base_pct) in COMM_ROUNDS.items():
         for code, area_type, name, owner in AREAS:
-            day = random.randint(4, 8)
-            hour = random.randint(9, 15)
-            minute = random.randint(5, 55)
-            second = random.randint(10, 50)
-            date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}+07"
+            team, aud_list = AREA_TEAMS[code]
+            week = WEEKS_BY_CODE[code]
+            plans.append((2026, code, m, week, round_no, team))
+
+    # 2. Self Audits: months 1 to 11
+    # Taught: before 10th of each month, spread 82% - 93%
+    for m_idx, base_pct in enumerate(SELF_MONTH_BASE):
+        m = m_idx + 1
+        for code_idx, (code, area_type, name, owner) in enumerate(AREAS):
+            day = 4 + (code_idx % 5)  # days 4, 5, 6, 7, 8 (all before 10th)
+            hour = 9 + (code_idx % 7)
+            minute = 10 + (code_idx * 7) % 45
+            date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:00+07"
             audit_no = f"S-{code}-{day:02d}{m:02d}26-01"
-            
-            # Target score between 83% and 92%: total between 104 and 115 (out of 125)
-            # 104 / 125 = 83.2%, 115 / 125 = 92.0%
-            total = random.randint(104, 115)
+
+            # Area variation around base_pct
+            # Clamp between 82.0% and 93.6% (103 to 117 points out of 125)
+            area_offset = (((code_idx * 17 + m * 7) % 11) - 5) * 0.7  # -3.5 to +3.5%
+            target_pct = min(93.6, max(82.4, base_pct + area_offset))
+            total = int(round((target_pct / 100.0) * 125))
+            total = min(117, max(103, total))
             pct = round((total / 125.0) * 100.0, 2)
-            result = 'PASS'
-            
+
             audits.append((
                 audit_no, 2026, 'SELF', code, 'null::text',
                 f"array['{owner}']::text[]", "'{}'::text[]",
-                f"'{date_str}'::timestamptz", total, pct, result, 'COMPLETED'
+                f"'{date_str}'::timestamptz", total, pct, 'PASS', 'COMPLETED'
             ))
-            
-            item_scores = generate_item_scores(total)
-            for item_no, sc in enumerate(item_scores, start=1):
-                scores.append((audit_no, item_no, sc))
 
-    # 2. Committee Audit: every 3 months starting from March (months 3, 6, 9)
-    # Taught: score 80% - 90% (total 100 to 112)
-    committee_months = [(3, 16, 22), (6, 16, 22), (9, 4, 8)]
-    for m, day_start, day_end in committee_months:
-        for code, area_type, name, owner in AREAS:
-            team, aud_list = AREA_TEAM.get(code, ('A', ['2103100']))
-            aud_sql = "array[" + ", ".join(f"'{x}'" for x in aud_list) + "]::text[]"
-            rec_sql = f"array['{owner}']::text[]"
-            day = random.randint(day_start, day_end)
-            hour = random.randint(9, 16)
-            minute = random.randint(5, 55)
-            second = random.randint(10, 50)
-            date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}+07"
+            item_sc = generate_item_scores(total, rng)
+            for it_no, sc in enumerate(item_sc, start=1):
+                scores.append((audit_no, it_no, sc))
+
+    # 3. Committee Audits: months 3, 6, 9
+    # Taught: spread 82% - 90%
+    for m, (round_no, base_pct) in COMM_ROUNDS.items():
+        for code_idx, (code, area_type, name, owner) in enumerate(AREAS):
+            team, aud_list = AREA_TEAMS[code]
+            week = WEEKS_BY_CODE[code]
+            # Day within week: Week 1: 2-6, Week 2: 9-13, Week 3: 16-20, Week 4: 23-27
+            day = (week - 1) * 7 + 2 + (code_idx % 5)
+            hour = 9 + (code_idx % 7)
+            minute = 10 + (code_idx * 11) % 45
+            date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:00+07"
             audit_no = f"C-{code}-{day:02d}{m:02d}26-01"
 
-            # Target score between 80% and 90%: total between 100 and 112 (out of 125)
-            # 100 / 125 = 80.0%, 112 / 125 = 89.6%
-            total = random.randint(100, 112)
+            area_offset = (((code_idx * 13 + m * 11) % 9) - 4) * 0.65  # -2.6 to +2.6%
+            target_pct = min(90.4, max(82.4, base_pct + area_offset))
+            total = int(round((target_pct / 100.0) * 125))
+            total = min(113, max(103, total))
             pct = round((total / 125.0) * 100.0, 2)
-            result = 'PASS'
+
+            aud_sql = "array[" + ", ".join(f"'{x}'" for x in aud_list) + "]::text[]"
+            rec_sql = f"array['{owner}']::text[]"
 
             audits.append((
                 audit_no, 2026, 'COMMITTEE', code, f"'{team}'::text",
                 aud_sql, rec_sql, f"'{date_str}'::timestamptz",
-                total, pct, result, 'COMPLETED'
+                total, pct, 'PASS', 'COMPLETED'
             ))
 
-            item_scores = generate_item_scores(total)
-            for item_no, sc in enumerate(item_scores, start=1):
-                scores.append((audit_no, item_no, sc))
+            item_sc = generate_item_scores(total, rng)
+            for it_no, sc in enumerate(item_sc, start=1):
+                scores.append((audit_no, it_no, sc))
 
-    print(f"Generated {len(audits)} audits ({len(scores)} item scores)")
+    # Stats
     self_audits = [a for a in audits if a[2] == 'SELF']
     comm_audits = [a for a in audits if a[2] == 'COMMITTEE']
-    self_avg = sum(a[9] for a in self_audits) / len(self_audits)
-    comm_avg = sum(a[9] for a in comm_audits) / len(comm_audits)
-    print(f"Self Audits: {len(self_audits)} rows · Avg: {self_avg:.2f}% (min {min(a[9] for a in self_audits)}%, max {max(a[9] for a in self_audits)}%)")
-    print(f"Committee Audits: {len(comm_audits)} rows · Avg: {comm_avg:.2f}% (min {min(a[9] for a in comm_audits)}%, max {max(a[9] for a in comm_audits)}%)")
+    print(f"Plans: {len(plans)} rows (months 3, 6, 9 x 34 areas)")
+    print(f"Self Audits: {len(self_audits)} rows · Min: {min(a[9] for a in self_audits)}% · Max: {max(a[9] for a in self_audits)}%")
+    print(f"Committee Audits: {len(comm_audits)} rows · Min: {min(a[9] for a in comm_audits)}% · Max: {max(a[9] for a in comm_audits)}%")
+    print("\nSelf monthly averages:")
+    for m in range(1, 12):
+        m_rows = [a for a in self_audits if f"-{m:02d}-" in a[7]]
+        print(f"  Month {m:2d}: {sum(a[9] for a in m_rows)/len(m_rows):.2f}% ({len(m_rows)} audits)")
+    print("\nCommittee monthly averages:")
+    for m in [3, 6, 9]:
+        m_rows = [a for a in comm_audits if f"-{m:02d}-" in a[7]]
+        print(f"  Month {m:2d}: {sum(a[9] for a in m_rows)/len(m_rows):.2f}% ({len(m_rows)} audits)")
 
-    # Format into SQL file
+    # Build SQL
     out = []
-    out.append("-- Mock 5S Audits for 2026")
-    out.append("-- Self Audit: Months 1-11 (Jan-Nov), before 10th of each month, score 83%-92% for all 34 areas")
-    out.append("-- Committee Audit: Months 3, 6, 9 (Mar, Jun, Sep), score 80%-90% for all 34 areas")
+    out.append("-- Mock 5S Plans and Audits for 2026")
+    out.append("-- 1. Audit Plan (mt_5s_audit_plan): 3 rounds (Mar, Jun, Sep) x 34 areas scheduled in Weeks 1-4 with assigned teams A-I")
+    out.append("-- 2. Self Audit (tx_5s_audit): Months 1-11 (Jan-Nov), before 10th of each month, spread 82%-93% for all 34 areas")
+    out.append("-- 3. Committee Audit (tx_5s_audit): Months 3, 6, 9 (Mar, Jun, Sep), strictly following the audit plan weeks and teams, spread 82%-90%")
     out.append("-- (December excluded per user request)")
     out.append("begin;\n")
 
-    # Insert audits in chunks of 100
-    out.append("-- 1. Insert audits")
+    # 1. Insert plans
+    out.append("-- 1. Insert committee audit plan")
+    out.append("insert into public.mt_5s_audit_plan (year, area_id, month, week, round, team)")
+    out.append("select v.year, ar.id, v.month, v.week, v.round, v.team from (values")
+    plan_vals = [f"  ({p[0]}::integer, '{p[1]}'::text, {p[2]}::integer, {p[3]}::integer, {p[4]}::integer, '{p[5]}'::text)" for p in plans]
+    out.append(",\n".join(plan_vals))
+    out.append(") v(year, code, month, week, round, team)")
+    out.append("join public.mt_5s_area ar on ar.code = v.code")
+    out.append("on conflict (year, area_id, month, week) do update set round = excluded.round, team = excluded.team;\n")
+
+    # 2. Insert audits
+    out.append("-- 2. Insert audits")
     out.append("insert into public.tx_5s_audit (audit_no, year, audit_type, area_id, team, auditors, receivers, audited_at, total_score, percent_score, result, status)")
     out.append("select v.audit_no, v.year, v.audit_type, ar.id, v.team, v.auditors, v.receivers, v.audited_at, v.total, v.percent, v.result, v.status from (values")
-    
-    audit_vals = []
-    for a in audits:
-        audit_vals.append(f"  ('{a[0]}'::text, {a[1]}::integer, '{a[2]}'::text, '{a[3]}'::text, {a[4]}, {a[5]}, {a[6]}, {a[7]}, {a[8]}::numeric, {a[9]}::numeric, '{a[10]}'::text, '{a[11]}'::text)")
+    audit_vals = [f"  ('{a[0]}'::text, {a[1]}::integer, '{a[2]}'::text, '{a[3]}'::text, {a[4]}, {a[5]}, {a[6]}, {a[7]}, {a[8]}::numeric, {a[9]}::numeric, '{a[10]}'::text, '{a[11]}'::text)" for a in audits]
     out.append(",\n".join(audit_vals))
     out.append(") v(audit_no, year, audit_type, code, team, auditors, receivers, audited_at, total, percent, result, status)")
     out.append("join public.mt_5s_area ar on ar.code = v.code")
     out.append("on conflict (audit_no) do update set")
     out.append("  audited_at = excluded.audited_at, total_score = excluded.total_score, percent_score = excluded.percent_score, result = excluded.result, status = excluded.status;\n")
 
-    # Insert scores in chunks of 500
-    out.append("-- 2. Insert audit scores")
+    # 3. Insert scores in chunks of 500
+    out.append("-- 3. Insert audit scores")
     chunk_size = 500
     for idx in range(0, len(scores), chunk_size):
         chunk = scores[idx:idx + chunk_size]
@@ -220,10 +266,11 @@ def generate_sql():
     out.append("commit;\n")
     out.append("-- Verification count")
     out.append("select audit_type, count(*), round(avg(percent_score), 2) as avg_percent from public.tx_5s_audit where year = 2026 group by audit_type;")
+    out.append("select count(*) as plans_count from public.mt_5s_audit_plan where year = 2026;")
 
     sql_path = ROOT / "inbox" / "mock_5s_audits_2026.sql"
     sql_path.write_text("\n".join(out), encoding="utf-8")
-    print(f"Saved to {sql_path} ({sql_path.stat().st_size:,} bytes)")
+    print(f"\nWritten to {sql_path} ({sql_path.stat().st_size:,} bytes)")
 
 if __name__ == "__main__":
-    generate_sql()
+    generate_all()
