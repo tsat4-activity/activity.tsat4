@@ -7,7 +7,9 @@ import { loadUser, publicUser, requireUser } from './users.js';
 
 export function mountAuth(app) {
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, database: dbReady() });
+    // which Supabase project each side uses: the public project ref from the URL only (no key) · MX = TX = activity01
+    const ref = (url) => (/^https:\/\/([a-z0-9]+)\.supabase\.co/.exec(url || '') || [])[1] || (url ? 'other' : 'unset');
+    res.json({ ok: true, database: dbReady(), mx: ref(process.env.MX_SUPABASE_URL), tx: ref(process.env.TX_SUPABASE_URL) });
   });
 
   app.post('/api/login', wrap(async (req, res) => {
