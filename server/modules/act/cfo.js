@@ -151,17 +151,20 @@ export function mountCfo(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const now = new Date();
     const due = year < now.getFullYear() ? 12 : year > now.getFullYear() ? 0 : now.getMonth() + 1;
-    const [access, settings, activities, efs, scopes, gwp, entries, details, materials] = await Promise.all([
+    const [access, settings, activities, efs, scopes, gwp, allEntries, details, materials, matUse, mats] = await Promise.all([
       accessOf(req, activity, year),
       settingsOf(t),
-      fetchAll(() => tx.from(t.activity).select('id,department,name,detail,calc,status,ef_id,gwp_code').order('id')),
+      fetchAll(() => tx.from(t.activity).select('*').order('id')),
       fetchAll(() => tx.from(t.ef).select('id,scope_code,kind,name,unit,kgco2e').order('id')),
       fetchAll(() => tx.from(t.cfoScope).select('code,name').order('code')),
       fetchAll(() => tx.from(t.gwp).select('code,ch4').order('code')),
-      fetchAll(() => tx.from(t.entryView).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')).then((list) => list.filter((e) => (e.part || 'main') === 'main')),
+      fetchAll(() => tx.from(t.entryView).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')),
       fetchAll(() => tx.from(t.entry).select('id,status,inputs,doc,remark,updated_at,updated_by').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')),
-      usageBySection(t, year)
+      usageBySection(t, year),
+      fetchAll(() => tx.from(t.materialUse).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`)).catch(() => []),
+      fetchAll(() => tx.from(t.material).select('grp,kind,scope_code,status')).catch(() => [])
     ]);
+    const entries = allEntries.filter((e) => (e.part || 'main') === 'main');
     const efById = new Map(efs.map((e) => [e.id, e]));
     const scopeName = new Map(scopes.map((s) => [s.code, s.name]));
     const gwpCh4 = new Map(gwp.map((g) => [g.code, g.ch4]));
@@ -193,8 +196,50 @@ export function mountCfo(app) {
           qty: Math.round(list.reduce((s, e) => s + Number(e.qty), 0) * 1000) / 1000,
           tco2e: Math.round(list.reduce((s, e) => s + Number(e.tco2e), 0) * 1000) / 1000
         };
-      })
+      }),
+      derived: derivedRows()
     });
+
+    // Lines that are counted but not recorded by hand (ผู้ใช้กำหนด 2026-11-03), for Dashboard > Scope only:
+    // 3-3 การได้มาของเชื้อเพลิง / ไฟฟ้า of an activity with ef3_id (same months as the activity) · 3-1 Usage (SAP) per หมวดหลัก
+    function derivedRows() {
+      const pct = (months) => (due ? Math.min(100, Math.round((months.filter((m) => m <= due).length / due) * 100)) : 0);
+      const r3 = (v) => Math.round(v * 1000) / 1000;
+      const up = new Map();
+      for (const e of allEntries.filter((x) => x.part === 'upstream')) {
+        if (!up.has(e.activity_id)) up.set(e.activity_id, []);
+        up.get(e.activity_id).push(e);
+      }
+      const upstream = activities.filter((a) => a.ef3_id && (a.status === 'Active' || up.has(a.id))).map((a) => {
+        const f = efById.get(a.ef3_id) || {};
+        const list = up.get(a.id) || [];
+        const months = [...new Set(list.map((e) => Number(e.month.slice(5, 7))))].sort((x, y) => x - y);
+        const power = /kwh/i.test(f.unit || '') || a.ef_id && /kwh/i.test(efById.get(a.ef_id)?.unit || '');
+        return { id: `up:${a.id}`, derived: 'upstream', department: a.department, name: `${a.name} (การได้มาของ${power ? 'ไฟฟ้า' : 'เชื้อเพลิง'})`, detail: a.detail,
+          scope_code: '3-3', category: category({ scope_code: '3-3' }), source: f.name, unit: f.unit, kgco2e: f.kgco2e, months, percent: pct(months),
+          qty: r3(list.reduce((s, e) => s + Number(e.qty), 0)), tco2e: r3(list.reduce((s, e) => s + Number(e.tco2e), 0)) };
+      });
+      const groups = new Map();
+      const groupOf = (grp, kind, scopeCode) => {
+        const name = grp || MAT_KINDS[kind] || 'Usage';
+        const key = `${scopeCode || '3-1'}|${name}`;
+        if (!groups.has(key)) groups.set(key, { name, scope_code: scopeCode || '3-1', months: new Set(), items: new Set(), tco2e: 0 });
+        return groups.get(key);
+      };
+      mats.filter((x) => x.grp && x.status !== 'Inactive').forEach((x) => groupOf(x.grp, x.kind, x.scope_code));
+      for (const u of matUse) {
+        const g = groupOf(u.grp, u.kind, u.scope_code);
+        g.months.add(Number(u.month.slice(5, 7)));
+        g.items.add(u.material);
+        g.tco2e += Number(u.tco2e);
+      }
+      const sap = [...groups.values()].map((g) => {
+        const months = [...g.months].sort((x, y) => x - y);
+        return { id: `sap:${g.scope_code}:${g.name}`, derived: 'sap', department: 'SAP', name: g.name, detail: `Usage (SAP) · ${g.items.size} วัสดุที่คิดได้`, scope_code: g.scope_code,
+          category: category({ scope_code: g.scope_code }), source: 'Usage (SAP)', unit: 'วัสดุ', months, percent: pct(months), qty: g.items.size, tco2e: r3(g.tco2e) };
+      });
+      return [...upstream, ...sap];
+    }
   });
 
   // ---------- transaction: save one activity × month ----------

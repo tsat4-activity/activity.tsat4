@@ -489,7 +489,8 @@ async function cfoDrawRevisions(body) {
 async function cfoDrawProgress(body) {
   const d = await a5Api(CFO, `cfo/progress?year=${a5Year}`);
   const scope = Number(cfoDash.scope) || 1;
-  const rows = d.rows.filter((r) => String(r.scope_code || '').startsWith(`${scope}-`));
+  // + 3-3 lines of fuel / electricity and 3-1 Usage (SAP) per หมวดหลัก (server derivedRows, ผู้ใช้กำหนด 2026-11-03)
+  const rows = [...d.rows, ...(d.derived || [])].filter((r) => String(r.scope_code || '').startsWith(`${scope}-`));
   const departments = [...new Set(rows.map((r) => r.department))].sort();
   body.innerHTML = `
     <div class="toolbar a5-filters">
@@ -509,7 +510,8 @@ async function cfoDrawProgress(body) {
     const groups = [...new Set(list.map((r) => r.category))];
     fillTable('cfo-rows', [{ label: 'หน่วยงาน', key: 'department' }, { label: 'กิจกรรม', key: 'name' }, { label: 'รายละเอียด', key: 'detail' }, 'รายเดือน',
       { label: 'ครบ', key: 'percent' }, { label: 'ปริมาณรวม', key: 'qty', num: true }, 'หน่วย', { label: 'tCO₂e', key: 'tco2e', num: true }],
-    groups.map((g) => `<tr class="cfo-group"><td colspan="8">${esc(g || '-')}</td></tr>${list.filter((r) => r.category === g).map((r) => `<tr><td>${esc(r.department)}</td><td>${esc(r.name)}</td><td>${esc(r.detail || '')}</td><td>${cells(r)}</td>
+    groups.sort((x, y) => (rows.find((r) => r.category === x)?.scope_code || '').localeCompare(rows.find((r) => r.category === y)?.scope_code || '', 'en', { numeric: true }))
+      .map((g) => `<tr class="cfo-group"><td colspan="8">${esc(g || '-')}</td></tr>${list.filter((r) => r.category === g).map((r) => `<tr${r.derived ? ' class="is-muted" title="คิดให้อัตโนมัติ: ' + (r.derived === 'sap' ? 'Usage (SAP) ที่วางแต่ละเดือน' : 'ปริมาณเดียวกับกิจกรรมหลัก × EF 3-3') + '"' : ''}><td>${esc(r.department)}</td><td>${esc(r.name)}</td><td>${esc(r.detail || '')}</td><td>${cells(r)}</td>
       <td><div class="cfo-prog"><span><i style="width:${r.percent}%"></i></span>${r.percent}%</div></td><td class="num">${cfoT(r.qty)}</td><td>${esc(r.unit || '')}</td><td class="num">${cfoT(r.tco2e)}</td></tr>`).join('')}`).join(''), 'ไม่มีกิจกรรม', headFor(cfoHeads.entries, draw));
     const full = list.filter((r) => r.percent >= 100).length;
     $('cfo-sum').textContent = `Scope ${scope} · ${list.length} กิจกรรม · ครบถึงเดือนปัจจุบัน ${full} · ขาด ${list.length - full} · รวม ${cfoT(list.reduce((t, r) => t + r.tco2e, 0))} tCO₂e`;
