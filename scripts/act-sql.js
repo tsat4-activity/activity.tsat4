@@ -314,6 +314,9 @@ alter table public.tx_${k}_material add column if not exists kind text not null 
 alter table public.tx_${k}_material add column if not exists costcenter text;
 alter table public.tx_${k}_material add column if not exists amount numeric;
 create index if not exists tx_${k}_material_cc on public.tx_${k}_material (month, costcenter);
+-- หมวดหลักของวัสดุ (ผู้ใช้กำหนด 2026-11-03) = กิจกรรม 3-1 ที่วัสดุรายงาน (Setting > Activities, Fr-04.1) · เก็บใน Usage ตอนวางด้วย
+alter table public.mt_${k}_material add column if not exists grp text;
+alter table public.tx_${k}_material add column if not exists grp text;
 
 -- กิจกรรมที่ต้องเก็บข้อมูลทุกเดือน (รถผู้บริหาร, Forklift, ไฟฟ้า ...) ของหน่วยงานไหน ใช้ EF ตัวไหน
 create table if not exists public.mt_${k}_activity (

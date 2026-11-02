@@ -1,4 +1,4 @@
-"""Usage.xlsx sheet "Usagelist" (the SAP materials the user picked for CFO) -> EF id + kg per SAP unit.
+"""Usage.xlsx sheets "Usagelist" (the SAP materials the user picked for CFO) + "Sheet1" (EF list) -> EF id + kg per SAP unit.
 
     python -I scripts/import_cfo_usagelist.py "C:/Work/projects/Activity/CFO/inbox/Usage.xlsx"
 
@@ -9,6 +9,10 @@ Writes (inbox/, not in git):
                                   carbon labels the user found (TGO CFP FY..) as own rows of EF CFP, then sets EF + factor of
                                   each material in mt_cfo_material (kind usage, Scope 3-1) · safe to re-run
 
+Sheet1 (ผู้ใช้เพิ่ม 2026-11-03: category_eng · group · emission_source · detail · unit · kgCO₂e/unit · reference): every row
+with a value that is not already in EF CFP (same name without spaces + unit + value) becomes an own row of EF CFP.
+Usagelist column หมวดหลัก (the user's main group, the later duplicate rows carry it) picks the EF of a material and is
+saved as mt_cfo_material.grp = the 3-1 activity it is reported under (Setting > Activities, Fr-04.1).
 EF ids CFP-0001 … CFP-0539 are the TGO list (inbox/import_cfp_tgo.sql, PDF order). factor = kg (or cylinder / litre, the
 unit of the EF) per 1 SAP unit; a material without a factor stays uncounted until the user fills it in Setting > วัสดุ.
 spec: docs/specs/act-cfo.md (ผู้ใช้กำหนด 2026-11-02)
@@ -26,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # TGO CFP (code, name, unit, kgCO2e/unit) used here
 TGO = {
     'paper': ('CFP-0498', 'กระดาษพิมพ์เขียนแบบไม่เคลือบผิว', 'kg', 2.102),
+    'paper_coated': ('CFP-0499', 'กระดาษพิมพ์เขียนแบบเคลือบผิว', 'kg', 2.1639),
     'board': ('CFP-0503', 'กระดาษกล่องขาวเคลือบแป้ง/ กระดาษกล่องแป้งหลังเทา', 'kg', 1.8679),
     'lldpe': ('CFP-0006', 'Linear Low Density Polyethylene (LLDPE)', 'kg', 2.3995),
     'steelwire': ('CFP-0537', 'ลวดเหล็กกล้าดึงเย็นเสริมคอนกรีต (ลวดปลอก)', 'kg', 2.5748),
@@ -43,6 +48,16 @@ LABEL = {
     'wachem611': ('สารเคมีบำบัดน้ำ WACHEM 850 / PHAMINOX 1000 (ฉลาก CFP)', 'kg', 0.611, 'TGO CFP FY26-535-4700'),
     'water': ('น้ำกลั่น (ฉลาก CFP)', 'l', 0.558, 'TGO CFP FY25-332-2190'),
     'paint': ('สีน้ำมัน DENZO (ฉลาก CFP)', 'kg', 2.09, 'TGO CFP FY26-757-7536 / 7537'),
+}
+# หมวดหลัก of Usagelist → EF: a TGO key, or ('own', name in Sheet1)
+CATEGORY = {
+    'กระดาษพิมพ์เขียน เคลือบผิว': 'paper_coated',
+    'กระดาษพิมพ์เขียน ไม่เคลือบผิว': 'paper',
+    'กระดาษกล่องขาวเคลือบแป้ง / กระดาษกล่องแป้งหลังเทา': 'board',
+    'กระดาษทิชชู': ('own', 'กระดาษทิชชู่'),
+    'ถุงมือผ้า': ('own', 'ถุงมือผ้า'),
+    'ถุงมือกันสารเคมี': ('own', 'ถุงมือกันสารเคมี'),
+    'แอลกอฮอล์': ('own', 'Alcohol'),
 }
 A4, A3, F9x11 = 0.06237, 0.12474, 0.2286 * 0.2794  # m² per sheet
 ARGON_KG_PER_CYL = 7 * 1.69  # 7 m³ argon at 15 °C, 1 atm
@@ -67,6 +82,32 @@ def continuous(name):
     p = int(plies.group(1)) if plies else 1
     gsm = 60.0 if p == 1 else 55.0
     return F9x11 * gsm * p * 1000 / 1000, f'9"×11" {F9x11:.5f} m² × {gsm:g} g × {p} ชั้น × 1000 ชุด', 'ประมาณ (1000 ชุด/กล่อง)'
+
+
+def by_category(cat, name, unit):
+    """The user's หมวดหลัก decides the EF; the kg per SAP unit is worked out as in match()."""
+    key = CATEGORY.get(cat)
+    if not key:
+        return None
+    n = name.upper()
+    if 'แก้วกาแฟกระดาษ' in name:
+        each = 0.008 if '8ออนซ์' in name else 0.006
+        return (key, each * 50, f'{each * 1000:g} g/ใบ × 50 ใบ', 'ประมาณ (ไม่รวมฝา)')
+    if 'THERMAL LABEL' in n:
+        return (key, 0.06 * 0.025 * 140 / 1000, '6 × 2.5 ซม. × 140 g/m² (กระดาษ + กระดาษรอง)', 'ประมาณ')
+    if 'LABEL' in n:
+        return (key, None, 'ฉลาก PET: ไม่รู้ขนาด / น้ำหนัก', 'ต้องชั่ง')
+    if key in ('paper', 'paper_coated', 'board'):
+        _, kg, how, sure = match('', name, unit)
+        return (key, kg, how, sure)
+    if key == ('own', 'ถุงมือผ้า'):
+        g = re.search(r'(\d+)\s*ขีด', name)
+        return (key, int(g.group(1)) * 0.1 if g else None, f'{g.group(1)} ขีด/โหล' if g else 'ไม่รู้ kg', 'จากชื่อ' if g else 'ต้องชั่ง')
+    if key == ('own', 'ถุงมือกันสารเคมี'):
+        if unit == 'BX':
+            return (key, 100 * 0.0035, '50 คู่ = 100 ชิ้น × 3.5 g', 'ประมาณ')
+        return (key, 0.05, '1 คู่ ≈ 50 g', 'ประมาณ')
+    return (key, None, f'{cat}: ไม่รู้น้ำหนักต่อหน่วย', 'ต้องชั่ง')
 
 
 def match(code, name, unit):
@@ -151,6 +192,37 @@ def main(book_path):
         unit = str(r[head.index('unit')] or '').strip().upper()
         if code and unit:
             sap_units.setdefault(code, set()).add(unit)
+    # Sheet1 = EF list the user added → own EF CFP rows (those already in the TGO list are skipped by the SQL)
+    own, own_keys, no_value = {}, set(), []
+    for r in list(book['Sheet1'].iter_rows(values_only=True))[1:]:
+        if not r or not r[2]:
+            continue
+        name = ' '.join(str(r[2]).split())
+        try:
+            total = float(str(r[5]).replace(',', ''))
+        except (TypeError, ValueError):
+            no_value.append(name)
+            continue
+        detail = ' '.join(str(r[3] or '').split())
+        if detail.startswith('ครอบคลุมตั้งแต่การเตรียมนำเยื่อ') and 'กระดาษ' not in name:
+            detail = ''  # the paper text was filled down the rows of gloves / tissue in the sheet
+        unit = str(r[4] or '').strip()
+        unit = unit.lower() if unit.lower() in ('kg', 'kwh') else unit
+        key = (re.sub(r'\s+', '', name).lower(), unit.lower(), round(total, 4), re.sub(r'\s+', '', detail).lower())
+        if key in own_keys:
+            continue
+        own_keys.add(key)
+        row = {'grp': str(r[1] or r[0] or 'EF ที่ผู้ใช้เพิ่ม'), 'name': name, 'detail': detail, 'unit': unit, 'total': total,
+               'reference': r[6], 'category': r[0]}
+        own.setdefault(name, row)
+        own.setdefault(f'#{len(own_keys)}', row)
+    own_rows = list({id(o): o for o in own.values()}.values())
+    # one material = one row: the first row keeps name / unit / price / old EF, หมวดหลัก comes from the last row that has one
+    cats = {}
+    for r in rows[1:]:
+        code = str(r[0] or '').strip().removesuffix('.0')
+        if code and r[6]:
+            cats[code] = ' '.join(str(r[6]).split())
     seen, items, dropped = {}, [], []
     for i, r in enumerate(rows[1:], start=2):
         code = str(r[0] or '').strip().removesuffix('.0')
@@ -167,10 +239,17 @@ def main(book_path):
         if len(used) == 1 and unit not in used:
             note = f' · หน่วยใน Usagelist {unit} แต่ SAP ใช้ {next(iter(used))}'
             unit = next(iter(used))
-        key, kg, how, sure = match(code, str(r[1] or ''), unit)
+        cat = cats.get(code, '')
+        key, kg, how, sure = by_category(cat, str(r[1] or ''), unit) or match(code, str(r[1] or ''), unit)
         how += note
-        ef = TGO.get(key) or (LABEL.get(key) and ('CFP-ใหม่',) + LABEL[key][:3])
-        items.append({'row': i, 'material': code, 'name': ' '.join(str(r[1] or '').split()), 'unit': unit, 'price': r[3], 'group': r[6],
+        if isinstance(key, tuple):
+            o = own.get(key[1])
+            ef = ('CFP-ใหม่', o['name'], o['unit'], o['total']) if o else None
+            if not o:
+                how, key, kg = f'{how} · ไม่พบ {key[1]} ใน Sheet1', None, None
+        else:
+            ef = TGO.get(key) or (LABEL.get(key) and ('CFP-ใหม่',) + LABEL[key][:3])
+        items.append({'row': i, 'material': code, 'name': ' '.join(str(r[1] or '').split()), 'unit': unit, 'price': r[3], 'group': cat,
                       'key': key, 'ef': ef, 'kg': kg, 'how': how, 'sure': sure, 'old': r[7], 'old_unit': r[8]})
 
     # ---------- Excel for the user ----------
@@ -196,6 +275,15 @@ def main(book_path):
     for col, w in zip('ABCDEFGHIJKLMNOP', [11, 44, 6, 8, 14, 10, 40, 9, 10, 12, 10, 12, 44, 30, 14, 8]):
         sh.column_dimensions[col].width = w
     sh.freeze_panes = 'C2'
+    efs = out.create_sheet('EF ที่เพิ่ม (Sheet1)')
+    efs.append(['กลุ่ม', 'ชื่อ', 'รายละเอียด', 'หน่วย', 'kgCO2e/หน่วย', 'อ้างอิง', 'หมายเหตุ'])
+    for o in own_rows:
+        efs.append([o['grp'], o['name'], o['detail'], o['unit'], o['total'], o['reference'], 'ถ้าตรงกับรายการ อบก. (ชื่อ + หน่วย + ค่า) ระบบไม่เพิ่มซ้ำ'])
+    for name in no_value:
+        efs.append(['', name, '', '', None, '', 'ยังไม่มีค่าใน Sheet1: ไม่ได้เพิ่ม'])
+    efs.column_dimensions['A'].width = 30
+    efs.column_dimensions['B'].width = 44
+    efs.column_dimensions['C'].width = 40
     gone = out.create_sheet('ตัดออก (ซ้ำ)')
     gone.append(['แถวในชีตเดิม', 'material_description', 'เหตุผล'])
     for d in dropped:
@@ -206,13 +294,28 @@ def main(book_path):
     out.save(xlsx)
 
     # ---------- SQL ----------
+    owns = ',\n'.join(f"  ({n}, {lit(o['grp'])}, {lit(o['name'])}, {lit(o['detail'] or None)}, {lit(o['unit'])}, {lit(o['total'])}, {lit(o['reference'])})"
+                       for n, o in enumerate(own_rows, start=1))
     labels = ',\n'.join(f"  ({lit(k)}, {lit(v[0])}, {lit(v[1])}, {lit(v[2])}, {lit(v[3])})" for k, v in LABEL.items())
     mats = ',\n'.join(f"  ({lit(it['material'])}, {lit(it['name'])}, {lit(it['unit'])}, {lit(it['price'] if isinstance(it['price'], (int, float)) else None)}, "
-                      f"{lit(TGO[it['key']][0] if it['key'] in TGO else None)}, {lit(it['key'] if it['key'] in LABEL else None)}, {lit(it['kg'])})"
+                      f"{lit(TGO[it['key']][0] if it['key'] in TGO else None)}, {lit(it['key'] if it['key'] in LABEL else None)}, {lit(it['kg'])}, "
+                      f"{lit(it['key'][1] if isinstance(it['key'], tuple) else None)}, {lit(it['group'] or None)})"
                       for it in items)
-    sql = f"""-- Usagelist (Usage.xlsx) → EF + ตัวแปลงของวัสดุ SAP · scripts/import_cfo_usagelist.py · ผู้ใช้กำหนด 2026-11-02
+    sql = f"""-- Usagelist + Sheet1 (Usage.xlsx) → EF + ตัวแปลง + หมวดหลักของวัสดุ SAP · scripts/import_cfo_usagelist.py · ผู้ใช้กำหนด 2026-11-02 / 03
 -- รันใน activity01 หลัง db/act/cfo.sql และ inbox/import_cfp_tgo.sql · รันซ้ำได้ · {len(items)} วัสดุ (ตัดแถวซ้ำ {len(dropped)})
 begin;
+-- 0) EF ที่ผู้ใช้เพิ่ม (Sheet1) = แถวของเราใน EF CFP · ข้ามรายการที่มีแล้ว (ชื่อไม่นับช่องว่าง + หน่วย + ค่า เช่น รายการ อบก.)
+create temp table own (seq int, grp text, name text, formula text, unit text, total numeric, reference text) on commit drop;
+insert into own values
+{owns};
+insert into public.mt_cfo_ef_ref (sheet, grp, name, formula, unit, total, reference, sort_no, status)
+select 'cfp', o.grp, o.name, o.formula, o.unit, o.total, o.reference,
+  100000 + coalesce((select max(sort_no) - 100000 from public.mt_cfo_ef_ref where sheet = 'cfp' and sort_no >= 100000), 0) + o.seq, 'Active'
+from own o
+where not exists (select 1 from public.mt_cfo_ef_ref r where r.sheet = 'cfp' and lower(regexp_replace(r.name, '\s+', '', 'g')) = lower(regexp_replace(o.name, '\s+', '', 'g'))
+  and lower(coalesce(r.unit, '')) = lower(o.unit) and round(r.total, 4) = round(o.total, 4)
+  and (o.formula is null or lower(regexp_replace(coalesce(r.formula, ''), '\s+', '', 'g')) = lower(regexp_replace(o.formula, '\s+', '', 'g')) or r.sort_no < 100000));
+
 -- 1) ฉลากคาร์บอนฟุตพริ้นท์ของผลิตภัณฑ์ (ผู้ใช้หามา) = แถวของเราใน EF CFP ต่อท้ายรายการ อบก. · id CFP- ต่อเลขเดิม
 create temp table lab (k text, name text, unit text, total numeric, reference text) on commit drop;
 insert into lab values
@@ -228,27 +331,34 @@ from (select id, row_number() over (order by sort_no, id) as n,
 where r.id = x.id;
 
 -- 2) วัสดุ: EF (id ของ อบก. หรือฉลาก) + ตัวแปลง = หน่วย EF ต่อ 1 หน่วย SAP · ไม่มี EF / ไม่รู้น้ำหนัก = เก็บรายการไว้แต่ยังไม่คิด
-create temp table ul (material text, name text, sap_unit text, price numeric, ef_code text, label text, factor numeric) on commit drop;
+create temp table ul (material text, name text, sap_unit text, price numeric, ef_code text, label text, factor numeric, own_name text, grp text) on commit drop;
 insert into ul values
 {mats};
-insert into public.mt_cfo_material (material, name, sap_unit, price, ef_ref_id, factor, scope_code, kind, status)
+-- หมวดหลัก (grp) = กิจกรรม 3-1 ที่วัสดุนี้รายงาน · EF ที่ผู้ใช้เลือกตามหมวดหลักแทนค่าเดิม
+insert into public.mt_cfo_material (material, name, sap_unit, price, ef_ref_id, factor, scope_code, kind, status, grp)
 select u.material, u.name, u.sap_unit, u.price,
-  coalesce((select id from public.mt_cfo_ef_ref where code = u.ef_code), (select r.id from public.mt_cfo_ef_ref r join lab l on l.name = r.name and r.sheet = 'cfp' where l.k = u.label limit 1)),
-  u.factor, '3-1', 'usage', 'Active'
+  coalesce((select id from public.mt_cfo_ef_ref where code = u.ef_code),
+    (select r.id from public.mt_cfo_ef_ref r join lab l on l.name = r.name and r.sheet = 'cfp' where l.k = u.label limit 1),
+    (select r.id from public.mt_cfo_ef_ref r where r.sheet = 'cfp' and r.name = u.own_name order by r.sort_no desc limit 1)),
+  u.factor, '3-1', 'usage', 'Active', u.grp
 from ul u
 on conflict (material) do update set name = excluded.name, sap_unit = excluded.sap_unit, price = coalesce(excluded.price, public.mt_cfo_material.price),
-  ef_ref_id = coalesce(excluded.ef_ref_id, public.mt_cfo_material.ef_ref_id), factor = coalesce(excluded.factor, public.mt_cfo_material.factor), kind = 'usage';
+  ef_ref_id = coalesce(excluded.ef_ref_id, public.mt_cfo_material.ef_ref_id), factor = coalesce(excluded.factor, public.mt_cfo_material.factor), kind = 'usage',
+  grp = coalesce(excluded.grp, public.mt_cfo_material.grp);
 commit;
 
 -- ตรวจ: วัสดุจาก Usagelist ที่คิดค่าได้ (มี EF + ตัวแปลง) / ยังไม่ได้
 select count(*) filter (where m.ef_ref_id is not null and m.factor is not null) as counted, count(*) filter (where m.ef_ref_id is null or m.factor is null) as not_yet
 from public.mt_cfo_material m where m.material in (select material from (values {', '.join(f"({lit(it['material'])})" for it in items)}) v(material));
-select code, name, unit, total from public.mt_cfo_ef_ref where grp = 'ฉลากคาร์บอนฟุตพริ้นท์ผลิตภัณฑ์' order by code;
+select code, grp, name, unit, total from public.mt_cfo_ef_ref where sheet = 'cfp' and sort_no >= 100000 order by code;
+select grp as "กิจกรรม 3-1 (หมวดหลัก)", count(*) as "วัสดุ", count(*) filter (where ef_ref_id is not null and factor is not null) as "คิดได้"
+from public.mt_cfo_material where grp is not null group by grp order by 1;
 """
     target = ROOT / 'inbox' / 'import_cfo_usagelist.sql'
     target.write_text(sql, encoding='utf-8', newline='\n')
     sys.stdout.reconfigure(encoding='utf-8')
     ok = sum(1 for it in items if it['ef'] and it['kg'])
+    print(f'EF Sheet1: {len(own_rows)} แถวมีค่า (ที่ซ้ำ อบก. SQL ข้ามให้) · ไม่มีค่า {len(no_value)}')
     print(f'{xlsx.relative_to(ROOT)} + {target.relative_to(ROOT)} · {len(items)} วัสดุ · ตัดซ้ำ {len(dropped)} · คิดได้ {ok} · มี EF แต่ไม่รู้น้ำหนัก '
           f'{sum(1 for it in items if it["ef"] and not it["kg"])} · ยังไม่มี EF {sum(1 for it in items if not it["ef"])}')
 

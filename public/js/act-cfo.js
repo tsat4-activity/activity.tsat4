@@ -846,6 +846,18 @@ function cfoSetActivities(body, m, rerender) {
   const refById = new Map(m.refs.map((r) => [r.id, r]));
   // EF id of an activity = the reference row its EF copy points to (mt_cfo_ef.ref_id → mt_cfo_ef_ref.code)
   const efCode = (a) => refById.get(efById.get(a.ef_id)?.ref_id)?.code || '';
+  // 3-1 activities from the SAP materials (ผู้ใช้กำหนด 2026-11-03): one row per หมวดหลัก, quantities come from the monthly
+  // Usage (SAP) · edited in Setting > Materials (SAP), so the row is not selectable here
+  const sapRows = () => {
+    const term = cfoFilter.q.trim().toLowerCase();
+    return (m.matGroups || []).filter((g) => (!cfoFilter.department || cfoFilter.department === 'SAP') && (!cfoFilter.scope || g.scope_code.startsWith(`${cfoFilter.scope}-`))
+      && (!term || g.grp.toLowerCase().includes(term))).map((g) => {
+      const codes = g.refs.map((id) => refById.get(id)?.code).filter(Boolean);
+      const one = g.refs.length === 1 ? refById.get(g.refs[0]) : null;
+      return `<tr class="is-muted" title="คิดจาก Usage (SAP) ทุกเดือน · แก้ที่ Setting > Materials (SAP)"><td>SAP</td><td>${esc(g.grp)}</td><td>Usage (SAP) · ${g.items} วัสดุ คิดได้ ${g.counted}</td>
+        <td><b>${esc(codes.slice(0, 2).join(', '))}${codes.length > 2 ? ' …' : ''}</b></td><td>${esc(g.scope_code)} · ${one ? `${esc(one.name)} (${cfoRefNum(one.total)} kgCO₂e/${esc(one.unit)})` : `${g.refs.length} EF`}</td><td></td><td>Usage SAP</td><td>Active</td></tr>`;
+    }).join('');
+  };
   // 3-3 line (การได้มาของเชื้อเพลิง / ไฟฟ้า): its EF id and kgCO2e per unit (ผู้ใช้กำหนด 2026-11-03)
   const ef3Label = (a) => {
     const e = a.ef3_id && efById.get(a.ef3_id);
@@ -858,14 +870,15 @@ function cfoSetActivities(body, m, rerender) {
       && (!cfoFilter.scope || String(efById.get(a.ef_id)?.scope_code || '').startsWith(`${cfoFilter.scope}-`))
       && (!term || `${a.name} ${a.detail || ''} ${efCode(a)}`.toLowerCase().includes(term))), cfoHeads.activities, (a, key) => (key === 'ef' ? cfoEfLabel(efById.get(a.ef_id)) : key === 'efcode' ? efCode(a) : key === 'ef3' ? ef3Label(a) : a[key] ?? ''));
     fillTable('cfo-rows', [{ label: 'หน่วยงาน', key: 'department' }, { label: 'กิจกรรม', key: 'name' }, { label: 'รายละเอียด', key: 'detail' }, { label: 'EF id', key: 'efcode' }, { label: 'Emission factor', key: 'ef' }, { label: '3-3 (EF id · kgCO₂e)', key: 'ef3' }, { label: 'สูตร', key: 'calc' }, { label: 'สถานะ', key: 'status' }],
-      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td>${esc(a.name)}</td><td>${esc(a.detail || '')}</td><td><b>${esc(efCode(a))}</b></td><td>${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td>${esc(ef3Label(a))}</td><td>${esc(CFO_CALCS[a.calc]?.short || '')}</td><td>${esc(a.status)}</td></tr>`).join(''), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
+      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td>${esc(a.name)}</td><td>${esc(a.detail || '')}</td><td><b>${esc(efCode(a))}</b></td><td>${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td>${esc(ef3Label(a))}</td><td>${esc(CFO_CALCS[a.calc]?.short || '')}</td><td>${esc(a.status)}</td></tr>`).join('')
+        + sapRows(), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
     bindRowSelect($('cfo-rows'), (id) => { picked = m.activities.find((a) => String(a.id) === id); ['cfo-edit', 'cfo-del'].forEach((b) => { if ($(b)) $(b).disabled = !picked; }); });
   };
   let picked = null;
   body.innerHTML = `
     <div class="toolbar a5-filters">
       ${field('Scope', `<select id="cfo-f-scope">${options(['', '1', '2', '3'], cfoFilter.scope, (v) => (v ? `Scope ${v}` : 'ทั้งหมด'))}</select>`)}
-      ${field('หน่วยงาน', `<select id="cfo-f-dept">${options(['', ...departments], cfoFilter.department, (v) => v || 'ทั้งหมด')}</select>`)}
+      ${field('หน่วยงาน', `<select id="cfo-f-dept">${options(['', ...departments, ...((m.matGroups || []).length ? ['SAP'] : [])], cfoFilter.department, (v) => v || 'ทั้งหมด')}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'ชื่อกิจกรรม' })}
       ${m.admin ? `<div class="action-bar">${button('cfo-fill3', 'เติม 3-3')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
     </div>
@@ -1228,16 +1241,16 @@ async function cfoSetMaterial(body, m, rerender) {
   const draw = () => {
     const term = cfoMatFilter.q.trim().toLowerCase();
     const list = d.rows.filter((r) => (!cfoMatFilter.ef || (cfoMatFilter.ef === 'yes') === Boolean(r.ef_ref_id && r.factor)) && (!cfoMatFilter.kind || (r.kind || 'usage') === cfoMatFilter.kind)
-      && (!term || `${r.material} ${r.name} ${efOf(r)?.name || ''}`.toLowerCase().includes(term)));
+      && (!term || `${r.material} ${r.name} ${r.grp || ''} ${efOf(r)?.name || ''}`.toLowerCase().includes(term)));
     const shown = list.slice(0, 500);
-    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab"><thead><tr><th class="c-unit">Material</th><th class="c-unit">ประเภท</th><th class="c-name">รายละเอียด</th><th class="c-unit">หน่วย SAP</th>
+    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab"><thead><tr><th class="c-unit">Material</th><th class="c-unit">ประเภท</th><th class="c-formula">หมวดหลัก (กิจกรรม 3-1)</th><th class="c-name">รายละเอียด</th><th class="c-unit">หน่วย SAP</th>
       <th class="c-name">Emission factor</th><th class="num c-num">ตัวแปลง</th><th class="c-unit">หน่วย EF</th><th class="num c-num">kgCO₂e / หน่วย SAP</th><th class="c-unit">หมวด</th><th class="c-unit">สถานะ</th></tr></thead>
       <tbody>${shown.map((r) => {
         const e = efOf(r);
-        return `<tr data-pick="${esc(r.material)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-unit">${esc(r.material)}</td><td class="c-unit">${esc(CFO_MAT_KINDS[r.kind || 'usage'])}</td><td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.sap_unit || '')}</td>
+        return `<tr data-pick="${esc(r.material)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-unit">${esc(r.material)}</td><td class="c-unit">${esc(CFO_MAT_KINDS[r.kind || 'usage'])}</td><td class="c-formula">${esc(r.grp || '')}</td><td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.sap_unit || '')}</td>
           <td class="c-name">${e ? esc(e.name.replace(/^-\s*/, '')) : '<span class="sum-meta">ยังไม่มี EF</span>'}</td><td class="num c-num">${r.factor == null ? '' : cfoRefNum(r.factor)}</td><td class="c-unit">${esc(e?.unit || '')}</td>
           <td class="num c-num">${e && r.factor ? cfoRefNum(Number(r.factor) * Number(e.total)) : ''}</td><td class="c-unit">${esc(r.scope_code)}</td><td class="c-unit">${esc(r.status)}</td></tr>`;
-      }).join('') || '<tr><td class="empty" colspan="10">ไม่มีรายการ</td></tr>'}</tbody></table>`;
+      }).join('') || '<tr><td class="empty" colspan="11">ไม่มีรายการ</td></tr>'}</tbody></table>`;
     $('cfo-mat-count').textContent = `${list.length.toLocaleString()} รายการ${list.length > shown.length ? ` (แสดง ${shown.length} แรก พิมพ์ค้นหาเพื่อดูเพิ่ม)` : ''} · มี EF ${d.rows.filter((r) => r.ef_ref_id && r.factor).length.toLocaleString()} จาก ${d.rows.length.toLocaleString()}`;
     picked = null;
     ['cfo-edit', 'cfo-del'].forEach((b) => { if ($(b)) $(b).disabled = true; });
@@ -1280,7 +1293,7 @@ async function cfoSetMaterial(body, m, rerender) {
   $('cfo-add').onclick = () => {
     openPopup('เพิ่ม / จับคู่วัสดุ', gridField('cfo-grid', [
       { key: 'material', label: 'Material', width: '110px' }, { key: 'kind', label: 'ประเภท', type: 'select', options: Object.entries(CFO_MAT_KINDS), value: 'usage', width: '110px' },
-      { key: 'name', label: 'รายละเอียด' }, { key: 'sap_unit', label: 'หน่วย SAP', width: '90px' },
+      { key: 'grp', label: 'หมวดหลัก', width: '160px' }, { key: 'name', label: 'รายละเอียด' }, { key: 'sap_unit', label: 'หน่วย SAP', width: '90px' },
       { key: 'ef_name', label: 'EF (ชื่อตามตาราง EF CFP)' }, { key: 'factor', label: 'ตัวแปลง', type: 'number', width: '100px' },
       { key: 'scope_code', label: 'หมวด', type: 'select', options: scopeOpts, value: '3-1', width: '150px' }
     ], 5, 'วางหลายแถวจาก Excel ได้ · รหัสที่มีอยู่แล้ว = แก้ EF / ตัวแปลง · ตัวแปลง = 1 หน่วย SAP เท่ากับกี่หน่วยของ EF · แถวว่างไม่บันทึก'), async () => {
@@ -1299,6 +1312,7 @@ async function cfoSetMaterial(body, m, rerender) {
     const groups = cfoEfGroups((x) => ['cfp', 'energy', 'chemical'].includes(x.sheet));
     openPopup(`วัสดุ ${esc(r.material)}`, `
       ${field('ประเภท', `<select id="cfo-m-kind">${options(Object.keys(CFO_MAT_KINDS), r.kind || 'usage', (v) => CFO_MAT_KINDS[v])}</select>`)}
+      ${field('หมวดหลัก (กิจกรรม 3-1)', `<input id="cfo-m-grp" maxlength="120" list="cfo-m-grps" value="${esc(r.grp || '')}"><datalist id="cfo-m-grps">${[...new Set(d.rows.map((x) => x.grp).filter(Boolean))].sort().map((g) => `<option value="${esc(g)}">`).join('')}</datalist>`)}
       ${field('รายละเอียด', `<input id="cfo-m-name" maxlength="300" value="${esc(r.name)}">`)}
       ${field('หน่วย SAP', `<input id="cfo-m-unit" maxlength="20" value="${esc(r.sap_unit || '')}">`)}
       ${field('Emission factor', `<select id="cfo-m-ef"><option value="">- ไม่คิด (ยังไม่มี EF) -</option>${groups}</select>`)}
@@ -1309,7 +1323,7 @@ async function cfoSetMaterial(body, m, rerender) {
         ${button('cfo-p-calc', 'ใส่ค่าตัวแปลง')}</details>
       ${field('หมวด', `<select id="cfo-m-scope">${scopeOpts.map(([v, l]) => `<option value="${v}"${v === r.scope_code ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`)}
       ${field('สถานะ', `<select id="cfo-m-status">${options(['Active', 'Inactive'], r.status)}</select>`)}`, async () => {
-      await a5Api(CFO, `cfo/materials/${encodeURIComponent(r.material)}`, { method: 'PATCH', body: { kind: $('cfo-m-kind').value, name: $('cfo-m-name').value, sap_unit: $('cfo-m-unit').value,
+      await a5Api(CFO, `cfo/materials/${encodeURIComponent(r.material)}`, { method: 'PATCH', body: { kind: $('cfo-m-kind').value, grp: $('cfo-m-grp').value, name: $('cfo-m-name').value, sap_unit: $('cfo-m-unit').value,
         ef_ref_id: $('cfo-m-ef').value.replace('ref:', ''), factor: $('cfo-m-factor').value, scope_code: $('cfo-m-scope').value, status: $('cfo-m-status').value } });
       toast('บันทึกแล้ว');
       closePopup();
