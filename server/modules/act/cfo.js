@@ -739,6 +739,45 @@ export function mountCfo(app) {
     await logRev(t, req, 'กิจกรรม', `${current.department} · ${current.name}`, changes(current, row, Object.keys(row)));
     res.json({ ok: true });
   });
+  // Fill the 3-3 line of every fuel activity that has none (ผู้ใช้กำหนด 2026-11-03), the pick the activity form makes:
+  // Diesel / B7 → EF CFP น้ำมันดีเซล, Gasohol / gasoline → แก๊สโซลีน, LPG → ก๊าซหุงต้ม (กลั่น) · litres × density (Fuel Properties)
+  // · the months already recorded get it too. Scope 1 (1-1, 1-2) and Scope 3 (not 3-3); electricity and refrigerants are left.
+  const FUEL_UP = { Diesel: [/^น้ำมันดีเซล/], Gasoline: [/^แก๊สโซลีน$/], LPG: [/^ก๊าซหุงต้ม$/, /กลั่น/] };
+  const fuelOf = (name) => (/diesel|ดีเซล|\bB\d+\b/i.test(name) ? 'Diesel' : /gasohol|gasoline|เบนซิน|โซฮอล|\bE\d+\b/i.test(name) ? 'Gasoline' : /LPG|ก๊าซหุงต้ม/i.test(name) ? 'LPG' : null);
+  const litre = (u) => /^(l|liter|litre|ลิตร)$/i.test(String(u || '').trim());
+  route('post', '/api/act/:activity/cfo/activities/fill-ef3', async (req, res, activity, t) => {
+    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    const [acts, efs, refs] = await Promise.all([
+      fetchAll(() => tx.from(t.activity).select('*').order('id')),
+      fetchAll(() => tx.from(t.ef).select('*')),
+      fetchAll(() => tx.from(t.efRef).select('id,sheet,grp,name,formula,unit,total').in('sheet', ['energy', 'cfp', 'fuel']))
+    ]);
+    const efById = new Map(efs.map((e) => [e.id, e]));
+    const refById = new Map(refs.map((r) => [r.id, r]));
+    const done = [];
+    const skipped = [];
+    for (const a of acts) {
+      const e = efById.get(a.ef_id);
+      if (a.ef3_id || !e || a.calc === 'septic' || e.hfc || e.other) continue;
+      if (!(['1-1', '1-2'].includes(e.scope_code) || (e.scope_code?.startsWith('3-') && e.scope_code !== '3-3'))) continue;
+      const ref = refById.get(e.ref_id);
+      if (ref && (ref.sheet !== 'energy' || ref.grp === 'Electricity')) continue;
+      const fuel = fuelOf(ref?.name || e.name);
+      if (!fuel) continue;
+      const [name, detail] = FUEL_UP[fuel];
+      const up = refs.find((r) => r.sheet === 'cfp' && name.test(r.name) && (!detail || detail.test(r.formula || '')) && r.total != null);
+      const density = refs.find((r) => r.sheet === 'fuel' && r.grp === 'Density' && r.name === fuel)?.total;
+      const same = up && String(up.unit).toLowerCase() === String(e.unit).toLowerCase();
+      if (!up || (!same && !(litre(e.unit) && String(up.unit).toLowerCase() === 'kg' && density))) { skipped.push(`${a.department} · ${a.name} ${a.detail || ''}`.trim()); continue; }
+      const made = await efFromRef(t, up.id, '3-3', false, same ? null : { factor: Number(density), unit: e.unit });
+      if (made.error) { skipped.push(`${a.department} · ${a.name}: ${made.error}`); continue; }
+      must(await tx.from(t.activity).update({ ef3_id: made.id }).eq('id', a.id));
+      must(await tx.from(t.entry).update({ ef3_id: made.id }).eq('activity_id', a.id).is('ef3_id', null));
+      done.push(a.id);
+    }
+    if (done.length) await logRev(t, req, 'กิจกรรม', 'เติม 3-3', `เติม EF การได้มาของเชื้อเพลิง (3-3) ให้ ${done.length} กิจกรรม`);
+    res.json({ ok: true, filled: done.length, skipped });
+  });
   route('delete', '/api/act/:activity/cfo/activities/:id', async (req, res, activity, t) => {
     if (!(await requireAdmin(req, res, activity, thisYear()))) return;
     const id = Number(req.params.id);

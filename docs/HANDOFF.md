@@ -34,6 +34,7 @@
 
 - 2026-11-02 · Antigravity [5S] · แก้ไขบั๊ก `Cannot read properties of undefined (reading 'admin')` ในหน้า 5S Summary โดยเพิ่ม fallback โหลดข้อมูล `me` และตัวแปร `isAdmin = Boolean(me?.access?.admin)` ใน `a5DrawSummary` (`public/js/act-5s.js`)
 
+- 2026-11-03 · Claude [5S] · CFO แก้: EF เก่าจาก Excel ไม่มี source_type → ช่อง 3-3 ไม่ขึ้นใน Scope 3 (ตัดสินจาก ref_id / ชื่อเชื้อเพลิงแทน) · ปุ่ม "เติม 3-3" (POST cfo/activities/fill-ef3) เติมให้ทุกกิจกรรมน้ำมันที่ยังไม่มี + เดือนที่บันทึกแล้ว · ตารางกิจกรรมมีคอลัมน์ 3-3
 - 2026-11-03 · Claude [5S] · CFO กิจกรรม Scope 3 ที่ใช้น้ำมัน (รถผู้บริหาร 3-6) มีช่อง 3-3 ด้วย · กิจกรรมเก่าเปิดแก้แล้วเลือก EF CFP ให้เอง กดบันทึก = เติม ef3_id ให้รายการที่บันทึกไว้แล้ว (ที่ยังไม่มี 3-3) · dropdown หน้า Setting 5S / CFO / SMF เป็นภาษาอังกฤษ · ไม่ต้องรัน SQL
 - 2026-11-02 · Claude [5S] · CFO Usagelist → EF id + kg ต่อหน่วย (scripts/import_cfo_usagelist.py → inbox/Usagelist_EF.xlsx + import_cfo_usagelist.sql, 130 วัสดุ ตัดซ้ำ 34, คิดได้ 74) · Dashboard > Usage (SAP): costcenter tCO₂e + บาท เรียงมากไปน้อย + Top 5 · tx_cfo_material.costcenter/amount → ต้องรัน db/act/cfo.sql แล้ว inbox/import_cfo_usagelist.sql
 - 2026-11-02 · Claude [5S] · core.js fit ทำใน requestAnimationFrame เมื่อเนื้อหาเปลี่ยน (เดิมรอ 120 ms → scrollbar ของหน้ากระพริบตอนเปลี่ยนหน้า/ตาราง) · ลบโค้ดไม่ใช้: route POST/PATCH/DELETE cfo/ef (หน้า EF ที่ใช้คำนวณถูกลบแล้ว) + efInput/EF_*, A5_EMP_FIELDS, CSS popup-wide/badge-over/apl-owner/cfo-org*/cfo-photos/cfo-bar/cfo-s3-pct

@@ -846,14 +846,19 @@ function cfoSetActivities(body, m, rerender) {
   const refById = new Map(m.refs.map((r) => [r.id, r]));
   // EF id of an activity = the reference row its EF copy points to (mt_cfo_ef.ref_id → mt_cfo_ef_ref.code)
   const efCode = (a) => refById.get(efById.get(a.ef_id)?.ref_id)?.code || '';
+  // 3-3 line (การได้มาของเชื้อเพลิง / ไฟฟ้า): its EF id and kgCO2e per unit (ผู้ใช้กำหนด 2026-11-03)
+  const ef3Label = (a) => {
+    const e = a.ef3_id && efById.get(a.ef3_id);
+    return e ? `${refById.get(e.ref_id)?.code || e.name} (${cfoRefNum(e.kgco2e)})` : '';
+  };
   const departments = [...new Set(m.activities.map((a) => a.department))].sort();
   const draw = () => {
     const term = cfoFilter.q.trim().toLowerCase();
     const list = listQuery(m.activities.filter((a) => (!cfoFilter.department || a.department === cfoFilter.department)
       && (!cfoFilter.scope || String(efById.get(a.ef_id)?.scope_code || '').startsWith(`${cfoFilter.scope}-`))
-      && (!term || `${a.name} ${a.detail || ''} ${efCode(a)}`.toLowerCase().includes(term))), cfoHeads.activities, (a, key) => (key === 'ef' ? cfoEfLabel(efById.get(a.ef_id)) : key === 'efcode' ? efCode(a) : a[key] ?? ''));
-    fillTable('cfo-rows', [{ label: 'หน่วยงาน', key: 'department' }, { label: 'กิจกรรม', key: 'name' }, { label: 'รายละเอียด', key: 'detail' }, { label: 'EF id', key: 'efcode' }, { label: 'Emission factor', key: 'ef' }, { label: 'สูตร', key: 'calc' }, { label: 'สถานะ', key: 'status' }],
-      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td>${esc(a.name)}</td><td>${esc(a.detail || '')}</td><td><b>${esc(efCode(a))}</b></td><td>${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td>${esc(CFO_CALCS[a.calc]?.short || '')}</td><td>${esc(a.status)}</td></tr>`).join(''), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
+      && (!term || `${a.name} ${a.detail || ''} ${efCode(a)}`.toLowerCase().includes(term))), cfoHeads.activities, (a, key) => (key === 'ef' ? cfoEfLabel(efById.get(a.ef_id)) : key === 'efcode' ? efCode(a) : key === 'ef3' ? ef3Label(a) : a[key] ?? ''));
+    fillTable('cfo-rows', [{ label: 'หน่วยงาน', key: 'department' }, { label: 'กิจกรรม', key: 'name' }, { label: 'รายละเอียด', key: 'detail' }, { label: 'EF id', key: 'efcode' }, { label: 'Emission factor', key: 'ef' }, { label: '3-3 (EF id · kgCO₂e)', key: 'ef3' }, { label: 'สูตร', key: 'calc' }, { label: 'สถานะ', key: 'status' }],
+      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td>${esc(a.name)}</td><td>${esc(a.detail || '')}</td><td><b>${esc(efCode(a))}</b></td><td>${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td>${esc(ef3Label(a))}</td><td>${esc(CFO_CALCS[a.calc]?.short || '')}</td><td>${esc(a.status)}</td></tr>`).join(''), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
     bindRowSelect($('cfo-rows'), (id) => { picked = m.activities.find((a) => String(a.id) === id); ['cfo-edit', 'cfo-del'].forEach((b) => { if ($(b)) $(b).disabled = !picked; }); });
   };
   let picked = null;
@@ -862,7 +867,7 @@ function cfoSetActivities(body, m, rerender) {
       ${field('Scope', `<select id="cfo-f-scope">${options(['', '1', '2', '3'], cfoFilter.scope, (v) => (v ? `Scope ${v}` : 'ทั้งหมด'))}</select>`)}
       ${field('หน่วยงาน', `<select id="cfo-f-dept">${options(['', ...departments], cfoFilter.department, (v) => v || 'ทั้งหมด')}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'ชื่อกิจกรรม' })}
-      ${m.admin ? `<div class="action-bar">${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
+      ${m.admin ? `<div class="action-bar">${button('cfo-fill3', 'เติม 3-3')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
     </div>
     <div class="table-wrap sheet" id="cfo-rows"></div>
     <p class="sum-meta">${m.activities.length} กิจกรรม · กิจกรรมที่มีข้อมูลแล้วลบไม่ได้ ให้ตั้งเป็น Inactive</p>`;
@@ -960,7 +965,10 @@ function cfoSetActivities(body, m, rerender) {
       const type = $('cfo-a-type').value;
       // Scope 3 fuel too (รถผู้บริหาร 3-6 ใช้ B7 / E85, ผู้ใช้กำหนด 2026-11-03): the fuel bought also has its 3-3 การได้มาของเชื้อเพลิง
       const mainRef = kind === 'ref' ? m.refs.find((r) => String(r.id) === id) : null;
-      const fuel = mainRef ? mainRef.sheet === 'energy' && mainRef.grp !== 'Electricity' : kind === 'ef' && current?.source_type === 'tgo' && current?.kind !== 'Electricity' && !current?.hfc;
+      // an EF copy from the old Excel import has no source_type: its reference row (ref_id) or the fuel name decides
+      const ownRef = !mainRef && kind === 'ef' ? m.refs.find((r) => r.id === current?.ref_id) : null;
+      const fuel = mainRef || ownRef ? (mainRef || ownRef).sheet === 'energy' && (mainRef || ownRef).grp !== 'Electricity'
+        : kind === 'ef' && Boolean(fuelOf(current?.name || '')) && !current?.hfc;
       const show = (type === '1' && $('cfo-a-calc').value !== 'septic' && ['1-1', '1-2'].includes($('cfo-a-scope').value)) || type === '2'
         || (type === '3' && $('cfo-a-scope').value !== '3-3' && fuel);
       $('cfo-a-up').hidden = !show;
@@ -1016,6 +1024,12 @@ function cfoSetActivities(body, m, rerender) {
     showCode();
   };
   $('cfo-add').onclick = () => form(null);
+  // every fuel activity without 3-3 gets the EF CFP the form would pick (server cfo/activities/fill-ef3)
+  $('cfo-fill3').onclick = () => confirmPopup('เติม 3-3 ให้กิจกรรมน้ำมัน', `กิจกรรมน้ำมันที่ยังไม่มี 3-3 (การได้มาของเชื้อเพลิง) ทั้งหมด: ดีเซล / B7 → EF CFP น้ำมันดีเซล, แก๊สโซฮอล์ / เบนซิน → แก๊สโซลีน, LPG → ก๊าซหุงต้ม · ลิตรคูณความหนาแน่น · เดือนที่บันทึกแล้วได้ 3-3 ด้วย`, async () => {
+    const r = await a5Api(CFO, 'cfo/activities/fill-ef3', { method: 'POST' });
+    toast(`เติม 3-3 แล้ว ${r.filled} กิจกรรม${r.skipped.length ? ` · ข้าม ${r.skipped.length}` : ''}`);
+    rerender();
+   }, 'เติม 3-3');
   $('cfo-edit').onclick = () => picked && form(picked);
   $('cfo-del').onclick = () => picked && confirmPopup('ลบกิจกรรม', `ลบ ${esc(picked.department)} · ${esc(picked.name)}`, async () => {
     await a5Api(CFO, `cfo/activities/${picked.id}`, { method: 'DELETE' });
