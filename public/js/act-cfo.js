@@ -39,7 +39,8 @@ let cfoSetTab = 'team';
 // Setting > Emission Factor (ผู้ใช้กำหนด 2026-11-01): GWP + separate reference tables of the TGO sheet
 // "EF TGO AR5 V2" (mt_cfo_ef_ref, seed db/act/cfo_ef_ref_seed.sql) so each table is easy to read and add to.
 // "EF ที่ใช้คำนวณ" was cut from here (ผู้ใช้สั่ง 2026-11-01); mt_cfo_ef stays for activities and entries.
-const CFO_EF_VIEWS = { energy: 'EF พลังงาน', gwp: 'GWP', chemical: 'GWP สารเคมี', ipcc: 'EF IPCC', fuel: 'คุณสมบัติเชื้อเพลิง', cfp: 'EF CFP' };
+// table names in English (ผู้ใช้กำหนด 2026-11-02)
+const CFO_EF_VIEWS = { energy: 'EF Energy', gwp: 'GWP', chemical: 'GWP Chemicals', ipcc: 'EF IPCC', fuel: 'Fuel Properties', cfp: 'EF CFP' };
 let cfoEfView = 'energy';
 // tables an activity can take its EF from (server REF_PICK)
 const CFO_EF_PICK = ['energy', 'chemical', 'cfp'];
