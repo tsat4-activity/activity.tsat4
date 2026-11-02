@@ -44,13 +44,17 @@ async function ownersOf(activity, year, areaIds) {
 
 // Summary: average % per group over every audit, and the average audit % per month.
 export function summarize(audits, groups) {
-  const groupNos = [...new Set(groups.map((g) => Number(g.s_group)))].sort((x, y) => x - y);
+  const byGroup = new Map();
+  for (const g of groups) {
+    const n = Number(g.s_group);
+    if (!byGroup.has(n)) byGroup.set(n, []);
+    byGroup.get(n).push(g.percent);
+  }
+  const byMonth = Array.from({ length: 12 }, () => []);
+  for (const a of audits) byMonth[monthOf(a.audited_at) - 1]?.push(a.percent_score);
   return {
-    groups: groupNos.map((n) => ({ group: n, percent: round1(avg(groups.filter((g) => Number(g.s_group) === n).map((g) => g.percent)) || 0) })),
-    months: Array.from({ length: 12 }, (_, i) => {
-      const rows = audits.filter((a) => monthOf(a.audited_at) === i + 1);
-      return { month: i + 1, percent: rows.length ? round2(avg(rows.map((a) => a.percent_score))) : 0, audits: rows.length };
-    }),
+    groups: [...byGroup.keys()].sort((x, y) => x - y).map((n) => ({ group: n, percent: round1(avg(byGroup.get(n)) || 0) })),
+    months: byMonth.map((scores, i) => ({ month: i + 1, percent: scores.length ? round2(avg(scores)) : 0, audits: scores.length })),
     audits: audits.length
   };
 }
@@ -115,23 +119,30 @@ export function mountAudit(app) {
   route('get', '/api/act/:activity/dashboard/summary', async (req, res, activity) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
-    const areas = await areasOf(activity);
     const areaType = AREA_TYPES.includes(req.query.areaType) ? req.query.areaType : '';
     const areaId = Number(req.query.area) || 0;
+    const [areas, rawAudits, ownerMap, pass] = await Promise.all([
+      areasOf(activity),
+      auditsOf(activity, year),
+      areaId ? ownersOf(activity, year, [areaId]) : null,
+      tx.from(tablesOf(activity).setting).select('value').eq('key', 'pass_percent').maybeSingle()
+    ]);
     const allowed = new Set(areas.filter((a) => (!areaType || a.area_type === areaType) && (!areaId || a.id === areaId)).map((a) => a.id));
     // Every type in one read: the KPI cards follow the ประเภท filter, the monthly charts show Self and Committee apart.
-    const all = (await auditsOf(activity, year)).filter((a) => allowed.has(a.area_id));
+    const all = rawAudits.filter((a) => allowed.has(a.area_id));
     const type = AUDIT_TYPES.includes(req.query.type) ? req.query.type : '';
     const audits = type ? all.filter((a) => a.audit_type === type) : all;
-    const groups = await groupsOf(activity, audits.map((a) => a.id));
-    const owner = areaId ? (await ownersOf(activity, year, [areaId])).get(areaId) : '';
-    const pass = await tx.from(tablesOf(activity).setting).select('value').eq('key', 'pass_percent').maybeSingle();
+    const owner = areaId ? ownerMap.get(areaId) : '';
+    const [groups, ownerNames] = await Promise.all([
+      groupsOf(activity, audits.map((a) => a.id)),
+      owner ? namesOf([owner]) : null
+    ]);
     res.json({
       pass: Number(pass.data?.value) || 80,
       areas: areas.filter((a) => a.status === 'Active' || allowed.has(a.id)).map((a) => ({ id: a.id, code: a.code, name: a.name, areaType: a.area_type })),
       ...summarize(audits, groups),
       byType: Object.fromEntries(AUDIT_TYPES.map((t) => [t, summarize(all.filter((a) => a.audit_type === t), []).months])),
-      owner: owner ? { employeeId: owner, name: (await namesOf([owner])).get(owner)?.name || '' } : null
+      owner: owner ? { employeeId: owner, name: ownerNames.get(owner)?.name || '' } : null
     });
   });
 
@@ -139,8 +150,8 @@ export function mountAudit(app) {
     const year = yearOf(req.query.year);
     const upTo = intIn(req.query.month, 1, 12) || 12;
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
-    const areas = await areasOf(activity);
-    const audits = (await auditsOf(activity, year, req.query.type)).filter((a) => monthOf(a.audited_at) <= upTo);
+    const [areas, rawAudits] = await Promise.all([areasOf(activity), auditsOf(activity, year, req.query.type)]);
+    const audits = rawAudits.filter((a) => monthOf(a.audited_at) <= upTo);
     const groups = await groupsOf(activity, audits.map((a) => a.id));
     res.json({ year, month: upTo, ...rank(areas, audits, groups, upTo) });
   });
@@ -151,19 +162,26 @@ export function mountAudit(app) {
     const areaType = AREA_TYPES.includes(req.query.areaType) ? req.query.areaType : AREA_TYPES[0];
     const areas = (await areasOf(activity)).filter((a) => a.area_type === areaType);
     const ids = areas.map((a) => a.id);
+    const idSet = new Set(ids);
     const [plans, audits] = await Promise.all([
       fetchIn(() => tx.from(tablesOf(activity).auditPlan).select('id,area_id,month,week,round,team').eq('year', year), 'area_id', ids),
       auditsOf(activity, year, 'COMMITTEE')
     ]);
-    const mine = audits.filter((a) => ids.includes(a.area_id));
+    const mine = audits.filter((a) => idSet.has(a.area_id));
     const issues = await fetchIn(() => tx.from(tablesOf(activity).issue).select('audit_id,status'), 'audit_id', mine.map((a) => a.id));
+    const issuesByAudit = new Map();
+    for (const i of issues) {
+      if (!issuesByAudit.has(i.audit_id)) issuesByAudit.set(i.audit_id, []);
+      issuesByAudit.get(i.audit_id).push(i);
+    }
+    const hasActivity = new Set([...plans.map((p) => p.area_id), ...mine.map((x) => x.area_id)]);
     res.json({
       year,
       areaType,
-      areas: areas.filter((a) => a.status === 'Active' || plans.some((p) => p.area_id === a.id) || mine.some((x) => x.area_id === a.id)).map((a) => ({ id: a.id, code: a.code, name: a.name })),
+      areas: areas.filter((a) => a.status === 'Active' || hasActivity.has(a.id)).map((a) => ({ id: a.id, code: a.code, name: a.name })),
       plans,
       audits: mine.map((a) => {
-        const own = issues.filter((i) => i.audit_id === a.id);
+        const own = issuesByAudit.get(a.id) || [];
         return { id: a.id, auditNo: a.audit_no, areaId: a.area_id, month: monthOf(a.audited_at), week: weekOf(a.audited_at), team: a.team, percent: Number(a.percent_score), issues: own.length, openIssues: own.filter((i) => i.status !== 'CLOSED').length };
       })
     });
@@ -209,8 +227,11 @@ export function mountAudit(app) {
     if (activity !== '5s') return res.json({ year: yearOf(req.query.year) || new Date().getFullYear(), areas: [] });
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
-    const areas = await areasOf(activity);
-    const owners = await ownersOf(activity, year, areas.map((a) => a.id));
+    const [areas, ownerRows] = await Promise.all([
+      areasOf(activity),
+      fetchAll(() => tx.from(tablesOf(activity).team).select('area_id,employee_id').eq('year', year).eq('role', 'owner'))
+    ]);
+    const owners = new Map(ownerRows.map((row) => [Number(row.area_id), String(row.employee_id)]));
     const names = await namesOf([...owners.values()]);
     res.json({ year, areas: areas.map((a) => ({ ...a, owner: owners.get(a.id) ? { employeeId: owners.get(a.id), name: names.get(owners.get(a.id))?.name || '' } : null })) });
   });
@@ -396,14 +417,13 @@ export function mountAudit(app) {
     if (!(await requireAdmin(req, res, activity, to))) return;
     const rows = await fetchAll(() => tx.from(table).select('*').eq('year', from).order('id'));
     if (!rows.length) return fail(res, 400, `ปี ${from} ไม่มีข้อมูลให้คัดลอก`);
-    let copied = 0;
-    for (const { id, ...row } of rows) {
+    const results = await Promise.all(rows.map(async ({ id, ...row }) => {
       const { error } = await tx.from(table).insert({ ...row, year: to });
-      if (error?.code === '23505') continue;
+      if (error?.code === '23505') return 0;
       throwIf(error);
-      copied += 1;
-    }
-    res.json({ ok: true, copied });
+      return 1;
+    }));
+    res.json({ ok: true, copied: results.reduce((s, v) => s + v, 0) });
   };
   route('post', '/api/act/:activity/team/copy', copyYear('team'));
   route('post', '/api/act/:activity/checklist/copy', copyYear('checklist'));

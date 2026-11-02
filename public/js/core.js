@@ -1,14 +1,11 @@
 // Shared shell: helpers, popup, api(), session screens, and the view router.
-// Modules register into VIEWS / TITLES / ACCESS. Scripts share one global scope: never reuse a top-level name.
-const RANK = { viewer: 1, user: 2, admin: 3 };
+// Modules register into VIEWS / TITLES. Scripts share one global scope: never reuse a top-level name.
 const PAGE = 50;
 const TITLES = {
   main: ['TSAT4 Activity', 'หน้าหลัก']
 };
 // view name -> render(target)
 const VIEWS = {};
-// view name -> [moduleId, minimum rank]; below it the view opens as 'locked'
-const ACCESS = {};
 // render for view names not in VIEWS (set by units.js)
 let viewFallback = null;
 
@@ -283,7 +280,7 @@ function chartKpi({ label, value, unit = '', pill = '', note = '', color = CHART
 // A card holding a chart has no title (ผู้ใช้กำหนด 2026-10-28): only its small note on the right, if any.
 // Table cards keep their title.
 function chartCard(title, body, meta = '') {
-  const chart = /class="(ch-plot|sto-donut-wrap)/.test(body);
+  const chart = /class="ch-plot/.test(body);
   const head = chart ? (meta ? `<div class="ch-head is-meta"><div class="sum-meta">${meta}</div></div>` : '') : `<div class="ch-head"><div class="card-title">${title}</div>${meta ? `<div class="sum-meta">${meta}</div>` : ''}</div>`;
   return `<section class="card ch-card"${chart ? ` aria-label="${esc(String(title).replace(/<[^>]*>/g, ''))}"` : ''}>${head}${body}</section>`;
 }
@@ -475,12 +472,6 @@ function bindRowSelect(container, onSelect) {
   });
 }
 
-function rankOf(moduleId = 'sto', user = me) {
-  if (!user) return 0;
-  if (user.creator) return RANK.admin;
-  return RANK[user.roles?.[moduleId]] || 0;
-}
-
 function showLogin() {
   me = null;
   $('login').classList.remove('d-none');
@@ -513,8 +504,6 @@ function zoneOf(name) {
 }
 
 function openView(name) {
-  const rule = ACCESS[name];
-  if (rule && rankOf(rule[0]) < rule[1]) name = 'locked';
   if (name === 'system' && !me.creator) name = 'main';
   view = name;
   // Dashboard pages use the compact sizes (body[data-dash] in app.css).
@@ -551,39 +540,6 @@ function modulePage(target, title, meta, cards) {
   const grid = `<div class="module-grid">${cards.map((card) => moduleCard(...card)).join('')}</div>`;
   target.innerHTML = cardView(title, meta, grid);
   bindGo(target);
-}
-
-function bindHold(button, onDone) {
-  const fill = button.querySelector('.hold-fill');
-  let active = false;
-  let finished = false;
-  let frame = 0;
-  const stop = (done) => {
-    if (finished) return;
-    active = false;
-    cancelAnimationFrame(frame);
-    if (!done) { fill.style.width = '0'; return; }
-    finished = true;
-    fill.style.width = '100%';
-    onDone();
-  };
-  const tick = (now) => {
-    if (!active) return;
-    const ratio = Math.min(1, (now - button.dataset.holdStart) / 2000);
-    fill.style.width = `${ratio * 100}%`;
-    if (ratio >= 1) { stop(true); return; }
-    frame = requestAnimationFrame(tick);
-  };
-  button.addEventListener('pointerdown', (event) => {
-    if (button.disabled || active || finished) return;
-    active = true;
-    button.dataset.holdStart = String(performance.now());
-    button.setPointerCapture?.(event.pointerId);
-    frame = requestAnimationFrame(tick);
-  });
-  button.addEventListener('pointerup', () => { if (active) stop(false); });
-  button.addEventListener('pointercancel', () => { if (active) stop(false); });
-  button.addEventListener('contextmenu', (event) => event.preventDefault());
 }
 
 // VIEWS.main (หน้าหลัก = ภาพรวมกิจกรรม 5S · CFO · SMF) is aplHome in act-planner.js
@@ -795,7 +751,7 @@ const DMY = (() => {
 
 // Hovering a list thumbnail shows it large next to the pointer (ผู้ใช้กำหนด 2026-10-28). One floating box for the
 // whole app, fixed position so table cells that clip overflow do not cut it. New thumbnails: add class img-zoom.
-const ZOOM_THUMBS = 'img.tx-card-img, img.usage-thumb, img.img-zoom';
+const ZOOM_THUMBS = 'img.img-zoom';
 (() => {
   if (!window.matchMedia('(hover: hover)').matches) return;
   const box = document.createElement('div');

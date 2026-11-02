@@ -655,71 +655,56 @@ async function aplSetting(target, activity) {
 }
 
 const smfPickedProj = {};
+const smfDiffPct = (tVal, aVal, bar = true) => {
+  if (tVal == null || aVal == null || Number.isNaN(tVal) || Number.isNaN(aVal)) return ['-', '-'];
+  const diff = aVal - tVal;
+  const diffHtml = `<span class="${diff >= 0 ? 'ov-good' : 'ov-bad'}">${diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)}</span>`;
+  if (tVal === 0) return [diffHtml, '-'];
+  const pct = (aVal / tVal) * 100;
+  const color = pct >= 100 ? '#10b981' : pct >= 80 ? '#f59e0b' : '#ef4444';
+  return [diffHtml, `<b>${pct.toFixed(1)}%</b>${bar ? `<div class="ov-bar" style="height:4px;margin-top:2px"><span style="width:${Math.min(pct, 100)}%;background:${color}"></span></div>` : ''}`];
+};
 
 // SMF Transaction: บันทึกเป้าหมาย (target) และผลงาน (actual) รายเดือนของแต่ละโครงการ (ผู้ใช้กำหนด 2026-11-01)
 async function smfTransaction(target, activity = 'smf') {
-  let me;
-  let pmData;
+  let me, pmData;
   try {
-    [me, pmData] = await Promise.all([
-      a5Api(activity, `me?year=${a5Year}`),
-      a5Api(activity, `project-months?year=${a5Year}`)
-    ]);
+    [me, pmData] = await Promise.all([a5Api(activity, `me?year=${a5Year}`), a5Api(activity, `project-months?year=${a5Year}`)]);
   } catch (err) {
     target.innerHTML = `<div class="view-body"><section class="card"><p class="empty">${esc(err.message)}</p></section></div>`;
     return;
   }
   const canEdit = !!(me.access?.admin || me.access?.member || me.access?.smart);
   const projects = (pmData.projects || []).filter((p) => p.status === 'Active');
+  const rerender = () => smfTransaction(target, activity).catch(onErr);
 
   if (!projects.length) {
     target.innerHTML = `<div class="view-body"><section class="card">
       ${pageBar('<strong class="plan-label">เป้าหมายและผลงานรายเดือน (SMF)</strong>', `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'smf')}
       <div id="smf-body"><p class="empty">ยังไม่มีโครงการปี ${a5Year} · เพิ่มโครงการได้ที่ Setting > โครงการ</p></div>
     </section></div>`;
-    if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); smfTransaction(target, activity).catch(onErr); };
+    if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
     return;
   }
 
-  if (!smfPickedProj[activity] || !projects.some((p) => p.id === smfPickedProj[activity])) {
-    smfPickedProj[activity] = projects[0].id;
-  }
+  if (!projects.some((p) => p.id === smfPickedProj[activity])) smfPickedProj[activity] = projects[0].id;
   const currentProj = projects.find((p) => p.id === smfPickedProj[activity]) || projects[0];
-  const monthsData = (pmData.months || []).filter((m) => m.project_id === currentProj.id);
-  const byMonth = Object.fromEntries(monthsData.map((m) => [m.month, m]));
-
+  const byMonth = Object.fromEntries((pmData.months || []).filter((m) => m.project_id === currentProj.id).map((m) => [m.month, m]));
   const projTabs = Object.fromEntries(projects.map((p) => [p.id, p.name]));
   const kpiLabel = currentProj.target_name || 'เป้าหมาย';
   const unitLabel = currentProj.unit ? ` (${currentProj.unit})` : '';
+  const lock = canEdit ? '' : 'disabled';
 
   const rowsHtml = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
     const item = byMonth[m] || {};
-    const tVal = item.target != null ? item.target : '';
-    const aVal = item.actual != null ? item.actual : '';
-    const noteVal = item.note || '';
-
-    let diffHtml = '-';
-    let pctHtml = '-';
-    if (tVal !== '' && aVal !== '') {
-      const diff = Number(aVal) - Number(tVal);
-      const diffSign = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
-      const diffClass = diff >= 0 ? 'ov-good' : 'ov-bad';
-      diffHtml = `<span class="${diffClass}">${diffSign}</span>`;
-      if (Number(tVal) !== 0) {
-        const pct = (Number(aVal) / Number(tVal)) * 100;
-        const pctColor = pct >= 100 ? '#10b981' : pct >= 80 ? '#f59e0b' : '#ef4444';
-        pctHtml = `<b>${pct.toFixed(1)}%</b><div class="ov-bar" style="height:4px;margin-top:2px"><span style="width:${Math.min(pct, 100)}%;background:${pctColor}"></span></div>`;
-      }
-    }
-
     return `<tr data-month="${m}">
       <td style="font-weight:600">${m}. ${ACT_MONTHS[i]}</td>
-      <td><input class="input smf-input smf-target" type="number" step="any" value="${tVal}" ${canEdit ? '' : 'disabled'} placeholder="Target"></td>
-      <td><input class="input smf-input smf-actual" type="number" step="any" value="${aVal}" ${canEdit ? '' : 'disabled'} placeholder="Actual"></td>
-      <td class="smf-diff-cell">${diffHtml}</td>
-      <td class="smf-pct-cell">${pctHtml}</td>
-      <td><input class="input smf-input smf-note" type="text" maxlength="300" value="${esc(noteVal)}" ${canEdit ? '' : 'disabled'} placeholder="หมายเหตุ..."></td>
+      <td><input class="input smf-input smf-target" type="number" step="any" value="${item.target ?? ''}" ${lock} placeholder="Target"></td>
+      <td><input class="input smf-input smf-actual" type="number" step="any" value="${item.actual ?? ''}" ${lock} placeholder="Actual"></td>
+      <td class="smf-diff-cell">-</td>
+      <td class="smf-pct-cell">-</td>
+      <td><input class="input smf-input smf-note" type="text" maxlength="300" value="${esc(item.note || '')}" ${lock} placeholder="หมายเหตุ..."></td>
     </tr>`;
   }).join('');
 
@@ -738,96 +723,52 @@ async function smfTransaction(target, activity = 'smf') {
       </div>
       <div class="table-wrap sheet">
         <table class="mo-data-table smf-month-table">
-          <thead>
-            <tr>
-              <th style="width:120px">เดือน</th>
-              <th style="width:140px">เป้าหมาย ${esc(unitLabel)}</th>
-              <th style="width:140px">ผลงานจริง ${esc(unitLabel)}</th>
-              <th style="width:110px">ผลต่าง</th>
-              <th style="width:130px">% บรรลุ</th>
-              <th>หมายเหตุ</th>
-            </tr>
-          </thead>
-          <tbody id="smf-rows">
-            ${rowsHtml}
-          </tbody>
-          <tfoot>
-            <tr id="smf-summary" style="background:var(--bg-subtle, #f8fafc);font-weight:600">
-              <td>เฉลี่ยทั้งปี</td>
-              <td id="smf-sum-target">-</td>
-              <td id="smf-sum-actual">-</td>
-              <td id="smf-sum-diff">-</td>
-              <td id="smf-sum-pct">-</td>
-              <td id="smf-sum-info" class="sum-meta"></td>
-            </tr>
-          </tfoot>
+          <thead><tr>
+            <th style="width:120px">เดือน</th>
+            <th style="width:140px">เป้าหมาย ${esc(unitLabel)}</th>
+            <th style="width:140px">ผลงานจริง ${esc(unitLabel)}</th>
+            <th style="width:110px">ผลต่าง</th>
+            <th style="width:130px">% บรรลุ</th>
+            <th>หมายเหตุ</th>
+          </tr></thead>
+          <tbody id="smf-rows">${rowsHtml}</tbody>
+          <tfoot><tr id="smf-summary" style="background:var(--bg-subtle, #f8fafc);font-weight:600">
+            <td>เฉลี่ยทั้งปี</td>
+            <td id="smf-sum-target">-</td>
+            <td id="smf-sum-actual">-</td>
+            <td id="smf-sum-diff">-</td>
+            <td id="smf-sum-pct">-</td>
+            <td id="smf-sum-info" class="sum-meta"></td>
+          </tr></tfoot>
         </table>
       </div>
       <p class="sum-meta" style="margin-top:10px">บันทึกเป้าหมายและผลงานได้รายเดือน · ผู้ดูแล (Smart Team, ผู้ประสานงาน, สมาชิกโครงการ) สามารถบันทึกได้</p>
     </div>
   </section></div>`;
 
-  const rerender = () => smfTransaction(target, activity).catch(onErr);
-  target.querySelectorAll('[data-smfproj]').forEach((node) => {
-    node.onclick = () => { smfPickedProj[activity] = Number(node.dataset.smfproj); rerender(); };
-  });
+  target.querySelectorAll('[data-smfproj]').forEach((node) => { node.onclick = () => { smfPickedProj[activity] = Number(node.dataset.smfproj); rerender(); }; });
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
 
+  const numOf = (el) => (el.value !== '' && Number.isFinite(Number(el.value)) ? Number(el.value) : null);
   const recalc = () => {
-    let tSum = 0, tCount = 0;
-    let aSum = 0, aCount = 0;
-    const rows = target.querySelectorAll('#smf-rows tr');
-    rows.forEach((tr) => {
-      const tIn = tr.querySelector('.smf-target');
-      const aIn = tr.querySelector('.smf-actual');
-      const diffCell = tr.querySelector('.smf-diff-cell');
-      const pctCell = tr.querySelector('.smf-pct-cell');
-      const tVal = tIn.value !== '' ? Number(tIn.value) : null;
-      const aVal = aIn.value !== '' ? Number(aIn.value) : null;
-
-      if (tVal != null && !Number.isNaN(tVal)) { tSum += tVal; tCount++; }
-      if (aVal != null && !Number.isNaN(aVal)) { aSum += aVal; aCount++; }
-
-      if (tVal != null && aVal != null && !Number.isNaN(tVal) && !Number.isNaN(aVal)) {
-        const diff = aVal - tVal;
-        const diffSign = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
-        const diffClass = diff >= 0 ? 'ov-good' : 'ov-bad';
-        diffCell.innerHTML = `<span class="${diffClass}">${diffSign}</span>`;
-        if (tVal !== 0) {
-          const pct = (aVal / tVal) * 100;
-          const pctColor = pct >= 100 ? '#10b981' : pct >= 80 ? '#f59e0b' : '#ef4444';
-          pctCell.innerHTML = `<b>${pct.toFixed(1)}%</b><div class="ov-bar" style="height:4px;margin-top:2px"><span style="width:${Math.min(pct, 100)}%;background:${pctColor}"></span></div>`;
-        } else {
-          pctCell.innerHTML = '-';
-        }
-      } else {
-        diffCell.innerHTML = '-';
-        pctCell.innerHTML = '-';
-      }
+    let tSum = 0, tCount = 0, aSum = 0, aCount = 0;
+    target.querySelectorAll('#smf-rows tr').forEach((tr) => {
+      const tVal = numOf(tr.querySelector('.smf-target'));
+      const aVal = numOf(tr.querySelector('.smf-actual'));
+      if (tVal != null) { tSum += tVal; tCount++; }
+      if (aVal != null) { aSum += aVal; aCount++; }
+      const [diffHtml, pctHtml] = smfDiffPct(tVal, aVal, true);
+      tr.querySelector('.smf-diff-cell').innerHTML = diffHtml;
+      tr.querySelector('.smf-pct-cell').innerHTML = pctHtml;
     });
-
     const tAvg = tCount > 0 ? tSum / tCount : null;
     const aAvg = aCount > 0 ? aSum / aCount : null;
-    if ($('smf-sum-target')) $('smf-sum-target').textContent = tAvg != null ? tAvg.toFixed(2) : '-';
-    if ($('smf-sum-actual')) $('smf-sum-actual').textContent = aAvg != null ? aAvg.toFixed(2) : '-';
-    if ($('smf-sum-diff')) {
-      if (tAvg != null && aAvg != null) {
-        const diff = aAvg - tAvg;
-        const diffSign = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
-        const diffClass = diff >= 0 ? 'ov-good' : 'ov-bad';
-        $('smf-sum-diff').innerHTML = `<span class="${diffClass}">${diffSign}</span>`;
-        if (tAvg !== 0) {
-          const pct = (aAvg / tAvg) * 100;
-          $('smf-sum-pct').innerHTML = `<b>${pct.toFixed(1)}%</b>`;
-        } else {
-          $('smf-sum-pct').textContent = '-';
-        }
-      } else {
-        $('smf-sum-diff').textContent = '-';
-        $('smf-sum-pct').textContent = '-';
-      }
-    }
-    if ($('smf-sum-info')) $('smf-sum-info').textContent = `บันทึกแล้ว ${aCount}/12 เดือน`;
+    const [sumDiff, sumPct] = smfDiffPct(tAvg, aAvg, false);
+    $('smf-sum-target').textContent = tAvg != null ? tAvg.toFixed(2) : '-';
+    $('smf-sum-actual').textContent = aAvg != null ? aAvg.toFixed(2) : '-';
+    $('smf-sum-diff').innerHTML = sumDiff;
+    $('smf-sum-pct').innerHTML = sumPct;
+    $('smf-sum-info').textContent = `บันทึกแล้ว ${aCount}/12 เดือน`;
   };
 
   recalc();
@@ -836,13 +777,8 @@ async function smfTransaction(target, activity = 'smf') {
   if (canEdit && $('smf-copy-target')) {
     $('smf-copy-target').onclick = () => {
       const firstTarget = target.querySelector('#smf-rows tr[data-month="1"] .smf-target').value;
-      if (firstTarget === '') {
-        toast('กรุณากรอกเป้าหมายเดือนที่ 1 ก่อน', 'warn');
-        return;
-      }
-      target.querySelectorAll('#smf-rows tr').forEach((tr, idx) => {
-        if (idx > 0) tr.querySelector('.smf-target').value = firstTarget;
-      });
+      if (firstTarget === '') return toast('กรุณากรอกเป้าหมายเดือนที่ 1 ก่อน', 'warn');
+      target.querySelectorAll('#smf-rows tr .smf-target').forEach((el) => { el.value = firstTarget; });
       recalc();
       toast('คัดลอกเป้าหมายไปทุกเดือนแล้ว');
     };
@@ -850,25 +786,15 @@ async function smfTransaction(target, activity = 'smf') {
 
   if (canEdit && $('smf-save')) {
     $('smf-save').onclick = async () => {
-      const months = [];
-      target.querySelectorAll('#smf-rows tr').forEach((tr) => {
-        const month = Number(tr.dataset.month);
-        const tVal = tr.querySelector('.smf-target').value;
-        const aVal = tr.querySelector('.smf-actual').value;
-        const note = tr.querySelector('.smf-note').value;
-        months.push({
-          month,
-          target: tVal !== '' ? Number(tVal) : null,
-          actual: aVal !== '' ? Number(aVal) : null,
-          note: note || null
-        });
-      });
+      const months = [...target.querySelectorAll('#smf-rows tr')].map((tr) => ({
+        month: Number(tr.dataset.month),
+        target: numOf(tr.querySelector('.smf-target')),
+        actual: numOf(tr.querySelector('.smf-actual')),
+        note: tr.querySelector('.smf-note').value || null
+      }));
       try {
         $('smf-save').disabled = true;
-        await a5Api(activity, 'project-months', {
-          method: 'PUT',
-          body: { year: a5Year, projectId: currentProj.id, months }
-        });
+        await a5Api(activity, 'project-months', { method: 'PUT', body: { year: a5Year, projectId: currentProj.id, months } });
         toast('บันทึกเป้าหมายและผลงานสำเร็จ');
         rerender();
       } catch (err) {

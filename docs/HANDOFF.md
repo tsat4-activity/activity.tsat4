@@ -13,10 +13,11 @@
 ## ข้อควรระวัง
 
 - `db/setup.sql` สร้างจาก `db/00_main.sql` + `db/act/5s.sql` ด้วย `node scripts/setup-sql.js` ห้ามแก้มือ (`npm run test:act` ตรวจให้)
-- `public/app.css` ยังมีสไตล์ของ Store / CFO / Kaizen / QCC ติดมา (ไม่มีผลกับหน้าจอ) ลบทีหลังได้
 - ข้อมูลเดิมจาก TSAT4 SMF (พนักงาน, ผลตรวจ 5S, CFO) ยังไม่ได้ย้ายมา · มีไฟล์นำเข้า `inbox/import_5s.sql`, `inbox/import_cfo.sql` (ไม่อยู่ใน git) ทดสอบแล้วใน test:act
 
 ## บันทึก (อันใหม่อยู่บนสุด)
+
+- 2026-11-02 · Antigravity [SMF] · Audit & ปรับความเร็วโค้ดทั้งระบบ: Parallelize คำสั่งอ่าน/บันทึก DB ด้วย `Promise.all` (`common.js` `fetchIn`, `audit.js`, `transaction.js`, `planner.js`, `overview.js`, `smf.js`, `cfo.js` รวมทั้ง batch โหลดวัสดุ SAP คราวเดียวแทนยิงทีละแถว) · เปลี่ยนการค้นหาซ้ำในลูป `.find()`/`.filter()` เป็น `Map`/`Set` O(1) ทั้งฝั่ง Server และตารางแผน 5S 48 สัปดาห์ (`a5Grid` ใน `act-5s.js`) · ยุบโค้ดซ้ำสร้าง Issue (`insertIssues` ใน `transaction.js`) และคำนวณผลต่าง/เปอร์เซ็นต์ SMF (`smfDiffPct` ใน `act-planner.js`) · โหลดฟอร์มแก้ไขใบตรวจและอัปโหลดรูป Issue แบบขนาน (`act-tx.js`) · แก้บั๊ก `smf.js` ขาด import `accessOf` · ลบโค้ดและ CSS เก่าที่ไม่ได้ใช้ของ Store / Kaizen / QCC (`core.js`, `app.css`)
 
 - 2026-11-02 · Claude [5S] · FK employee_id → mt_main_employee ใน mt_<act>_team และ owner_id ใน mt_<act>_task (NOT VALID, สร้างเมื่อ mt_main_* อยู่ฐานเดียวกัน) · System > mt_main_user แสดงหน่วยงานจากข้อมูลพนักงาน · สิทธิ์ผู้ใช้ใน inbox/users_access.sql (ผู้ใช้รัน) · ต้องรัน db/act/*.sql ใหม่
 

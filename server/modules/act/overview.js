@@ -95,12 +95,13 @@ async function fiveS(year, today) {
 // CFO: tCO2e of the year (not the separately reported EF) against the compare year and its target, months recorded.
 async function cfo(year) {
   const t = tablesOf('cfo');
-  const settings = Object.fromEntries((await fetchAll(() => tx.from(t.setting).select('key,value'))).map((r) => [r.key, r.value]));
+  const rowsOf = (y) => fetchAll(() => tx.from(t.entryView).select('month,tco2e,separate').gte('month', `${y}-01-01`).lte('month', `${y}-12-01`));
+  const [settingRows, curAll] = await Promise.all([fetchAll(() => tx.from(t.setting).select('key,value')), rowsOf(year)]);
+  const settings = Object.fromEntries(settingRows.map((r) => [r.key, r.value]));
   const baseYear = yearOf(settings.base_year, 0) || null;
   const compareYear = baseYear && baseYear !== year ? baseYear : year - 1;
   const target = Number(settings.target_percent ?? 5) || 0;
-  const rowsOf = (y) => fetchAll(() => tx.from(t.entryView).select('month,tco2e,separate').gte('month', `${y}-01-01`).lte('month', `${y}-12-01`));
-  const [cur, base] = (await Promise.all([rowsOf(year), rowsOf(compareYear)])).map((list) => list.filter((r) => !r.separate));
+  const [cur, base] = [curAll, await rowsOf(compareYear)].map((list) => list.filter((r) => !r.separate));
   const sum = (list) => round(list.reduce((s, r) => s + Number(r.tco2e), 0), 3);
   const months = new Set(cur.map((r) => r.month.slice(0, 7))).size;
   // compare the same months only, so a half-recorded year is not set against a full one
@@ -115,12 +116,13 @@ export function mountOverview(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const today = todayIso();
     const projects = await Promise.all(ACTIVITIES.map(async (activity) => {
-      const [plan, team, results] = await Promise.all([
+      const [plan, team, results, projList] = await Promise.all([
         safe(() => planOf(activity, year, today)),
         safe(() => teamOf(activity, year)),
-        safe(() => (activity === '5s' ? fiveS(year, today) : CFO_ON.includes(activity) ? cfo(year) : null))
+        safe(() => (activity === '5s' ? fiveS(year, today) : CFO_ON.includes(activity) ? cfo(year) : null)),
+        safe(() => projectsOf(activity, year))
       ]);
-      return { activity, plan, team, results, projects: await safe(() => projectsOf(activity, year)) };
+      return { activity, plan, team, results, projects: projList };
     }));
     res.json({ year, today, projects });
   }));

@@ -1,6 +1,6 @@
 import { mx, tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
-import { accessOf, actRoute, dateOf, fetchAll, imageBytes, must, namesOf, requireAdmin, yearOf } from './common.js';
+import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, requireAdmin, yearOf } from './common.js';
 
 // CFO (Carbon Footprint for Organization): Dashboard totals, monthly entry, and master data (EF, activities, company).
 // Tables: db/act/cfo.sql (scripts/act-sql.js cfoSql) · spec: docs/specs/act-cfo.md
@@ -62,17 +62,17 @@ export function mountCfo(app) {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const department = text(req.query.department, 80);
-    const settings = await settingsOf(t);
-    const baseYear = yearOf(settings.base_year, 0) || null;
-    const compareYear = baseYear && baseYear !== year ? baseYear : year - 1;
-    const target = Number(settings.target_percent ?? 5) || 0;
     const rowsOf = (y) => fetchAll(() => {
       let q = tx.from(t.entryView).select('*').gte('month', `${y}-01-01`).lte('month', `${y}-12-01`).order('id');
       if (department) q = q.eq('department', department);
       return q;
     });
+    const [settings, curAll] = await Promise.all([settingsOf(t), rowsOf(year)]);
+    const baseYear = yearOf(settings.base_year, 0) || null;
+    const compareYear = baseYear && baseYear !== year ? baseYear : year - 1;
+    const target = Number(settings.target_percent ?? 5) || 0;
     // รายงานแยก (EF separate) stays out of every Scope total and is reported on its own (Fr-05 "อื่นๆ").
-    const [curAll, baseAll] = await Promise.all([rowsOf(year), rowsOf(compareYear)]);
+    const baseAll = await rowsOf(compareYear);
     const [cur, base] = [curAll, baseAll].map((list) => list.filter((r) => !r.separate));
     const sum = (list) => Math.round(list.reduce((s, r) => s + Number(r.tco2e), 0) * 1000) / 1000;
     const inMonth = (list, m) => list.filter((r) => Number(r.month.slice(5, 7)) === m);
@@ -134,7 +134,7 @@ export function mountCfo(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const now = new Date();
     const due = year < now.getFullYear() ? 12 : year > now.getFullYear() ? 0 : now.getMonth() + 1;
-    const [access, settings, activities, efs, scopes, gwp, entries, details] = await Promise.all([
+    const [access, settings, activities, efs, scopes, gwp, entries, details, materials] = await Promise.all([
       accessOf(req, activity, year),
       settingsOf(t),
       fetchAll(() => tx.from(t.activity).select('id,department,name,detail,calc,status,ef_id,gwp_code').order('id')),
@@ -142,12 +142,18 @@ export function mountCfo(app) {
       fetchAll(() => tx.from(t.cfoScope).select('code,name').order('code')),
       fetchAll(() => tx.from(t.gwp).select('code,ch4').order('code')),
       fetchAll(() => tx.from(t.entryView).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')).then((list) => list.filter((e) => (e.part || 'main') === 'main')),
-      fetchAll(() => tx.from(t.entry).select('id,status,inputs,doc,remark,updated_at,updated_by').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id'))
+      fetchAll(() => tx.from(t.entry).select('id,status,inputs,doc,remark,updated_at,updated_by').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')),
+      usageBySection(t, year)
     ]);
     const efById = new Map(efs.map((e) => [e.id, e]));
     const scopeName = new Map(scopes.map((s) => [s.code, s.name]));
     const gwpCh4 = new Map(gwp.map((g) => [g.code, g.ch4]));
     const detailOf = new Map(details.map((d) => [d.id, d]));
+    const entriesByAct = new Map();
+    for (const e of entries) {
+      if (!entriesByAct.has(e.activity_id)) entriesByAct.set(e.activity_id, []);
+      entriesByAct.get(e.activity_id).push(e);
+    }
     const category = (ef) => `${scopeName.get(ef.scope_code) || ef.scope_code || '-'}${ef.scope_code?.startsWith('1-') && ef.kind ? `(${ef.kind})` : ''}`;
     res.json({
       year,
@@ -155,9 +161,9 @@ export function mountCfo(app) {
       admin: access.admin,
       departments: access.departments,
       septic: Object.fromEntries(Object.entries(settings).filter(([k]) => k.startsWith('septic_'))),
-      materials: await usageBySection(t, year),
-      rows: activities.filter((a) => a.status === 'Active' || entries.some((e) => e.activity_id === a.id)).map((a) => {
-        const list = entries.filter((e) => e.activity_id === a.id);
+      materials,
+      rows: activities.filter((a) => a.status === 'Active' || entriesByAct.has(a.id)).map((a) => {
+        const list = entriesByAct.get(a.id) || [];
         const months = [...new Set(list.map((e) => Number(e.month.slice(5, 7))))];
         const ef = efById.get(a.ef_id) || {};
         return {
@@ -227,8 +233,11 @@ export function mountCfo(app) {
   route('delete', '/api/act/:activity/cfo/entries/:id', async (req, res, activity, t) => {
     const entry = must(await tx.from(t.entry).select('id,month,status,activity_id').eq('id', Number(req.params.id)).maybeSingle());
     if (!entry) return fail(res, 404, 'ไม่พบรายการ');
-    const act = must(await tx.from(t.activity).select('department').eq('id', entry.activity_id).single());
-    const access = await accessOf(req, activity, Number(entry.month.slice(0, 4)));
+    const [actRes, access] = await Promise.all([
+      tx.from(t.activity).select('department').eq('id', entry.activity_id).single(),
+      accessOf(req, activity, Number(entry.month.slice(0, 4)))
+    ]);
+    const act = must(actRes);
     if (!access.admin && (entry.status === 'CONFIRMED' || !access.departments.includes(act.department))) return fail(res, 403, 'ลบรายการนี้ไม่ได้');
     must(await tx.from(t.entry).delete().eq('id', entry.id));
     res.json({ ok: true });
@@ -250,20 +259,21 @@ export function mountCfo(app) {
 
   // ---------- Setting: master data (admin of this year edits) ----------
   route('get', '/api/act/:activity/cfo/master', async (req, res, activity, t) => {
-    const [scopes, gwp, ef, refs, activities, used, settings] = await Promise.all([
+    const [scopes, gwp, ef, refs, activities, used, settings, access] = await Promise.all([
       fetchAll(() => tx.from(t.cfoScope).select('*').order('scope').order('code')),
       fetchAll(() => tx.from(t.gwp).select('*').order('code')),
       fetchAll(() => tx.from(t.ef).select('*').order('scope_code').order('id')),
       fetchAll(() => tx.from(t.efRef).select('*').order('sheet').order('sort_no').order('id')),
       fetchAll(() => tx.from(t.activity).select('*').order('department').order('id')),
       fetchAll(() => tx.from(t.entry).select('ef_id,activity_id,gwp_code').order('id')),
-      settingsOf(t)
+      settingsOf(t),
+      accessOf(req, activity, thisYear())
     ]);
     const usedEf = new Set(used.map((u) => u.ef_id));
     const usedGwp = new Set([...used, ...activities].map((u) => u.gwp_code));
     const usedAct = new Set(used.map((u) => u.activity_id));
     res.json({
-      admin: (await accessOf(req, activity, thisYear())).admin,
+      admin: access.admin,
       scopes, settings, refs,
       gwp: gwp.map((g) => ({ ...g, used: usedGwp.has(g.code) })),
       ef: ef.map((e) => ({ ...e, used: usedEf.has(e.id) })),
@@ -305,7 +315,8 @@ export function mountCfo(app) {
   route('delete', '/api/act/:activity/cfo/ef/:id', async (req, res, activity, t) => {
     if (!(await requireAdmin(req, res, activity, thisYear()))) return;
     const id = Number(req.params.id);
-    const usedBy = must(await tx.from(t.activity).select('id').eq('ef_id', id).limit(1)).length + must(await tx.from(t.entry).select('id').eq('ef_id', id).limit(1)).length;
+    const [u1, u2] = await Promise.all([tx.from(t.activity).select('id').eq('ef_id', id).limit(1), tx.from(t.entry).select('id').eq('ef_id', id).limit(1)]);
+    const usedBy = must(u1).length + must(u2).length;
     if (usedBy) return fail(res, 400, 'EF นี้ถูกใช้แล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
     const gone = must(await tx.from(t.ef).delete().eq('id', id).select('code,scope_code,name'));
     if (gone[0]) await logRev(t, req, 'Emission Factor', gone[0].code || `${gone[0].scope_code} ${gone[0].name}`, 'ลบ EF');
@@ -321,7 +332,10 @@ export function mountCfo(app) {
     if (GWP_GASES.some((k) => Number.isNaN(row[k]) || row[k] < 0)) return { error: 'ค่า GWP ไม่ถูกต้อง' };
     return { row };
   };
-  const gwpUsed = async (t, code) => must(await tx.from(t.activity).select('id').eq('gwp_code', code).limit(1)).length + must(await tx.from(t.entry).select('id').eq('gwp_code', code).limit(1)).length > 0;
+  const gwpUsed = async (t, code) => {
+    const [u1, u2] = await Promise.all([tx.from(t.activity).select('id').eq('gwp_code', code).limit(1), tx.from(t.entry).select('id').eq('gwp_code', code).limit(1)]);
+    return must(u1).length + must(u2).length > 0;
+  };
   route('post', '/api/act/:activity/cfo/gwp', async (req, res, activity, t) => {
     if (!(await requireAdmin(req, res, activity, thisYear()))) return;
     const { row, error } = gwpInput(req.body || {});
@@ -400,9 +414,11 @@ export function mountCfo(app) {
   // usage = ของใช้สิ้นเปลือง (Store) · raw = วัตถุดิบ · other = อื่นๆ (ผู้ใช้กำหนด 2026-11-02)
   const MAT_KINDS = { usage: 'Usage', raw: 'วัตถุดิบ', other: 'อื่นๆ' };
   route('get', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
-    const [rows, uses] = await Promise.all([
+    const [rows, uses, access, sections] = await Promise.all([
       fetchAll(() => tx.from(t.material).select('*').order('material')),
-      fetchAll(() => tx.from(t.materialUse).select('month,tco2e').order('month'))
+      fetchAll(() => tx.from(t.materialUse).select('month,tco2e').order('month')),
+      accessOf(req, activity, thisYear()),
+      usageBySection(t, yearOf(req.query.year) || thisYear())
     ]);
     const months = Object.values(uses.reduce((acc, u) => {
       const m = (acc[u.month] = acc[u.month] || { month: u.month, rows: 0, tco2e: 0 });
@@ -410,11 +426,11 @@ export function mountCfo(app) {
       m.tco2e += Number(u.tco2e);
       return acc;
     }, {})).map((m) => ({ ...m, tco2e: Math.round(m.tco2e * 1000) / 1000 }));
-    res.json({ admin: (await accessOf(req, activity, thisYear())).admin, rows, months, sections: await usageBySection(t, yearOf(req.query.year) || thisYear()) });
+    res.json({ admin: access.admin, rows, months, sections });
   });
   // partial (grid paste): a blank cell keeps what the material already has, so pasting only EF + factor does not
   // wipe the SAP unit that the Usage check compares against
-  const matInput = async (t, b, partial = false) => {
+  const matInput = async (t, b, partial = false, preloadedRefs = null) => {
     const given = (k) => b[k] !== undefined && !(partial && String(b[k] ?? '').trim() === '');
     const row = { material: matCode(b.material) };
     if (!row.material) return { error: 'ระบุรหัสวัสดุ' };
@@ -429,7 +445,7 @@ export function mountCfo(app) {
     if (given('ef_ref_id') || given('ef_name')) {
       if (b.ef_name !== undefined && String(b.ef_name || '').trim()) {
         const want = String(b.ef_name).trim().toLowerCase();
-        const refs = must(await tx.from(t.efRef).select('id,name,sheet,unit,total').in('sheet', MAT_SHEETS));
+        const refs = preloadedRefs || must(await tx.from(t.efRef).select('id,name,sheet,unit,total').in('sheet', MAT_SHEETS));
         const hit = refs.find((r) => r.name.replace(/^-\s*/, '').trim().toLowerCase() === want && r.unit && r.total != null);
         if (!hit) return { error: `ไม่พบ EF ชื่อ "${b.ef_name}" ในตาราง EF CFP / EF พลังงาน` };
         row.ef_ref_id = hit.id;
@@ -450,15 +466,31 @@ export function mountCfo(app) {
   route('post', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
     if (!(await requireAdmin(req, res, activity, thisYear()))) return;
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [req.body || {}];
-    const rows = [];
+    const needRefs = list.some((b) => b.ef_name !== undefined && String(b.ef_name || '').trim());
+    const [refs, existingList] = await Promise.all([
+      needRefs ? tx.from(t.efRef).select('id,name,sheet,unit,total').in('sheet', MAT_SHEETS).then(must) : null,
+      fetchIn(() => tx.from(t.material).select('material'), 'material', list.map((b) => matCode(b.material)))
+    ]);
+    const existing = new Set(existingList.map((r) => r.material));
+    const parsed = [];
     for (const [i, b] of list.entries()) {
-      const { row, error } = await matInput(t, b, true);
+      const { row, error } = await matInput(t, b, true, refs);
       if (error) return fail(res, 400, list.length > 1 ? `แถว ${i + 1}: ${error}` : error);
-      const current = must(await tx.from(t.material).select('*').eq('material', row.material).maybeSingle());
-      if (current) must(await tx.from(t.material).update(row).eq('material', row.material));
-      else rows.push({ name: row.material, ...row, ...(row.ef_ref_id && row.factor === undefined ? { factor: 1 } : {}) });
+      parsed.push(row);
     }
-    if (rows.length) must(await tx.from(t.material).insert(rows));
+    const toInsert = [];
+    const toUpdate = [];
+    for (const row of parsed) {
+      if (existing.has(row.material)) toUpdate.push(row);
+      else {
+        existing.add(row.material);
+        toInsert.push({ name: row.material, ...row, ...(row.ef_ref_id && row.factor === undefined ? { factor: 1 } : {}) });
+      }
+    }
+    await Promise.all([
+      toInsert.length ? tx.from(t.material).insert(toInsert).then(must) : null,
+      ...toUpdate.map((row) => tx.from(t.material).update(row).eq('material', row.material).then(must))
+    ]);
     await logRev(t, req, 'วัสดุ (SAP)', list.length === 1 ? matCode(list[0].material) : `${list.length} รายการ`, 'เพิ่ม / แก้วัสดุและ EF');
     res.status(201).json({ ok: true, count: list.length });
   });
@@ -790,10 +822,13 @@ export function mountCfo(app) {
 
   // บันทึกการปรับปรุง: newest first; admins add a note by hand. No delete.
   route('get', '/api/act/:activity/cfo/revisions', async (req, res, activity, t) => {
-    const rows = await fetchAll(() => tx.from(t.revision).select('*').order('at', { ascending: false }).order('id', { ascending: false }));
+    const [rows, access] = await Promise.all([
+      fetchAll(() => tx.from(t.revision).select('*').order('at', { ascending: false }).order('id', { ascending: false })),
+      accessOf(req, activity, thisYear())
+    ]);
     const names = await namesOf([...new Set(rows.map((r) => r.by))]);
     res.json({
-      admin: (await accessOf(req, activity, thisYear())).admin,
+      admin: access.admin,
       rows: rows.map((r, i) => ({ ...r, no: rows.length - i, by_name: names.get(String(r.by))?.name || '' }))
     });
   });

@@ -1,6 +1,6 @@
 import { tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
-import { PROJECT_ON, actRoute, must, projectsOf, requireAdmin, tablesOf, yearOf } from './common.js';
+import { PROJECT_ON, accessOf, actRoute, must, projectsOf, requireAdmin, tablesOf, yearOf } from './common.js';
 
 // SMF (Smart Factory) projects of a year (ผู้ใช้กำหนด 2026-11-01: 2026 = Smart OEE, Vision Camera, Work Flow Automation).
 // Setting > โครงการ: admins add / edit / delete; a project already used by the team or the plan becomes Inactive instead.
@@ -90,8 +90,10 @@ export function mountSmf(app) {
   route('get', '/api/act/:activity/project-months', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
-    const projects = await projectsOf(activity, year);
-    const { data, error } = await tx.from(t.projectMonth).select('*').eq('year', year).order('month');
+    const [projects, { data, error }] = await Promise.all([
+      projectsOf(activity, year),
+      tx.from(t.projectMonth).select('*').eq('year', year).order('month')
+    ]);
     if (error?.code === 'PGRST205') return res.json({ year, projects, months: [] });
     if (error) throw error;
     res.json({ year, projects, months: data || [] });
@@ -102,10 +104,12 @@ export function mountSmf(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const projectId = Number(req.body?.projectId);
     if (!projectId) return fail(res, 400, 'ระบุโครงการ');
-    const project = must(await tx.from(t.project).select('*').eq('id', projectId).eq('year', year).maybeSingle());
+    const [projectResult, access] = await Promise.all([
+      tx.from(t.project).select('*').eq('id', projectId).eq('year', year).maybeSingle(),
+      accessOf(req, activity, year)
+    ]);
+    const project = must(projectResult);
     if (!project) return fail(res, 404, 'ไม่พบโครงการ');
-
-    const access = await accessOf(req, activity, year);
     if (!access.admin && !access.member) return fail(res, 403, 'ไม่มีสิทธิ์บันทึกข้อมูลโครงการนี้');
 
     const rawList = Array.isArray(req.body?.months) ? req.body.months : [req.body];

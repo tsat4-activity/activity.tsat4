@@ -136,12 +136,12 @@ export function mountPlanner(app) {
   route('get', '/api/act/:activity/tasks', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
-    const rows = await rowsOf(t.task, year);
+    const [rows, units, access] = await Promise.all([rowsOf(t.task, year), projectsOf(activity, year), accessOf(req, activity, year)]);
     const names = await namesOf(rows.map((r) => r.owner_id));
     res.json({
       year,
-      units: await projectsOf(activity, year),
-      canEdit: (await accessOf(req, activity, year)).admin,
+      units,
+      canEdit: access.admin,
       tasks: withSpans(rows).map((row) => ({ ...row, plan: planStatus(row), owner_name: row.owner_id ? names.get(String(row.owner_id))?.name || row.owner_id : '' }))
     });
   });
@@ -150,9 +150,10 @@ export function mountPlanner(app) {
     const year = yearOf(req.body?.year);
     if (!year || !(await requireAdmin(req, res, activity, year))) return;
     const { row, error: invalid } = input(req.body || {}, year, false, await unitsOf(activity, year, true));
-    const bad = invalid || await badParent(t.task, year, row.parent_id, null);
+    if (invalid) return fail(res, 400, invalid);
+    const [bad, sort_no] = await Promise.all([badParent(t.task, year, row.parent_id, null), nextSort(t.task, year, row.parent_id)]);
     if (bad) return fail(res, 400, bad);
-    const insert = { ...row, year, sort_no: await nextSort(t.task, year, row.parent_id), created_by: req.user.employeeId };
+    const insert = { ...row, year, sort_no, created_by: req.user.employeeId };
     const done = doneOn(row.progress, null, req.body?.doneOn);
     if (done !== undefined) insert.done_on = done;
     const { data: created, warn } = await write((r) => tx.from(t.task).insert(r).select('id').single(), insert, activity);
@@ -165,17 +166,17 @@ export function mountPlanner(app) {
     const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 200) : [];
     if (!year || !items.length) return fail(res, 400, 'ไม่มีรายการที่ย้าย');
     if (!(await requireAdmin(req, res, activity, year))) return;
-    const rows = withSpans(await rowsOf(t.task, year));
+    const rowById = new Map(withSpans(await rowsOf(t.task, year)).map((r) => [r.id, r]));
     const changes = [];
     for (const item of items) {
-      const row = rows.find((r) => r.id === Number(item.id));
+      const row = rowById.get(Number(item.id));
       if (!row || row.derived) return fail(res, 400, 'ย้ายรายการนี้ไม่ได้');
       const dates = datesIn(year, item.startDate, item.endDate);
       if (dates.error) return fail(res, 400, dates.error);
       changes.push({ id: row.id, start_date: dates.start, end_date: dates.end });
     }
     const updated_at = new Date().toISOString();
-    for (const { id, ...dates } of changes) must(await tx.from(t.task).update({ ...dates, updated_at }).eq('id', id));
+    await Promise.all(changes.map(async ({ id, ...dates }) => must(await tx.from(t.task).update({ ...dates, updated_at }).eq('id', id))));
     res.json({ ok: true });
   });
 
@@ -183,8 +184,8 @@ export function mountPlanner(app) {
     const current = await oneOf(t.task, Number(req.params.id));
     if (!current) return fail(res, 404, 'ไม่พบรายการ');
     if (!(await requireAdmin(req, res, activity, current.year))) return;
-    const hasKids = (await kidCount(t.task, current.id)) > 0;
-    const units = await unitsOf(activity, current.year, true);
+    const [kids, units] = await Promise.all([kidCount(t.task, current.id), unitsOf(activity, current.year, true)]);
+    const hasKids = kids > 0;
     const { row, error: invalid } = input(req.body || {}, current.year, hasKids, current.unit && !units.includes(current.unit) ? [...units, current.unit] : units);
     if (!invalid && hasKids && req.body?.parentId) return fail(res, 400, 'ข้อหลักที่มีข้อรองย้ายไปเป็นข้อรองไม่ได้');
     const bad = invalid || await badParent(t.task, current.year, row.parent_id, current.id);
@@ -209,28 +210,27 @@ export function mountPlanner(app) {
 // ระบบตั้งค่า > ปฏิทิน: items with their own dates (sub items, and main items without sub items) as calendar events.
 // Activities whose Planner table is not created yet are skipped.
 export async function plannerEvents(from, to) {
-  const out = [];
-  for (const activity of PLANNER_ON) {
+  const lists = await Promise.all(PLANNER_ON.map(async (activity) => {
     const table = tablesOf(activity).task;
     const { data, error } = await tx.from(table).select(COLUMNS).lte('start_date', to).gte('end_date', from).order('start_date').limit(1000);
-    if (error?.code === 'PGRST205') continue;
+    if (error?.code === 'PGRST205') return [];
     if (error) throw error;
     // Main items with sub items are shown through their sub items.
-    const parents = new Set((await fetchAll(() => tx.from(table).select('parent_id').not('parent_id', 'is', null).order('id'))).map((r) => Number(r.parent_id)));
-    const names = await namesOf(data.map((r) => r.owner_id));
-    for (const row of data) {
-      if (row.parent_id == null && parents.has(Number(row.id))) continue;
-      out.push({
-        id: `t${row.id}`,
-        activity,
-        title: row.title,
-        detail: row.note,
-        start_date: row.start_date,
-        end_date: row.end_date,
-        responsible: row.owner_id ? names.get(String(row.owner_id))?.name || row.owner_id : null,
-        status: row.progress >= 100 ? 'done' : 'planned'
-      });
-    }
-  }
-  return out;
+    const [parentRows, names] = await Promise.all([
+      fetchAll(() => tx.from(table).select('parent_id').not('parent_id', 'is', null).order('id')),
+      namesOf(data.map((r) => r.owner_id))
+    ]);
+    const parents = new Set(parentRows.map((r) => Number(r.parent_id)));
+    return data.filter((row) => !(row.parent_id == null && parents.has(Number(row.id)))).map((row) => ({
+      id: `t${row.id}`,
+      activity,
+      title: row.title,
+      detail: row.note,
+      start_date: row.start_date,
+      end_date: row.end_date,
+      responsible: row.owner_id ? names.get(String(row.owner_id))?.name || row.owner_id : null,
+      status: row.progress >= 100 ? 'done' : 'planned'
+    }));
+  }));
+  return lists.flat();
 }

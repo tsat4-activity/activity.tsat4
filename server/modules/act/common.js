@@ -106,9 +106,10 @@ export async function fetchAll(build) {
 
 export async function fetchIn(build, column, ids, size = 200) {
   const unique = [...new Set(ids.filter((id) => id != null && id !== ''))];
-  const rows = [];
-  for (let i = 0; i < unique.length; i += size) rows.push(...(await fetchAll(() => build().in(column, unique.slice(i, i + size)))));
-  return rows;
+  if (!unique.length) return [];
+  const chunks = [];
+  for (let i = 0; i < unique.length; i += size) chunks.push(unique.slice(i, i + size));
+  return (await Promise.all(chunks.map((chunk) => fetchAll(() => build().in(column, chunk))))).flat();
 }
 
 export async function namesOf(ids) {

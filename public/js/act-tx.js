@@ -165,7 +165,10 @@ async function atxAuditDetail(activity, id) {
 // New audit, or edit one (editId): type and area are fixed when editing.
 async function atxForm(body, activity, me, editId = 0) {
   const state = { type: '', areaId: '', date: actIso(new Date()), team: '', participated: new Set(), receivers: [], scores: {}, text: {}, photo: {}, editId, auditNo: '', ownItems: new Set() };
-  let form = await a5Api(activity, `audit-form?year=${a5Year}`);
+  let [form, d] = await Promise.all([
+    a5Api(activity, `audit-form?year=${a5Year}`),
+    editId ? a5Api(activity, `audits/${editId}`) : null
+  ]);
   if (!editId && !form.types.length) throw new Error('คุณยังไม่มีสิทธิ์ทำการตรวจปีนี้');
   if (!form.items.length) throw new Error(`ยังไม่มีหัวข้อตรวจปี ${a5Year} (admin เพิ่มที่ Setting > หัวข้อตรวจ)`);
   state.type = form.types.includes('COMMITTEE') && !form.access.ownerAreaIds.length ? 'COMMITTEE' : form.types[0];
@@ -176,7 +179,6 @@ async function atxForm(body, activity, me, editId = 0) {
   const resetParticipants = () => { state.participated = new Set(teamMembers().map((m) => m.employeeId)); };
   resetParticipants();
   if (editId) {
-    const d = await a5Api(activity, `audits/${editId}`);
     Object.assign(state, {
       type: d.audit.audit_type, areaId: String(d.audit.area_id), date: String(d.audit.audited_at).slice(0, 10), team: d.audit.team || '', auditNo: d.audit.audit_no,
       participated: new Set(d.people.filter((p) => p.kind === 'participated').map((p) => String(p.employee_id))),
@@ -281,11 +283,11 @@ function atxSave(body, activity, me, state, form, open) {
       }
     });
     let failedPhotos = 0;
-    for (const issue of result.issues || []) {
+    await Promise.all((result.issues || []).map(async (issue) => {
       try {
         await a5Api(activity, `issues/${issue.id}/photo`, { method: 'POST', body: { kind: 'BEFORE', image: state.photo[issue.checklist_id] } });
       } catch (err) { failedPhotos += 1; toast(`${issue.issue_no}: ${err.message}`, 'error'); }
-    }
+    }));
     toast(`บันทึก ${result.auditNo} แล้ว · ${result.percent}%${failedPhotos ? ` · รูปไม่ขึ้น ${failedPhotos} รายการ (แนบใหม่ที่แท็บ Issue)` : ''}`);
     atxAudits(body, activity, me).catch(onErr);
   }, 'บันทึก');

@@ -175,10 +175,11 @@ function a5Dot(year, plan, audit, today) {
 function a5Grid(year, areas, plans, audits, cell) {
   const head1 = ACT_MONTHS_SHORT.map((m) => `<th colspan="4" class="a5-month">${m}</th>`).join('');
   const head2 = ACT_MONTHS_SHORT.map(() => [1, 2, 3, 4].map((w) => `<th class="a5-wk">${w}</th>`).join('')).join('');
+  const planMap = new Map(plans.map((p) => [`${p.area_id}:${p.month}:${p.week}`, p]));
+  const auditMap = new Map(audits.map((x) => [`${x.areaId}:${x.month}:${x.week}`, x]));
   const rows = areas.map((a) => `<tr><td class="a5-sticky">${esc(a.code)}</td><td class="a5-sticky a5-sticky2">${esc(a.name)}</td>${ACT_MONTHS_SHORT.map((_, mi) => [1, 2, 3, 4].map((w) => {
-    const plan = plans.find((p) => p.area_id === a.id && p.month === mi + 1 && p.week === w);
-    const audit = audits.find((x) => x.areaId === a.id && x.month === mi + 1 && x.week === w);
-    return `<td class="a5-cell" data-cell="${a.id}:${mi + 1}:${w}">${cell(plan, audit)}</td>`;
+    const key = `${a.id}:${mi + 1}:${w}`;
+    return `<td class="a5-cell" data-cell="${key}">${cell(planMap.get(key), auditMap.get(key))}</td>`;
   }).join('')).join('')}</tr>`).join('');
   return `<div class="a5-sched-wrap"><table class="a5-sched"><thead><tr><th rowspan="2" class="a5-sticky">ID</th><th rowspan="2" class="a5-sticky a5-sticky2">ชื่อพื้นที่</th>${head1}</tr><tr>${head2}</tr></thead><tbody>${rows || `<tr><td colspan="50" class="empty">ยังไม่มีพื้นที่ ${esc(a5AreaType)}</td></tr>`}</tbody></table></div>`;
 }

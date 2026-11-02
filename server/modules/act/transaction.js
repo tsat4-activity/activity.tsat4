@@ -83,22 +83,40 @@ export function mountTransaction(app) {
     return issues.map((i) => ({ ...i, photos: photosOf(i), after_photos: (i.photo_after || []).length }));
   };
 
+  const insertIssues = async (t, { auditId, year, areaId, auditedAt, needIssue, scores, described, daysBefore, plans: preloadedPlans }) => {
+    if (!needIssue.length) return [];
+    const [ownerRes, plansRes, lastRes] = await Promise.all([
+      tx.from(t.team).select('employee_id').eq('year', year).eq('area_id', areaId).eq('role', 'owner').maybeSingle(),
+      preloadedPlans ? { data: preloadedPlans, error: null } : tx.from(t.auditPlan).select('year,month,week').eq('area_id', areaId).gte('year', year),
+      tx.from(t.issue).select('issue_no').order('issue_no', { ascending: false }).limit(1)
+    ]);
+    const owner = must(ownerRes);
+    const due = dueDateFor(must(plansRes), auditedAt, daysBefore);
+    const last = must(lastRes);
+    let n = Number(String(last[0]?.issue_no || 'ISS0000').replace(/\D/g, '')) || 0;
+    return must(await tx.from(t.issue).insert(needIssue.map((i) => ({
+      issue_no: `ISS${String(++n).padStart(4, '0')}`, audit_id: auditId, area_id: areaId, checklist_id: i.id, score: scores.get(i.id),
+      description: described.get(i.id), issue_date: auditedAt, responsible_id: owner?.employee_id || null, due_date: due, status: 'OPEN'
+    }))).select('id,issue_no,checklist_id'));
+  };
+
   route('get', '/api/act/:activity/audit-form', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const access = await accessOf(req, activity, year);
     if (!access.member) return fail(res, 403, `บันทึกได้เฉพาะทีมของกิจกรรมนี้ปี ${year}`);
-    const [settings, items, areas, team] = await Promise.all([
+    const areaId = Number(req.query.area) || 0;
+    const [settings, items, areas, team, openIssues] = await Promise.all([
       settingsOf(activity),
       fetchAll(() => tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', year).eq('status', 'Active').order('item_no')),
       fetchAll(() => tx.from(t.area).select('id,code,area_type,name').eq('status', 'Active').order('code')),
-      fetchAll(() => tx.from(t.team).select('employee_id,role,team').eq('year', year).eq('status', 'Active'))
+      fetchAll(() => tx.from(t.team).select('employee_id,role,team').eq('year', year).eq('status', 'Active')),
+      areaId ? openIssuesOf(t, areaId, Number(req.query.audit) || 0) : []
     ]);
     const types = [];
     if (access.admin || access.ownerAreaIds.length) types.push('SELF');
     if (access.admin || access.chairman || access.auditor) types.push('COMMITTEE');
     const names = await namesOf(team.map((m) => m.employee_id));
-    const areaId = Number(req.query.area) || 0;
     res.json({
       year,
       access,
@@ -110,7 +128,7 @@ export function mountTransaction(app) {
         team: letter,
         members: team.filter((m) => m.team === letter).map((m) => ({ employeeId: String(m.employee_id), name: names.get(String(m.employee_id))?.name || '' }))
       })),
-      openIssues: areaId ? await openIssuesOf(t, areaId, Number(req.query.audit) || 0) : []
+      openIssues
     });
   });
 
@@ -128,9 +146,15 @@ export function mountTransaction(app) {
     const team = audit.audit_type === 'COMMITTEE' ? String(body.team || audit.team || '').trim().toUpperCase() : null;
     if (audit.audit_type === 'COMMITTEE' && !/^[A-Z]$/.test(team || '')) return fail(res, 400, 'เลือกทีมที่ตรวจ');
 
-    const settings = await settingsOf(activity);
-    const items = must(await tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', audit.year).eq('status', 'Active').order('item_no'));
-    const locked = new Set(must(await tx.from(t.issue).select('checklist_id').eq('verify_audit_no', audit.audit_no).eq('status', 'OVERDUE')).map((r) => r.checklist_id));
+    const [settings, itemsRes, lockedRes, ownRes, carriedIssues] = await Promise.all([
+      settingsOf(activity),
+      tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', audit.year).eq('status', 'Active').order('item_no'),
+      tx.from(t.issue).select('checklist_id').eq('verify_audit_no', audit.audit_no).eq('status', 'OVERDUE'),
+      tx.from(t.issue).select('id,checklist_id,score,status,action_description,photo_after').eq('audit_id', audit.id),
+      audit.audit_type === 'COMMITTEE' ? openIssuesOf(t, audit.area_id, audit.id) : []
+    ]);
+    const items = must(itemsRes);
+    const locked = new Set(must(lockedRes).map((r) => r.checklist_id));
     const scores = new Map();
     for (const item of items) {
       if (locked.has(item.id)) { scores.set(item.id, 0); continue; }
@@ -140,8 +164,8 @@ export function mountTransaction(app) {
     const missing = items.filter((i) => scores.get(i.id) == null).map((i) => i.item_no);
     if (missing.length) return fail(res, 400, `ให้คะแนนให้ครบ (ข้อที่ ${missing.join(', ')})`);
 
-    const own = must(await tx.from(t.issue).select('id,checklist_id,score,status,action_description,photo_after').eq('audit_id', audit.id));
-    const carried = audit.audit_type === 'COMMITTEE' ? new Set((await openIssuesOf(t, audit.area_id, audit.id)).map((i) => i.checklist_id)) : new Set();
+    const own = must(ownRes);
+    const carried = new Set(carriedIssues.map((i) => i.checklist_id));
     const low = (id) => scores.get(id) < settings.issue_score;
     // Drop own Issues whose item is no longer low, only while nobody has worked on them yet.
     const drop = own.filter((i) => !low(i.checklist_id) && i.status === 'OPEN' && !String(i.action_description || '').trim() && !(i.photo_after || []).length);
@@ -152,30 +176,20 @@ export function mountTransaction(app) {
     if (undescribed.length) return fail(res, 400, `ข้อที่ได้ต่ำกว่า ${settings.issue_score} ต้องเปิด Issue พร้อมรายละเอียด (ข้อที่ ${undescribed.join(', ')})`);
 
     const score = scoreAudit(items, scores, settings.pass_percent);
-    must(await tx.from(t.audit).update({ audited_at: `${auditedAt}T05:00:00Z`, team, total_score: score.total, percent_score: score.percent, result: score.result }).eq('id', audit.id));
+    const auditPatch = { audited_at: `${auditedAt}T05:00:00Z`, team, total_score: score.total, percent_score: score.percent, result: score.result };
+    if (Array.isArray(body.participated) || Array.isArray(body.receivers)) {
+      auditPatch.auditors = idList(body.participated).length ? idList(body.participated) : [audit.created_by].filter(Boolean);
+      auditPatch.receivers = idList(body.receivers);
+    }
+    must(await tx.from(t.audit).update(auditPatch).eq('id', audit.id));
     must(await tx.from(t.score).delete().eq('audit_id', audit.id));
     must(await tx.from(t.score).insert(items.map((i) => ({ audit_id: audit.id, checklist_id: i.id, score: scores.get(i.id) }))));
-    if (Array.isArray(body.participated) || Array.isArray(body.receivers)) {
-      const auditors = idList(body.participated).length ? idList(body.participated) : [audit.created_by].filter(Boolean);
-      must(await tx.from(t.audit).update({ auditors, receivers: idList(body.receivers) }).eq('id', audit.id));
-    }
     if (drop.length) must(await tx.from(t.issue).delete().in('id', drop.map((i) => i.id)));
-    let created = [];
-    if (needIssue.length) {
-      const owner = must(await tx.from(t.team).select('employee_id').eq('year', audit.year).eq('area_id', audit.area_id).eq('role', 'owner').maybeSingle());
-      const plans = must(await tx.from(t.auditPlan).select('year,month,week').eq('area_id', audit.area_id).gte('year', audit.year));
-      const due = dueDateFor(plans, auditedAt, settings.issue_due_days_before_next);
-      const last = must(await tx.from(t.issue).select('issue_no').order('issue_no', { ascending: false }).limit(1));
-      let n = Number(String(last[0]?.issue_no || 'ISS0000').replace(/\D/g, '')) || 0;
-      created = must(await tx.from(t.issue).insert(needIssue.map((i) => ({
-        issue_no: `ISS${String(++n).padStart(4, '0')}`, audit_id: audit.id, area_id: audit.area_id, checklist_id: i.id, score: scores.get(i.id),
-        description: described.get(i.id), issue_date: auditedAt, responsible_id: owner?.employee_id || null, due_date: due, status: 'OPEN'
-      }))).select('id,issue_no,checklist_id'));
-    }
+    const created = await insertIssues(t, { auditId: audit.id, year: audit.year, areaId: audit.area_id, auditedAt, needIssue, scores, described, daysBefore: settings.issue_due_days_before_next });
     // Keep the score on the audit's own remaining Issues in step with the edited item scores.
-    for (const i of own.filter((x) => !drop.includes(x))) {
-      if (Number(scores.get(i.checklist_id)) !== Number(i.score)) must(await tx.from(t.issue).update({ score: scores.get(i.checklist_id) }).eq('id', i.id));
-    }
+    await Promise.all(own.filter((x) => !drop.includes(x) && Number(scores.get(x.checklist_id)) !== Number(x.score)).map(async (i) => {
+      must(await tx.from(t.issue).update({ score: scores.get(i.checklist_id) }).eq('id', i.id));
+    }));
     res.json({ id: audit.id, auditNo: audit.audit_no, ...score, issues: created, dropped: drop.length });
   });
 
@@ -187,16 +201,21 @@ export function mountTransaction(app) {
     if (!type || !auditedAt || !areaId) return fail(res, 400, 'เลือกประเภท พื้นที่ และวันที่ตรวจ');
     if (auditedAt > todayIso()) return fail(res, 400, 'วันที่ตรวจต้องไม่เกินวันนี้');
     const year = Number(auditedAt.slice(0, 4));
-    const access = await accessOf(req, activity, year);
-    const area = must(await tx.from(t.area).select('id,code,status').eq('id', areaId).maybeSingle());
+    const [access, areaRes, settings, itemsRes, open] = await Promise.all([
+      accessOf(req, activity, year),
+      tx.from(t.area).select('id,code,status').eq('id', areaId).maybeSingle(),
+      settingsOf(activity),
+      tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', year).eq('status', 'Active').order('item_no'),
+      type === 'COMMITTEE' ? openIssuesOf(t, areaId) : []
+    ]);
+    const area = must(areaRes);
     if (!area || area.status !== 'Active') return fail(res, 404, 'ไม่พบพื้นที่');
     if (type === 'SELF' && !(access.admin || access.ownerAreaIds.includes(areaId))) return fail(res, 403, 'Self Audit ทำได้เฉพาะเจ้าของพื้นที่ปีนี้');
     if (type === 'COMMITTEE' && !(access.admin || access.chairman || access.auditor)) return fail(res, 403, 'Committee Audit ทำได้เฉพาะทีมตรวจประเมิน');
     const team = type === 'COMMITTEE' ? String(body.team || access.teams[0] || '').trim().toUpperCase() : null;
     if (type === 'COMMITTEE' && !/^[A-Z]$/.test(team || '')) return fail(res, 400, 'เลือกทีมที่ตรวจ');
 
-    const settings = await settingsOf(activity);
-    const items = must(await tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', year).eq('status', 'Active').order('item_no'));
+    const items = must(itemsRes);
     if (!items.length) return fail(res, 400, `ยังไม่มีหัวข้อตรวจปี ${year}`);
     let scores = new Map();
     for (const item of items) {
@@ -205,9 +224,7 @@ export function mountTransaction(app) {
       else scores.set(item.id, value);
     }
     let verification = { updates: [] };
-    let open = [];
     if (type === 'COMMITTEE') {
-      open = await openIssuesOf(t, areaId);
       verification = verifyIssues(open, scores, settings.issue_score);
       scores = verification.scores;
     }
@@ -235,27 +252,14 @@ export function mountTransaction(app) {
 
     try {
       must(await tx.from(t.score).insert(items.map((i) => ({ audit_id: audit.id, checklist_id: i.id, score: scores.get(i.id) }))));
-
-      let created = [];
-      if (needIssue.length) {
-        const owner = must(await tx.from(t.team).select('employee_id').eq('year', year).eq('area_id', areaId).eq('role', 'owner').maybeSingle());
-        const plans = must(await tx.from(t.auditPlan).select('year,month,week').eq('area_id', areaId).gte('year', year));
-        const due = dueDateFor(plans, auditedAt, settings.issue_due_days_before_next);
-        const last = must(await tx.from(t.issue).select('issue_no').order('issue_no', { ascending: false }).limit(1));
-        let n = Number(String(last[0]?.issue_no || 'ISS0000').replace(/\D/g, '')) || 0;
-        created = must(await tx.from(t.issue).insert(needIssue.map((i) => ({
-          issue_no: `ISS${String(++n).padStart(4, '0')}`, audit_id: audit.id, area_id: areaId, checklist_id: i.id, score: scores.get(i.id),
-          description: described.get(i.id), issue_date: auditedAt, responsible_id: owner?.employee_id || null, due_date: due, status: 'OPEN'
-        }))).select('id,issue_no,checklist_id'));
-      }
-
-      const plans = verification.updates.length ? must(await tx.from(t.auditPlan).select('year,month,week').eq('area_id', areaId).gte('year', year)) : [];
-      for (const u of verification.updates) {
+      const plans = needIssue.length || verification.updates.length ? must(await tx.from(t.auditPlan).select('year,month,week').eq('area_id', areaId).gte('year', year)) : [];
+      const created = await insertIssues(t, { auditId: audit.id, year, areaId, auditedAt, needIssue, scores, described, daysBefore: settings.issue_due_days_before_next, plans });
+      await Promise.all(verification.updates.map(async (u) => {
         const patch = { status: u.status, final_score: u.final_score, verify_audit_no: auditNo };
         if (u.closed) Object.assign(patch, { closed_by: req.user.employeeId, closed_at: auditedAt });
         if (u.carry) Object.assign(patch, { due_date: dueDateFor(plans, auditedAt, settings.issue_due_days_before_next) });
         must(await tx.from(t.issue).update(patch).eq('id', u.id));
-      }
+      }));
       must(await tx.from(t.audit).update({ status: 'COMPLETED' }).eq('id', audit.id));
       res.status(201).json({ id: audit.id, auditNo, ...score, issues: created, verified: verification.updates.length });
     } catch (err) {
@@ -274,13 +278,19 @@ export function mountTransaction(app) {
       fetchAll(() => tx.from(t.area).select('id,code,name,area_type'))
     ]);
     const issues = await fetchIn(() => tx.from(t.issue).select('audit_id,status'), 'audit_id', audits.map((a) => a.id));
+    const areaById = new Map(areas.map((x) => [x.id, x]));
+    const issuesByAudit = new Map();
+    for (const i of issues) {
+      if (!issuesByAudit.has(i.audit_id)) issuesByAudit.set(i.audit_id, []);
+      issuesByAudit.get(i.audit_id).push(i);
+    }
     res.json({
       year,
       canDelete: access.admin,
       audits: audits.map((a) => {
         const canEdit = access.admin || a.created_by === req.user.employeeId;
-        const area = areas.find((x) => x.id === a.area_id) || {};
-        const own = issues.filter((i) => i.audit_id === a.id);
+        const area = areaById.get(a.area_id) || {};
+        const own = issuesByAudit.get(a.id) || [];
         return { ...a, canEdit, areaCode: area.code, areaName: area.name, areaType: area.area_type, issues: own.length, openIssues: own.filter((i) => i.status !== 'CLOSED').length };
       })
     });
@@ -291,16 +301,17 @@ export function mountTransaction(app) {
     if (!audit) return fail(res, 404, 'ไม่พบใบตรวจ');
     if (!(await accessOf(req, activity, audit.year)).member) return fail(res, 403, 'ดูได้เฉพาะทีมของกิจกรรมนี้');
     const people = (audit.auditors || []).map((id) => ({ employee_id: id, kind: 'participated' })).concat((audit.receivers || []).map((id) => ({ employee_id: id, kind: 'receiver' })));
-    const [scores, issues, area] = await Promise.all([
+    const [scores, issues, area, names] = await Promise.all([
       fetchAll(() => tx.from(t.score).select('checklist_id,score').eq('audit_id', audit.id)),
       fetchAll(() => tx.from(t.issue).select('id,issue_no,checklist_id,score,description,status,due_date').eq('audit_id', audit.id)),
-      tx.from(t.area).select('code,name,area_type').eq('id', audit.area_id).maybeSingle()
+      tx.from(t.area).select('code,name,area_type').eq('id', audit.area_id).maybeSingle(),
+      namesOf(people.map((p) => p.employee_id))
     ]);
     const items = await fetchIn(() => tx.from(t.checklist).select('id,item_no,s_group,title,score_max'), 'id', scores.map((s) => s.checklist_id));
-    const names = await namesOf(people.map((p) => p.employee_id));
+    const itemById = new Map(items.map((i) => [i.id, i]));
     res.json({
       audit: { ...audit, area: area.data },
-      scores: scores.map((s) => ({ ...s, ...(items.find((i) => i.id === s.checklist_id) || {}) })).sort((a, b) => a.item_no - b.item_no),
+      scores: scores.map((s) => ({ ...s, ...(itemById.get(s.checklist_id) || {}) })).sort((a, b) => a.item_no - b.item_no),
       people: people.map((p) => ({ ...p, name: names.get(String(p.employee_id))?.name || '' })),
       issues
     });
@@ -326,22 +337,27 @@ export function mountTransaction(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const access = await accessOf(req, activity, year);
     if (!access.member) return fail(res, 403, `ดูได้เฉพาะทีมของกิจกรรมนี้ปี ${year}`);
-    const audits = await fetchAll(() => tx.from(t.audit).select('id,audit_no,year').eq('year', year));
-    const issues = await fetchIn(() => tx.from(t.issue).select('*').order('issue_no'), 'audit_id', audits.map((a) => a.id));
-    const [areas, items] = await Promise.all([
-      fetchAll(() => tx.from(t.area).select('id,code,name')),
-      fetchIn(() => tx.from(t.checklist).select('id,item_no,s_group,title'), 'id', issues.map((i) => i.checklist_id))
+    const [audits, areas] = await Promise.all([
+      fetchAll(() => tx.from(t.audit).select('id,audit_no,year').eq('year', year)),
+      fetchAll(() => tx.from(t.area).select('id,code,name'))
     ]);
-    const names = await namesOf(issues.map((i) => i.responsible_id).filter(Boolean));
+    const issues = await fetchIn(() => tx.from(t.issue).select('*').order('issue_no'), 'audit_id', audits.map((a) => a.id));
+    const [items, names] = await Promise.all([
+      fetchIn(() => tx.from(t.checklist).select('id,item_no,s_group,title'), 'id', issues.map((i) => i.checklist_id)),
+      namesOf(issues.map((i) => i.responsible_id).filter(Boolean))
+    ]);
+    const auditById = new Map(audits.map((a) => [a.id, a]));
+    const areaById = new Map(areas.map((a) => [a.id, a]));
+    const itemById = new Map(items.map((x) => [x.id, x]));
     const today = todayIso();
     res.json({
       year,
       issues: issues.map((i) => ({
         ...i,
         shownStatus: shownStatus(i, today),
-        auditNo: audits.find((a) => a.id === i.audit_id)?.audit_no || '',
-        area: areas.find((a) => a.id === i.area_id) || {},
-        item: items.find((x) => x.id === i.checklist_id) || {},
+        auditNo: auditById.get(i.audit_id)?.audit_no || '',
+        area: areaById.get(i.area_id) || {},
+        item: itemById.get(i.checklist_id) || {},
         responsibleName: names.get(String(i.responsible_id))?.name || '',
         photos: photosOf(i),
         ...issueRights(access, i, req.user.employeeId)
