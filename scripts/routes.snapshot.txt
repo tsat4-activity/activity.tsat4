@@ -87,3 +87,4 @@ PUT /api/act/:activity/cfo/entries auth
 PUT /api/act/:activity/cfo/s3 auth
 PUT /api/act/:activity/cfo/settings auth
 PUT /api/act/:activity/project-months auth
+PUT /api/act/:activity/target auth

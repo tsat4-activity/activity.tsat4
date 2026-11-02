@@ -18,6 +18,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Antigravity [5S] · ปรับระยะห่างคอลัมน์ตาราง 5S Summary ให้เท่ากันทุกช่อง (`colgroup` เดือน 28%, ข้อมูล 4 ช่องละ 18% เท่ากัน) และเพิ่มระบบปรับ target รายปี (`PUT /api/act/:activity/target`, จัดเก็บ `pass_percent:<year>` แยกตามปีพร้อม fallback ค่าตั้งต้น): แอดมินสามารถคลิกที่ป้าย Target บนกราฟหรือปุ่มเป้าหมายในแถบเครื่องมือเพื่อปรับเป้าหมายของแต่ละปีได้ทันที (`public/js/act-5s.js`, `public/app.css`, `server/modules/act/audit.js`, `server/modules/act/transaction.js`)
+
 - 2026-11-02 · Antigravity [5S] · ปรับเกณฑ์เปิด Issue 5S: ข้อที่ได้คะแนน 3 หรือต่ำกว่า (≤ 3 คือ 1, 2, 3) ต้องเปิด Issue พร้อมรูปและรายละเอียดปัญหา (ปุ่ม 1–3 แสดงสีแดง และเปิดช่อง Issue ทันทีเมื่อเลือกคะแนน) และปิด Issue เมื่อมี Action พร้อมตรวจประเมินรอบถัดไปได้คะแนน ≥ 4 (4 หรือ 5) ตรงตามข้อความแนะนำและข้อมูลจริงเดิม (`public/js/act-tx.js`, `server/modules/act/transaction.js`, `scripts/act-sql.js`, `db/act/5s.sql`, `db/setup.sql`)
 
 - 2026-11-02 · Claude [5S] · CFO EF CFP เรียงคอลัมน์ตาม อบก. + id (mt_cfo_ef_ref.code, CFP-0001…) ใช้กรอกในกิจกรรม / วัสดุ · item_no = ลำดับ อบก. · ต้องรัน db/act/cfo.sql

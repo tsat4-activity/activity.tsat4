@@ -63,11 +63,15 @@ function idList(list) {
   return [...new Set((Array.isArray(list) ? list : []).map((x) => String(x).trim()).filter(Boolean))];
 }
 
-async function settingsOf(activity) {
+async function settingsOf(activity, year) {
   const { data, error } = await tx.from(tablesOf(activity).setting).select('key,value');
   if (error) throw error;
   const out = { ...DEFAULTS };
   for (const row of data || []) if (row.key in out) out[row.key] = Number(row.value);
+  if (year) {
+    const yearPass = (data || []).find((r) => r.key === `pass_percent:${year}`);
+    if (yearPass && Number(yearPass.value)) out.pass_percent = Number(yearPass.value);
+  }
   return out;
 }
 
@@ -112,7 +116,7 @@ export function mountTransaction(app) {
     if (!access.member) return fail(res, 403, `บันทึกได้เฉพาะทีมของกิจกรรมนี้ปี ${year}`);
     const areaId = Number(req.query.area) || 0;
     const [settings, items, areas, team, openIssues] = await Promise.all([
-      settingsOf(activity),
+      settingsOf(activity, year),
       fetchAll(() => tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', year).eq('status', 'Active').order('item_no')),
       fetchAll(() => tx.from(t.area).select('id,code,area_type,name').eq('status', 'Active').order('code')),
       fetchAll(() => tx.from(t.team).select('employee_id,role,team').eq('year', year).eq('status', 'Active')),
@@ -152,7 +156,7 @@ export function mountTransaction(app) {
     if (audit.audit_type === 'COMMITTEE' && !/^[A-Z]$/.test(team || '')) return fail(res, 400, 'เลือกทีมที่ตรวจ');
 
     const [settings, itemsRes, lockedRes, ownRes, carriedIssues] = await Promise.all([
-      settingsOf(activity),
+      settingsOf(activity, audit.year),
       tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', audit.year).eq('status', 'Active').order('item_no'),
       tx.from(t.issue).select('checklist_id').eq('verify_audit_no', audit.audit_no).eq('status', 'OVERDUE'),
       tx.from(t.issue).select('id,checklist_id,score,status,action_description,photo_after').eq('audit_id', audit.id),
@@ -209,7 +213,7 @@ export function mountTransaction(app) {
     const [access, areaRes, settings, itemsRes, open] = await Promise.all([
       accessOf(req, activity, year),
       tx.from(t.area).select('id,code,status').eq('id', areaId).maybeSingle(),
-      settingsOf(activity),
+      settingsOf(activity, year),
       tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', year).eq('status', 'Active').order('item_no'),
       type === 'COMMITTEE' ? openIssuesOf(t, areaId) : []
     ]);

@@ -296,6 +296,9 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .a5-charts > .card{min-width:0}
 /* Self / Committee table headers carry their chart colour (ชุดสี A / B) */
 .a5-side th.a5-type-head{text-align:center;color:var(--team);border-bottom:3px solid var(--team)}
+.a5-side .mo-data-table{table-layout:fixed;width:100%}
+.a5-side .mo-data-table th,.a5-side .mo-data-table td{text-align:center;padding:4px 2px;white-space:nowrap}
+.a5-side .mo-data-table th:first-child,.a5-side .mo-data-table td:first-child{text-align:left;padding-left:10px}
 .a5-rank td:nth-child(n+3),.a5-rank th:nth-child(n+3){text-align:right}
 .a5-rank tfoot td{font-weight:600;color:var(--mo-primary);border-top:2px solid var(--mo-line)}
 .a5-legend{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:11px;color:var(--mo-text-muted);margin:0 0 6px}

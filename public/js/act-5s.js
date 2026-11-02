@@ -122,15 +122,39 @@ async function a5DrawSummary(body, activity) {
       ${field('ประเภท', `<select id="a5-type">${options(['', 'SELF', 'COMMITTEE'], a5Summary.type, (v) => ({ '': 'ทั้งหมด', SELF: 'Self Audit', COMMITTEE: 'Committee' }[v]))}</select>`)}
       ${field('ประเภทพื้นที่', `<select id="a5-atype">${options(['', ...A5_AREA_TYPES], a5Summary.areaType, (v) => v || 'ทั้งหมด')}</select>`)}
       ${field('พื้นที่', `<select id="a5-area"><option value="">ทั้งหมด</option>${areas.map((a) => `<option value="${a.id}"${String(a.id) === String(a5Summary.area) ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)}</option>`).join('')}</select>`, 'grow')}
+      ${me.access.admin ? `<div class="action-bar">${button('a5-target-btn', `เป้าหมาย ${pass}%`, 'secondary')}</div>` : ''}
     </div>
     <div class="ch-kpis">${(data.groups.length ? data.groups : [1, 2, 3, 4, 5].map((n) => ({ group: n, percent: 0 }))).map((g, i) => chartKpi({ label: `${esc(a5GroupName(activity, g.group))} · เฉลี่ยทั้งปี`, value: g.percent, unit: '%', pie: g.percent, color: CHART.series[i % CHART.series.length], note: g.percent >= pass ? 'ผ่านเกณฑ์' : g.percent ? `ต่ำกว่าเกณฑ์ ${pass}%` : '' })).join('')}</div>
     ${data.owner ? `<p class="sum-meta">เจ้าของพื้นที่: ${esc(data.owner.name || data.owner.employeeId)}</p>` : ''}
     <div class="a5-side">
       <div class="a5-charts">${sets.map(chart).join('')}</div>
-      <div class="table-wrap"><table class="mo-data-table"><thead><tr><th rowspan="2">เดือน</th>${head}</tr><tr>${sets.map(() => '<th>%</th><th>ครั้ง</th>').join('')}</tr></thead><tbody>${ACT_MONTHS.map((_, i) => row(i)).join('')}</tbody></table></div>
+      <div class="table-wrap"><table class="mo-data-table">
+        <colgroup><col style="width:28%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup>
+        <thead><tr><th rowspan="2">เดือน</th>${head}</tr><tr>${sets.map(() => '<th>%</th><th>ครั้ง</th>').join('')}</tr></thead>
+        <tbody>${ACT_MONTHS.map((_, i) => row(i)).join('')}</tbody>
+      </table></div>
     </div>`;
   a5Lift(body);
-  const redraw = () => a5DrawSummary(body, activity).catch(onErr);
+  const redraw = () => a5DrawSummary(body, activity, me).catch(onErr);
+  const editTarget = () => {
+    if (!me.access.admin) return;
+    openPopup(`ปรับเป้าหมายปี ${a5Year}`, field(`เป้าหมาย (% ผ่านเกณฑ์ปี ${a5Year})`, `<input id="a5-target-val" type="number" min="1" max="100" value="${pass}" placeholder="80">`), async () => {
+      const val = Math.round(Number($('a5-target-val').value));
+      if (!val || val < 1 || val > 100) throw new Error('ระบุเป้าหมายเป็นตัวเลข 1–100%');
+      await a5Api(activity, 'target', { method: 'PUT', body: { year: a5Year, target: val } });
+      toast(`บันทึกเป้าหมายปี ${a5Year} เป็น ${val}% แล้ว`);
+      closePopup();
+      redraw();
+    });
+  };
+  if ($('a5-target-btn')) $('a5-target-btn').onclick = editTarget;
+  if (me.access.admin) {
+    body.querySelectorAll('.ch-target').forEach((el) => {
+      el.style.cursor = 'pointer';
+      el.title = `คลิกเพื่อปรับเป้าหมายปี ${a5Year} (ปัจจุบัน ${pass}%)`;
+      el.onclick = editTarget;
+    });
+  }
   $('a5-type').onchange = () => { a5Summary.type = $('a5-type').value; redraw(); };
   $('a5-atype').onchange = () => { a5Summary.areaType = $('a5-atype').value; a5Summary.area = ''; redraw(); };
   $('a5-area').onchange = () => { a5Summary.area = $('a5-area').value; redraw(); };

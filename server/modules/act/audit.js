@@ -220,12 +220,14 @@ export function mountAudit(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const areaType = AREA_TYPES.includes(req.query.areaType) ? req.query.areaType : '';
     const areaId = Number(req.query.area) || 0;
-    const [areas, rawAudits, ownerMap, pass] = await Promise.all([
+    const [areas, rawAudits, ownerMap, passSettings] = await Promise.all([
       areasOf(activity),
       auditsOf(activity, year),
       areaId ? ownersOf(activity, year, [areaId]) : null,
-      tx.from(tablesOf(activity).setting).select('value').eq('key', 'pass_percent').maybeSingle()
+      tx.from(tablesOf(activity).setting).select('key,value').in('key', [`pass_percent:${year}`, 'pass_percent'])
     ]);
+    const passMap = new Map((passSettings.data || []).map((r) => [r.key, Number(r.value)]));
+    const pass = passMap.get(`pass_percent:${year}`) ?? passMap.get('pass_percent') ?? 80;
     const allowed = new Set(areas.filter((a) => (!areaType || a.area_type === areaType) && (!areaId || a.id === areaId)).map((a) => a.id));
     // Every type in one read: the KPI cards follow the ประเภท filter, the monthly charts show Self and Committee apart.
     const all = rawAudits.filter((a) => allowed.has(a.area_id));
@@ -237,7 +239,7 @@ export function mountAudit(app) {
       owner ? namesOf([owner]) : null
     ]);
     res.json({
-      pass: Number(pass.data?.value) || 80,
+      pass,
       areas: areas.filter((a) => a.status === 'Active' || allowed.has(a.id)).map((a) => ({ id: a.id, code: a.code, name: a.name, areaType: a.area_type })),
       ...summarize(audits, groups),
       byType: Object.fromEntries(AUDIT_TYPES.map((t) => [t, summarize(all.filter((a) => a.audit_type === t), []).months])),
@@ -594,5 +596,17 @@ export function mountAudit(app) {
       : await tx.from(tablesOf(activity).auditPlan).delete().eq('year', year).eq('area_id', areaId).eq('month', month).eq('week', week);
     throwIf(error);
     res.json({ ok: true });
+  });
+
+  // Yearly target (% pass): distinct per year (e.g. 2026 = 80%, 2027 = 85%)
+  route('put', '/api/act/:activity/target', async (req, res, activity) => {
+    const year = yearOf(req.body?.year);
+    const target = Number(req.body?.target);
+    if (!year || !Number.isInteger(target) || target < 1 || target > 100) return fail(res, 400, 'ระบุปีและเป้าหมาย 1–100%');
+    if (!(await requireAdmin(req, res, activity, year))) return;
+    const t = tablesOf(activity);
+    const { error } = await tx.from(t.setting).upsert({ key: `pass_percent:${year}`, value: String(target) }, { onConflict: 'key' });
+    throwIf(error);
+    res.json({ ok: true, year, target });
   });
 }
