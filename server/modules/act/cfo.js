@@ -21,7 +21,7 @@ const REF_SHEETS = ['energy', 'chemical', 'ipcc', 'fuel', 'cfp'];
 const REF_PICK = ['energy', 'chemical', 'cfp'];
 const REF_NUMBERS = ['co2', 'ch4_fossil', 'ch4', 'n2o', 'total', 'ratio'];
 // id shown to users (mt_cfo_ef_ref.code): prefix per table, CFP-0001 … · a code is typed in activities and materials
-const REF_PREFIX = { cfp: 'CFP' };
+const REF_PREFIX = { cfp: 'CFP', energy: 'CFO', chemical: 'CFO' }; // CFO-xxxx = เอกสาร EF ของ CFO (อบก.)
 const refCode = (v) => String(v ?? '').trim().toUpperCase().slice(0, 40) || null;
 // Weighted Fr-03.2 (ผู้ใช้กำหนด 2026-11-02): levels 1–5 · score = Σ level × weight · significant = source and (sector ✓ or score ≥ pass)
 export const S3_LEVELS = ['magnitude', 'influence', 'risk', 'opportunity'];
@@ -670,7 +670,7 @@ export function mountCfo(app) {
     const same = copies.find((c) => c.unit === row.unit && Number(c.kgco2e) === row.kgco2e && Number(c.co2_bio ?? 0) === Number(row.co2_bio ?? 0));
     if (same) return { id: same.id };
     row.code = copies.length ? `${base}:${copies.length + 1}` : base;
-    const made = must(await tx.from(t.ef).insert(row).select('id'));
+    const made = must(await tx.from(t.ef).insert({ ...row, ref_id: ref.id }).select('id'));
     return { id: made[0].id };
   };
   // Septic tank: the quantity is kg CH4 and v_cfo_entry multiplies it by the GWP CH4, so the EF is a fixed one per category.

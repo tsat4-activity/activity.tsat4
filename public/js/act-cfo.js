@@ -83,9 +83,9 @@ const cfoUnitKey = (u) => String(u || '').trim().toLowerCase().replace(/^(l|lite
 const CFO_GWP_GASES = [['co2', 'CO₂'], ['ch4_fossil', 'Fossil CH₄'], ['ch4', 'CH₄'], ['n2o', 'N₂O'], ['sf6', 'SF₆'], ['nf3', 'NF₃']];
 // Columns of each reference table as in the sheet: [key, label, unit line, number column]
 const CFO_REF_COLS = {
-  energy: { title: 'GHG Emission Factors for energy consumption (per unit)', cols: [['name', 'Emission Source'], ['unit', 'Units'], ['co2', 'CO₂', '(kgCO₂/unit)', 1], ['ch4_fossil', 'Fossil CH₄', '(kgCH₄/unit)', 1],
+  energy: { title: 'GHG Emission Factors for energy consumption (per unit)', cols: [['code', 'id'], ['name', 'Emission Source'], ['unit', 'Units'], ['co2', 'CO₂', '(kgCO₂/unit)', 1], ['ch4_fossil', 'Fossil CH₄', '(kgCH₄/unit)', 1],
     ['ch4', 'CH₄', '(kgCH₄/unit)', 1], ['n2o', 'N₂O', '(kgN₂O/unit)', 1], ['total', 'Total', '(kgCO₂-eq/unit)', 1], ['reference', 'Emission Reference'], ['remark', 'หมายเหตุ']] },
-  chemical: { title: 'Global warming potential ของสารเคมี / สารทำความเย็น', cols: [['name', 'Common chemical name'], ['unit', 'Units'], ['total', 'GWP Total', '(kgCO₂-eq/unit)', 1], ['reference', 'Reference']] },
+  chemical: { title: 'Global warming potential ของสารเคมี / สารทำความเย็น', cols: [['code', 'id'], ['name', 'Common chemical name'], ['unit', 'Units'], ['total', 'GWP Total', '(kgCO₂-eq/unit)', 1], ['reference', 'Reference']] },
   ipcc: { title: 'GHG Emission Factors from IPCC Guidelines', cols: [['name', 'Emission Source'], ['co2', 'CO₂', '(kgCO₂/TJ)', 1], ['ch4_fossil', 'Fossil CH₄', '(kgCH₄/TJ)', 1], ['ch4', 'CH₄', '(kgCH₄/TJ)', 1],
     ['n2o', 'N₂O', '(kgN₂O/TJ)', 1], ['total', 'Total', '(kgCO₂-eq/TJ)', 1], ['reference', 'Emission Reference']] },
   // grp = Heating value / Density / Conversion Factor: the band row names what the value is
@@ -812,14 +812,17 @@ function cfoEfLabel(e) {
 
 function cfoSetActivities(body, m, rerender) {
   const efById = new Map(m.ef.map((e) => [e.id, e]));
+  const refById = new Map(m.refs.map((r) => [r.id, r]));
+  // EF id of an activity = the reference row its EF copy points to (mt_cfo_ef.ref_id → mt_cfo_ef_ref.code)
+  const efCode = (a) => refById.get(efById.get(a.ef_id)?.ref_id)?.code || '';
   const departments = [...new Set(m.activities.map((a) => a.department))].sort();
   const draw = () => {
     const term = cfoFilter.q.trim().toLowerCase();
     const list = listQuery(m.activities.filter((a) => (!cfoFilter.department || a.department === cfoFilter.department)
       && (!cfoFilter.scope || String(efById.get(a.ef_id)?.scope_code || '').startsWith(`${cfoFilter.scope}-`))
-      && (!term || `${a.name} ${a.detail || ''}`.toLowerCase().includes(term))), cfoHeads.activities, (a, key) => (key === 'ef' ? cfoEfLabel(efById.get(a.ef_id)) : a[key] ?? ''));
-    fillTable('cfo-rows', [{ label: 'หน่วยงาน', key: 'department' }, { label: 'กิจกรรม', key: 'name' }, { label: 'รายละเอียด', key: 'detail' }, { label: 'Emission factor', key: 'ef' }, { label: 'สูตร', key: 'calc' }, { label: 'สถานะ', key: 'status' }],
-      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td>${esc(a.name)}</td><td>${esc(a.detail || '')}</td><td>${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td>${esc(CFO_CALCS[a.calc]?.short || '')}</td><td>${esc(a.status)}</td></tr>`).join(''), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
+      && (!term || `${a.name} ${a.detail || ''} ${efCode(a)}`.toLowerCase().includes(term))), cfoHeads.activities, (a, key) => (key === 'ef' ? cfoEfLabel(efById.get(a.ef_id)) : key === 'efcode' ? efCode(a) : a[key] ?? ''));
+    fillTable('cfo-rows', [{ label: 'หน่วยงาน', key: 'department' }, { label: 'กิจกรรม', key: 'name' }, { label: 'รายละเอียด', key: 'detail' }, { label: 'EF id', key: 'efcode' }, { label: 'Emission factor', key: 'ef' }, { label: 'สูตร', key: 'calc' }, { label: 'สถานะ', key: 'status' }],
+      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td>${esc(a.name)}</td><td>${esc(a.detail || '')}</td><td><b>${esc(efCode(a))}</b></td><td>${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td>${esc(CFO_CALCS[a.calc]?.short || '')}</td><td>${esc(a.status)}</td></tr>`).join(''), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
     bindRowSelect($('cfo-rows'), (id) => { picked = m.activities.find((a) => String(a.id) === id); ['cfo-edit', 'cfo-del'].forEach((b) => { if ($(b)) $(b).disabled = !picked; }); });
   };
   let picked = null;
@@ -937,7 +940,8 @@ function cfoSetActivities(body, m, rerender) {
     // EF id ↔ Emission factor: typing an id picks that EF in the list (if it fits the Scope / หมวด / สูตร chosen), picking an EF shows its id
     const showCode = () => {
       const [kind, id] = $('cfo-a-ef').value.split(':');
-      $('cfo-a-efcode').value = kind === 'ref' ? m.refs.find((x) => String(x.id) === id)?.code || '' : '';
+      const refId = kind === 'ref' ? Number(id) : kind === 'ef' ? m.ef.find((e) => String(e.id) === id)?.ref_id : null;
+      $('cfo-a-efcode').value = m.refs.find((x) => x.id === refId)?.code || '';
     };
     $('cfo-a-efcode').oninput = () => {
       const code = $('cfo-a-efcode').value.trim().toUpperCase();
@@ -1295,7 +1299,7 @@ async function cfoSetMaterial(body, m, rerender) {
 }
 
 // File columns of a reference table (Export writes them, Import reads them by the key in row 1; row 2 = Thai label, skipped)
-const CFO_REF_FILE = [['id', 'id (ว่าง = เพิ่มใหม่)'], ['grp', 'กลุ่ม'], ['name', 'ชื่อ / รายการ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'],
+const CFO_REF_FILE = [['code', 'id'], ['id', 'รหัสระบบ (ห้ามแก้)'], ['grp', 'กลุ่ม'], ['name', 'ชื่อ / รายการ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'],
   ['co2', 'CO2'], ['ch4_fossil', 'Fossil CH4'], ['ch4', 'CH4'], ['n2o', 'N2O'], ['total', 'Total / EF / ค่า'], ['ratio', 'สัดส่วนชีวมวล'],
   ['reference', 'แหล่งข้อมูล'], ['remark', 'หมายเหตุ'], ['sort_no', 'ลำดับ'], ['status', 'สถานะ (Active / Inactive)']];
 

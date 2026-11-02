@@ -262,3 +262,11 @@ select v.sheet::text, v.grp::text, v.name::text, v.formula::text, v.unit::text, 
   ('fuel', 'Conversion Factor', 'MMBTU to MJ', null, 'MJ/MMBTU', null, null, null, null, 1055.055853, null, 'สำนักงานนโยบายและแผนพลังงาน, กระทรวงพลังงาน, "รายงานสถิติพลังงานของประเทศไทย 2567 (Energy Statistics of Thailand 2024)', null, 30)
 ) as v (sheet, grp, name, formula, unit, co2, ch4_fossil, ch4, n2o, total, ratio, reference, remark, sort_no)
 where not exists (select 1 from public.mt_cfo_ef_ref where sheet = 'fuel');
+
+-- id ของ EF ตามเอกสาร อบก. "ค่าการปล่อยก๊าซเรือนกระจก ... คาร์บอนฟุตพริ้นท์ขององค์กร" (ผู้ใช้กำหนด 2026-11-02): EF พลังงาน แล้ว GWP สารเคมี
+-- เรียงตามเอกสาร CFO-0001 … · เฉพาะแถวที่มีหน่วยและค่า (หัวข้อไม่มี id) · แถวใหม่ต่อเลขเดิม
+update public.mt_cfo_ef_ref r set code = 'CFO-' || lpad((x.n + x.base)::text, 4, '0')
+from (select id, row_number() over (order by case sheet when 'energy' then 1 else 2 end, sort_no, id) as n,
+        coalesce((select max(substring(code from 5)::int) from public.mt_cfo_ef_ref where code ~ '^CFO-[0-9]+$'), 0) as base
+      from public.mt_cfo_ef_ref where sheet in ('energy', 'chemical') and code is null and unit is not null and total is not null) x
+where r.id = x.id;

@@ -172,6 +172,13 @@ from (select id, row_number() over (order by sort_no, id) as n,
         coalesce((select max(substring(code from 5)::int) from public.mt_cfo_ef_ref where code ~ '^CFP-[0-9]+$'), 0) as base
       from public.mt_cfo_ef_ref where sheet = 'cfp' and code is null) x
 where r.id = x.id;
+-- id ของ EF ตามเอกสาร อบก. "ค่าการปล่อยก๊าซเรือนกระจก ... คาร์บอนฟุตพริ้นท์ขององค์กร" (ผู้ใช้กำหนด 2026-11-02): EF พลังงาน แล้ว GWP สารเคมี
+-- เรียงตามเอกสาร CFO-0001 … · เฉพาะแถวที่มีหน่วยและค่า (หัวข้อไม่มี id) · แถวใหม่ต่อเลขเดิม
+update public.mt_cfo_ef_ref r set code = 'CFO-' || lpad((x.n + x.base)::text, 4, '0')
+from (select id, row_number() over (order by case sheet when 'energy' then 1 else 2 end, sort_no, id) as n,
+        coalesce((select max(substring(code from 5)::int) from public.mt_cfo_ef_ref where code ~ '^CFO-[0-9]+$'), 0) as base
+      from public.mt_cfo_ef_ref where sheet in ('energy', 'chemical') and code is null and unit is not null and total is not null) x
+where r.id = x.id;
 
 -- วัสดุจาก SAP (Store usage, Scope 3 ผู้ใช้กำหนด 2026-11-01): รายการวัสดุ + EF ที่จับคู่ (ตารางอ้างอิง) + ตัวแปลงหน่วย
 -- factor = 1 หน่วย SAP เท่ากับกี่หน่วยของ EF (เช่น กระดาษ A4 80g 1 รีม = 2.495 kg) · ไม่มี EF = ไม่คิด
@@ -304,6 +311,19 @@ on conflict (key) do nothing;
 -- EF การได้มาของเชื้อเพลิง (Scope 3-3, ผู้ใช้กำหนด 2026-11-01): ปริมาณเดียวกันของกิจกรรมคิดอีกบรรทัดใน 3-3
 -- เช่น กระบะ B7 = Scope 1 (Report in Scope 1) + รายงานแยก (co2_bio ของ EF) + 3-3 การได้มาของ B7 · entry เก็บ ef3_id ตอนบันทึก
 alter table public.mt_cfo_activity add column if not exists ef3_id bigint references public.mt_cfo_ef (id);
+-- EF ของกิจกรรม (สำเนาใน mt_cfo_ef) ผูกกับแถวในตารางอ้างอิงด้วย FK ref_id (ผู้ใช้กำหนด 2026-11-02) · id ที่ผู้ใช้เห็น = mt_cfo_ef_ref.code
+-- กิจกรรมเก่า: จากรหัสสำเนา ref:<id>:<หมวด> หรือชื่อ + หน่วย + ค่า kgCO2e ตรงกับ EF พลังงาน / GWP สารเคมี (EF เดิมจาก Excel)
+alter table public.mt_cfo_ef add column if not exists ref_id bigint references public.mt_cfo_ef_ref (id) on delete set null;
+update public.mt_cfo_ef f set ref_id = r.id from public.mt_cfo_ef_ref r
+where f.ref_id is null and f.code ~ '^ref:[0-9]+:' and r.id = substring(f.code from '^ref:([0-9]+):')::bigint;
+update public.mt_cfo_ef f set ref_id = x.id
+from (select distinct on (f2.id) f2.id as ef_id, r.id from public.mt_cfo_ef f2
+      join public.mt_cfo_ef_ref r on r.sheet in ('energy', 'chemical') and r.total is not null
+        and lower(regexp_replace(r.name, '^-\s*', '')) = lower(regexp_replace(f2.name, '^-\s*', ''))
+        and lower(replace(replace(coalesce(r.unit, ''), 'Liter', 'l'), 'litre', 'l')) = lower(replace(replace(coalesce(f2.unit, ''), 'Liter', 'l'), 'litre', 'l'))
+        and round(r.total, 3) = round(coalesce(f2.kgco2e, -1), 3)
+      where f2.ref_id is null order by f2.id, r.id) x
+where f.id = x.ef_id;
 alter table public.tx_cfo_entry add column if not exists ef3_id bigint references public.mt_cfo_ef (id);
 
 -- ผลต่อแถว: tCO2e = qty × kgco2e / 1000 · แยกก๊าซ (Scope 1) = qty × EF ก๊าซ × GWP / 1000

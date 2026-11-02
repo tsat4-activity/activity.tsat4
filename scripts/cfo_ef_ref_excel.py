@@ -83,6 +83,15 @@ def main(book_path):
         out.append(f') as v ({", ".join(cols)})')
         out.append(f"where not exists (select 1 from public.mt_cfo_ef_ref where sheet = '{sheet}');")
         out.append('')
+    # ids CFO-0001 … of EF พลังงาน + GWP สารเคมี (the same update as db/act/cfo.sql, for a database seeded after it)
+    out.append("""-- id ของ EF ตามเอกสาร อบก. "ค่าการปล่อยก๊าซเรือนกระจก ... คาร์บอนฟุตพริ้นท์ขององค์กร" (ผู้ใช้กำหนด 2026-11-02): EF พลังงาน แล้ว GWP สารเคมี
+-- เรียงตามเอกสาร CFO-0001 … · เฉพาะแถวที่มีหน่วยและค่า (หัวข้อไม่มี id) · แถวใหม่ต่อเลขเดิม
+update public.mt_cfo_ef_ref r set code = 'CFO-' || lpad((x.n + x.base)::text, 4, '0')
+from (select id, row_number() over (order by case sheet when 'energy' then 1 else 2 end, sort_no, id) as n,
+        coalesce((select max(substring(code from 5)::int) from public.mt_cfo_ef_ref where code ~ '^CFO-[0-9]+$'), 0) as base
+      from public.mt_cfo_ef_ref where sheet in ('energy', 'chemical') and code is null and unit is not null and total is not null) x
+where r.id = x.id;
+""")
     target = ROOT / 'db' / 'act' / 'cfo_ef_ref_seed.sql'
     target.write_text('\n'.join(out), encoding='utf-8', newline='\n')
     print(f'{target.relative_to(ROOT)} written')
