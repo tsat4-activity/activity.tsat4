@@ -106,10 +106,10 @@ const cfoPct = (part, total) => (total ? `${Math.round((part / total) * 1000) / 
 const cfoMonthIso = (m) => `${a5Year}-${String(m).padStart(2, '0')}`;
 
 // Page frame shared by the three CFO pages: tabs on the left, year (+ extra) on the right, body below.
-async function cfoFrame(target, tabs, attr, active, rightExtra = '', { year = true } = {}) {
+async function cfoFrame(target, tabs, attr, active, rightExtra = '', { year = true, pick = false } = {}) {
   const me = await a5Api(CFO, `me?year=${a5Year}`);
   target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(tabs ? a5Seg(attr, tabs, active) : '', `${year ? `<div class="a5-year">${a5YearSelect(me.years)}</div>` : ''}${rightExtra}`, 'a5')}
+    ${pageBar(tabs ? (pick ? a5SetPick(tabs, active) : a5Seg(attr, tabs, active)) : '', `${year ? `<div class="a5-year">${a5YearSelect(me.years)}</div>` : ''}${rightExtra}`, 'a5')}
     <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
   </section></div>`;
   return { me, body: $('a5-body') };
@@ -770,9 +770,9 @@ function cfoEntryForm(row, septic, month, reload) {
 
 async function cfoSetting(target) {
   // Emission Factor is master data for every year, so its tab has no year (ผู้ใช้กำหนด 2026-11-01)
-  const { me, body } = await cfoFrame(target, CFO_SET_TABS, 'data-cfoset', cfoSetTab, '', { year: !['ef', 'material'].includes(cfoSetTab) });
+  const { me, body } = await cfoFrame(target, CFO_SET_TABS, 'data-cfoset', cfoSetTab, '', { year: !['ef', 'material'].includes(cfoSetTab), pick: true });
   const rerender = () => cfoSetting(target).catch(onErr);
-  target.querySelectorAll('[data-cfoset]').forEach((node) => { node.onclick = () => { cfoSetTab = node.dataset.cfoset; rerender(); }; });
+  $('a5-setpick').onchange = () => { cfoSetTab = $('a5-setpick').value; rerender(); };
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   if (cfoSetTab === 'team') return a5SetTeam(body, CFO, me.access.admin, rerender, CFO_ROLE_LABEL);
   if (cfoSetTab === 's3') return cfoSetS3(body, rerender);

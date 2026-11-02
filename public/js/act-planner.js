@@ -635,13 +635,11 @@ async function aplSetting(target, activity) {
   const tabs = APL_SET_TABS_OF[activity] || APL_SET_TABS;
   const tab = tabs[aplSetTab[activity]] ? aplSetTab[activity] : 'team';
   target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Seg('data-aplset', tabs, tab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
+    ${pageBar(a5SetPick(tabs, tab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
     <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
   </section></div>`;
   const rerender = () => aplSetting(target, activity).catch(onErr);
-  target.querySelectorAll('[data-aplset]').forEach((node) => {
-    node.onclick = () => { aplSetTab[activity] = node.dataset.aplset; rerender(); };
-  });
+  $('a5-setpick').onchange = () => { aplSetTab[activity] = $('a5-setpick').value; rerender(); };
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('a5-body');
   if (tab === 'project') return aplSetProjects(body, activity, admin, rerender);

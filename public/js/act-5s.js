@@ -40,6 +40,11 @@ function a5TeamColor(team) {
   return A5_TEAM_COLORS[team] || '#64748b';
 }
 
+// Setting pages pick their sub-page from one dropdown (ผู้ใช้กำหนด 2026-11-02, AGENTS.md) · the page binds #a5-setpick
+function a5SetPick(tabs, active) {
+  return field('หน้า', `<select id="a5-setpick">${options(Object.keys(tabs), active, (k) => tabs[k])}</select>`);
+}
+
 function a5Seg(attr, tabs, active) {
   const entries = Array.isArray(tabs) ? tabs : Object.entries(tabs);
   return `<div class="seg" role="group">${entries.map(([key, name]) => `<button class="seg-btn${key === active ? ' is-active' : ''}" type="button" ${attr}="${esc(key)}" aria-pressed="${key === active}">${esc(name)}</button>`).join('')}</div>`;
@@ -240,11 +245,11 @@ async function a5Setting(target, activity) {
   const me = await a5Api(activity, `me?year=${a5Year}`);
   const admin = me.access.admin;
   target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Seg('data-a5set', A5_SET_TABS, a5SetTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
+    ${pageBar(a5SetPick(A5_SET_TABS, a5SetTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
     <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
   </section></div>`;
   const rerender = () => a5Setting(target, activity).catch(onErr);
-  target.querySelectorAll('[data-a5set]').forEach((node) => { node.onclick = () => { a5SetTab = node.dataset.a5set; rerender(); }; });
+  $('a5-setpick').onchange = () => { a5SetTab = $('a5-setpick').value; rerender(); };
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('a5-body');
   if (a5SetTab === 'gantt') return aplRender(body, activity, { inPage: true });
