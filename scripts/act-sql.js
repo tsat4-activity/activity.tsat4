@@ -310,6 +310,10 @@ alter table public.mt_${k}_material add column if not exists kind text not null 
 alter table public.mt_${k}_material drop constraint if exists mt_${k}_material_kind;
 alter table public.mt_${k}_material add constraint mt_${k}_material_kind check (kind in ('usage', 'raw', 'other'));
 alter table public.tx_${k}_material add column if not exists kind text not null default 'usage';
+-- รายงาน Usage ต่อ costcenter (ผู้ใช้กำหนด 2026-11-02): costcenter ตามไฟล์ SAP (department = section ของ costcenter) · amount = เงิน (บาท)
+alter table public.tx_${k}_material add column if not exists costcenter text;
+alter table public.tx_${k}_material add column if not exists amount numeric;
+create index if not exists tx_${k}_material_cc on public.tx_${k}_material (month, costcenter);
 
 -- กิจกรรมที่ต้องเก็บข้อมูลทุกเดือน (รถผู้บริหาร, Forklift, ไฟฟ้า ...) ของหน่วยงานไหน ใช้ EF ตัวไหน
 create table if not exists public.mt_${k}_activity (

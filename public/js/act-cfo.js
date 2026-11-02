@@ -7,7 +7,7 @@ const CFO = 'cfo';
 const CFO_SCOPE_COLORS = CHART_THEMES.cool.series.slice(0, 3);
 const CFO_BASE_COLORS = CHART_THEMES.cool.base;
 const CFO_ROLE_LABEL = { ...ACT_TEAM_ROLES, admin: 'ผู้ประสานงาน (ผู้จัดทำ)', member: 'สมาชิก (ตัวแทนหน่วยงาน)' }; // TGO forms call the coordinator ผู้จัดทำ
-const CFO_DASH_TABS = { summary: 'Summary', scope: 'Scope', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
+const CFO_DASH_TABS = { summary: 'Summary', scope: 'Scope', usage: 'Usage (SAP)', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
 const CFO_SET_TABS = { team: 'ทีม', activities: 'กิจกรรม', ef: 'Emission Factor', material: 'วัสดุ (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'บริษัท' };
 // TGO Fr-03.2 weighted criteria (server s3Rule, ผู้ใช้กำหนด 2026-11-02): level 1–5 per issue · Magnitude comes from the data
 const CFO_S3_LEVELS = [
@@ -133,6 +133,7 @@ async function cfoDashboard(target) {
   target.querySelectorAll('[data-cfodash]').forEach((node) => { node.onclick = () => { cfoDashTab = node.dataset.cfodash; rerender(); }; });
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   if (cfoDashTab === 'scope') return cfoDrawProgress(body);
+  if (cfoDashTab === 'usage') return cfoDrawUsage(body);
   if (cfoDashTab === 'company') return cfoDrawCompany(body, me.access.admin, rerender);
   if (cfoDashTab === 'team') return cfoDrawTeam(body, me.access.admin);
   if (cfoDashTab === 'fr032') return cfoDrawS3(body);
@@ -417,6 +418,35 @@ async function cfoDrawInventory(body) {
 // Dashboard > บันทึกการปรับปรุง: what changed in master data, settings and confirmations (written by the server),
 // plus notes the admin adds. Search + area filter.
 const cfoRev = { q: '', area: '' };
+// Dashboard > Usage (SAP) (ผู้ใช้กำหนด 2026-11-02): the SAP Usage counted for a month (or the whole year) —
+// costcenters by tCO₂e most first with money (บาท) and Top 5 materials · server cfo/usage-report
+const cfoUsageView = { month: '' };
+const cfoBaht = (n) => (n == null ? '' : Number(n).toLocaleString('th-TH', { maximumFractionDigits: 0 }));
+async function cfoDrawUsage(body) {
+  const month = cfoUsageView.month ? `${a5Year}-${cfoUsageView.month.padStart(2, '0')}` : '';
+  const d = await a5Api(CFO, `cfo/usage-report?year=${a5Year}${month ? `&month=${month}` : ''}`);
+  const have = d.months.map((x) => String(Number(x.month.slice(5, 7))));
+  const all = d.total.tco2e || 0;
+  const title = month ? `${ACT_MONTHS[Number(cfoUsageView.month) - 1]} ${a5Year}` : `ทั้งปี ${a5Year}`;
+  body.innerHTML = `
+    <div class="toolbar a5-filters">
+      ${field('เดือน', `<select id="cfo-us-month">${options(['', ...have], cfoUsageView.month, (v) => (v ? ACT_MONTHS[Number(v) - 1] : 'ทั้งปี'))}</select>`)}
+    </div>
+    <div class="ch-kpis">
+      ${chartKpi({ label: `Usage ${title}`, value: cfoT(d.total.tco2e), unit: 'tCO₂e', icon: 'co2', note: `${d.total.lines.toLocaleString()} บรรทัดที่คิดได้` })}
+      ${chartKpi({ label: 'มูลค่าที่ใช้', value: cfoBaht(d.total.amount), unit: 'บาท', icon: 'payments', note: 'เฉพาะรายการที่คิด tCO₂e ได้' })}
+      ${chartKpi({ label: 'Costcenter', value: d.costcenters.length.toLocaleString(), icon: 'apartment', note: d.costcenters[0] ? `มากสุด ${esc(d.costcenters[0].costcenter || d.costcenters[0].department)}` : '' })}
+    </div>
+    ${chartCard(`Top 5 รายการที่ปล่อยมากสุด · ${title}`, `<div class="table-wrap"><table class="mo-data-table"><thead><tr><th class="num">#</th><th>Material</th><th>รายการ</th><th class="num">ปริมาณ</th><th>หน่วย</th><th class="num">tCO₂e</th><th class="num">%</th><th class="num">เงิน (บาท)</th></tr></thead>
+      <tbody>${d.top.map((x, i) => `<tr><td class="num">${i + 1}</td><td>${esc(x.material)}</td><td title="${esc(x.name)}">${esc(x.name)}</td><td class="num">${cfoT(x.qty)}</td><td>${esc(x.unit || '')}</td><td class="num"><b>${cfoT(x.tco2e)}</b></td>
+        <td class="num">${all ? Math.round((x.tco2e / all) * 100) : 0}%</td><td class="num">${cfoBaht(x.amount)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">ยังไม่มี Usage ที่คิดได้</td></tr>'}</tbody></table></div>`)}
+    ${chartCard(`Costcenter เรียงจากปล่อยมากไปน้อย · ${title}`, `<div class="table-wrap"><table class="mo-data-table"><thead><tr><th class="num">#</th><th>Costcenter</th><th>ชื่อ</th><th>Section</th><th class="num">รายการ</th><th class="num">tCO₂e</th><th class="num">%</th><th class="num">เงิน (บาท)</th></tr></thead>
+      <tbody>${d.costcenters.map((x, i) => `<tr><td class="num">${i + 1}</td><td>${esc(x.costcenter || '-')}</td><td title="${esc(x.name)}">${esc(x.name)}</td><td>${esc(x.department)}</td><td class="num">${x.items}</td>
+        <td class="num"><b>${cfoT(x.tco2e)}</b></td><td class="num">${all ? Math.round((x.tco2e / all) * 100) : 0}%</td><td class="num">${cfoBaht(x.amount)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">ยังไม่มี Usage · วางได้ที่ Setting > วัสดุ (SAP) > วาง Usage</td></tr>'}</tbody></table></div>`)}
+    <p class="sum-meta">คิดเฉพาะวัสดุที่มี EF + ตัวแปลง (Setting > วัสดุ (SAP)) · เงิน = คอลัมน์ total ของไฟล์ SAP (ไม่มี = ปริมาณ × ราคา)${d.costcenter || !d.total.lines ? '' : ' · เดือนที่วางก่อนเพิ่มคอลัมน์ costcenter แสดงตาม Section: วางเดือนนั้นใหม่เพื่อแยก costcenter'}</p>`;
+  $('cfo-us-month').onchange = () => { cfoUsageView.month = $('cfo-us-month').value; cfoDrawUsage(body).catch(onErr); };
+}
+
 async function cfoDrawRevisions(body) {
   const d = await a5Api(CFO, 'cfo/revisions');
   const areas = [...new Set(d.rows.map((r) => r.area))].sort();
@@ -1305,12 +1335,14 @@ async function cfoSetMaterial(body, m, rerender) {
       const head = (lines[0] || []).map((c) => c.toLowerCase());
       const at = (...names) => head.findIndex((h) => names.includes(h));
       const col = head.includes('material')
-        ? { material: at('material'), qty: at('current', 'qty', 'quantity', 'usage', 'ปริมาณ'), unit: at('unit', 'bun', 'หน่วย'), department: at('costcenter', 'cost center', 'section', 'department', 'หน่วยงาน') }
-        : { material: 0, qty: 1, unit: 2, department: 3 };
+        ? { material: at('material'), qty: at('current', 'qty', 'quantity', 'usage', 'ปริมาณ'), unit: at('unit', 'bun', 'หน่วย'), department: at('costcenter', 'cost center', 'section', 'department', 'หน่วยงาน'),
+          amount: at('total', 'amount', 'มูลค่า', 'เงิน'), price: at('price', 'ราคา') }
+        : { material: 0, qty: 1, unit: 2, department: 3, amount: -1, price: -1 };
       if (col.qty < 0) throw new Error('ไม่พบคอลัมน์ปริมาณ (current / qty)');
       const num = (v) => String(v ?? '').replace(/,/g, '');
       return lines.slice(head.includes('material') ? 1 : 0).filter((c) => c[col.material] && num(c[col.qty]) !== '' && Number.isFinite(Number(num(c[col.qty]))))
-        .map((c) => ({ material: c[col.material].replace(/\.0+$/, ''), qty: num(c[col.qty]), unit: col.unit >= 0 ? c[col.unit] : '', department: col.department >= 0 ? String(c[col.department] || '').replace(/\.0+$/, '') : '' }));
+        .map((c) => ({ material: c[col.material].replace(/\.0+$/, ''), qty: num(c[col.qty]), unit: col.unit >= 0 ? c[col.unit] : '', department: col.department >= 0 ? String(c[col.department] || '').replace(/\.0+$/, '') : '',
+          amount: col.amount >= 0 ? num(c[col.amount]) : '', price: col.price >= 0 ? num(c[col.price]) : '' }));
     };
     const send = async (save) => {
       const rows = parse();

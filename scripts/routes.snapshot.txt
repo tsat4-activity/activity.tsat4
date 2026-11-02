@@ -23,6 +23,7 @@ GET /api/act/:activity/cfo/progress auth
 GET /api/act/:activity/cfo/revisions auth
 GET /api/act/:activity/cfo/s3 auth
 GET /api/act/:activity/cfo/summary auth
+GET /api/act/:activity/cfo/usage-report auth
 GET /api/act/:activity/checklist auth
 GET /api/act/:activity/dashboard/ranking auth
 GET /api/act/:activity/dashboard/schedule auth
