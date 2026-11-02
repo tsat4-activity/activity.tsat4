@@ -1,7 +1,7 @@
-"""Turn the old TSAT4-5S workbooks into SQL for Tx Data (tables: db/act/5s.sql, names mt_5s_* / tx_5s_*).
+"""Turn the TSAT4-5S workbooks into SQL for Tx Data (tables: db/act/5s.sql, names mt_5s_* / tx_5s_*).
 
-    python -I scripts/import_5s_excel.py            # reads inbox/master_5s.xlsx + inbox/transaction_5s.xlsx
-    -> writes inbox/import_5s.sql (inbox/ is git-ignored: the data stays off GitHub)
+    python -I scripts/import_5s_excel.py            # reads inbox/master_5s.xlsx (+ inbox/transaction_5s.xlsx if present)
+    -> writes inbox/import_5s_setup.sql, inbox/import_5s.sql, and inbox/import_5s/*.sql
 
 Run it in the Tx Data SQL Editor after db/act/5s.sql. It is safe to run again (on conflict).
 tr_role is read for employee_id + role only; its password hashes are never read.
@@ -58,11 +58,48 @@ def values(rows):
     return ',\n  '.join('(' + ', '.join(r) + ')' for r in rows)
 
 
+def master_sections(k, year, areas, team, checklist, admins):
+    sec_areas = (
+        '\n-- areas\n'
+        f'insert into public.mt_{k}_area (code, area_type, name, section, status) values\n  ' + values(
+            [[lit(r['area_id']), lit(r['area_type']), lit(r['objectname']), lit(r.get('section')), lit(r.get('status') or 'Active')] for r in areas]
+        ) + '\non conflict (code) do update set area_type = excluded.area_type, name = excluded.name, section = excluded.section, status = excluded.status;'
+    )
+    sec_owners = (
+        '\n-- area owners (team rows with role owner in unit audit)\n'
+        f'insert into public.mt_{k}_team (year, employee_id, role, unit, area_id, status)\nselect v.year, v.employee_id, \'owner\', \'audit\', ar.id, \'Active\' from (values\n  ' + values(
+            [[lit(year, 'integer'), lit(r['area_id']), lit(emp(r['employee_id']))] for r in areas if emp(r.get('employee_id'))]
+        ) + f'\n) v(year, code, employee_id)\njoin public.mt_{k}_area ar on ar.code = v.code\n'
+            f'on conflict (year, area_id) where (role = \'owner\') do update set employee_id = excluded.employee_id, unit = excluded.unit, status = excluded.status;'
+    )
+    rows = []
+    for r in team:
+        role = 'chairman' if str(r.get('role', '')).strip() == 'หัวหน้าทีม' else 'auditor'
+        letter = str(r.get('audit_team') or '').strip().upper()
+        rows.append([lit(r['auditor_year'], 'integer'), lit(emp(r['employee_id'])), lit(role), lit('audit'), lit(letter if role == 'auditor' else None), lit(r.get('status') or 'Active')])
+    for r in admins:
+        rows.append([lit(year, 'integer'), lit(emp(r['employee_id'])), lit('admin'), lit('audit'), lit(None), lit('Active')])
+    sec_team = (
+        '\n-- team (หัวหน้าทีม -> chairman, Auditor -> auditor + team, Admin จาก tr_role -> admin, unit = audit)\n'
+        f"update public.mt_{k}_team set unit = 'audit' where year = {year} and unit is null and role in ('chairman', 'auditor', 'admin');\n"
+        f'insert into public.mt_{k}_team (year, employee_id, role, unit, team, status) values\n  ' + values(rows) +
+        f'\non conflict on constraint mt_{k}_team_unique do update set status = excluded.status;'
+    )
+    sec_checklist = (
+        '\n-- checklist\n'
+        f'insert into public.mt_{k}_checklist (year, item_no, s_group, title, score_max, status) values\n  ' + values(
+            [[lit(year, 'integer'), lit(item_no(r['item_id']), 'integer'), lit(item_no(r['s_type']), 'integer'), lit(r['checklist_name']), lit(r.get('score_max') or 5, 'integer'), lit(r.get('status') or 'Active')] for r in checklist]
+        ) + '\non conflict (year, item_no) do update set s_group = excluded.s_group, title = excluded.title, score_max = excluded.score_max, status = excluded.status;'
+    )
+    return [sec_areas, sec_owners, sec_team, sec_checklist]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--master', default=ROOT / 'inbox' / 'master_5s.xlsx')
     ap.add_argument('--trans', default=ROOT / 'inbox' / 'transaction_5s.xlsx')
     ap.add_argument('--out', default=ROOT / 'inbox' / 'import_5s.sql')
+    ap.add_argument('--setup-out', default=ROOT / 'inbox' / 'import_5s_setup.sql')
     ap.add_argument('--year', type=int, default=2026, help='year of the area owners and the checklist')
     ap.add_argument('--activity', default='5s')
     a = ap.parse_args()
@@ -71,101 +108,99 @@ def main():
     areas = sheet(a.master, 'mt_area')
     team = sheet(a.master, 'mt_audit')
     checklist = sheet(a.master, 'mt_list')
-    audits = sheet(a.trans, 'tr_5s')
-    issues = sheet(a.trans, 'tr_issue')
-    plans = sheet(a.trans, 'tr_plan')
-    admins = [r for r in sheet(a.trans, 'tr_role') if str(r.get('role', '')).strip().lower() == 'admin']
 
-    out = [f'-- generated {datetime.now():%Y-%m-%d %H:%M} from {Path(a.master).name} + {Path(a.trans).name} · activity {a.activity}', 'begin;']
+    # Always write master-only setup SQL (inbox/import_5s_setup.sql) from master_5s.xlsx
+    setup_secs = master_sections(k, a.year, areas, team, checklist, [])
+    setup_out = [
+        f'-- generated {datetime.now():%Y-%m-%d %H:%M} from {Path(a.master).name} · activity {a.activity} (master setup: areas, area owners, audit team, checklist)',
+        'begin;',
+        *setup_secs,
+        '\ncommit;',
+        f'\n-- check: expect areas {len(areas)}, owners {len(areas)}, audit_team {len(team)}, checklist {len(checklist)}',
+        f"select (select count(*) from public.mt_{k}_area) as areas,\n"
+        f"  (select count(*) from public.mt_{k}_team where year = {a.year} and role = 'owner') as owners,\n"
+        f"  (select count(*) from public.mt_{k}_team where year = {a.year} and unit = 'audit' and role in ('chairman', 'auditor')) as audit_team,\n"
+        f"  (select count(*) from public.mt_{k}_checklist where year = {a.year}) as checklist;"
+    ]
+    Path(a.setup_out).write_text('\n'.join(setup_out) + '\n', encoding='utf-8')
 
-    out.append('\n-- areas')
-    out.append(f'insert into public.mt_{k}_area (code, area_type, name, section, status) values\n  ' + values(
-        [[lit(r['area_id']), lit(r['area_type']), lit(r['objectname']), lit(r.get('section')), lit(r.get('status') or 'Active')] for r in areas]
-    ) + '\non conflict (code) do update set area_type = excluded.area_type, name = excluded.name, section = excluded.section, status = excluded.status;')
+    trans_path = Path(a.trans)
+    out_path = Path(a.out)
+    if trans_path.exists():
+        audits = sheet(trans_path, 'tr_5s')
+        issues = sheet(trans_path, 'tr_issue')
+        plans = sheet(trans_path, 'tr_plan')
+        admins = [r for r in sheet(trans_path, 'tr_role') if str(r.get('role', '')).strip().lower() == 'admin']
 
-    out.append('\n-- area owners (team rows with role owner)')
-    out.append(f'insert into public.mt_{k}_team (year, employee_id, role, area_id, status)\nselect v.year, v.employee_id, \'owner\', ar.id, \'Active\' from (values\n  ' + values(
-        [[lit(a.year, 'integer'), lit(r['area_id']), lit(emp(r['employee_id']))] for r in areas if emp(r.get('employee_id'))]
-    ) + f'\n) v(year, code, employee_id)\njoin public.mt_{k}_area ar on ar.code = v.code\non conflict do nothing;')
+        out = [f'-- generated {datetime.now():%Y-%m-%d %H:%M} from {Path(a.master).name} + {trans_path.name} · activity {a.activity}', 'begin;']
+        out.extend(master_sections(k, a.year, areas, team, checklist, admins))
 
-    out.append('\n-- team (หัวหน้าทีม -> chairman, Auditor -> auditor + team, Admin จาก tr_role -> admin)')
-    rows = []
-    for r in team:
-        role = 'chairman' if str(r.get('role', '')).strip() == 'หัวหน้าทีม' else 'auditor'
-        letter = str(r.get('audit_team') or '').strip().upper()
-        rows.append([lit(r['auditor_year'], 'integer'), lit(emp(r['employee_id'])), lit(role), lit(letter if role == 'auditor' else None), lit(r.get('status') or 'Active')])
-    for r in admins:
-        rows.append([lit(a.year, 'integer'), lit(emp(r['employee_id'])), lit('admin'), lit(None), lit('Active')])
-    out.append(f'insert into public.mt_{k}_team (year, employee_id, role, team, status) values\n  ' + values(rows) + f'\non conflict on constraint mt_{k}_team_unique do nothing;')
+        out.append('\n-- committee plan (area x month x week)')
+        out.append(f'insert into public.mt_{k}_audit_plan (year, area_id, month, week, round, team)\nselect v.year, ar.id, v.month, v.week, v.round, v.team from (values\n  ' + values(
+            [[lit(r['audit_year'], 'integer'), lit(r['area_id']), lit(r['audit_month'], 'integer'), lit(item_no(r['audit_week']), 'integer'), lit(r.get('audit_round'), 'integer'), lit(r.get('audit_team'))] for r in plans]
+        ) + f'\n) v(year, code, month, week, round, team)\njoin public.mt_{k}_area ar on ar.code = v.code\non conflict (year, area_id, month, week) do update set round = excluded.round, team = excluded.team;')
 
-    out.append('\n-- checklist')
-    out.append(f'insert into public.mt_{k}_checklist (year, item_no, s_group, title, score_max, status) values\n  ' + values(
-        [[lit(a.year, 'integer'), lit(item_no(r['item_id']), 'integer'), lit(item_no(r['s_type']), 'integer'), lit(r['checklist_name']), lit(r.get('score_max') or 5, 'integer'), lit(r.get('status') or 'Active')] for r in checklist]
-    ) + '\non conflict (year, item_no) do update set s_group = excluded.s_group, title = excluded.title, score_max = excluded.score_max, status = excluded.status;')
+        out.append('\n-- audits')
+        out.append(f'insert into public.tx_{k}_audit (audit_no, year, audit_type, area_id, team, auditors, receivers, audited_at, total_score, percent_score, result, status)\nselect v.audit_no, v.year, v.audit_type, ar.id, v.team, v.auditors, v.receivers, v.audited_at, v.total, v.percent, v.result, v.status from (values\n  ' + values(
+            [[lit(r['audit_id']), lit(r['datetime'].year, 'integer'), lit(r['audit_type']), lit(r['area_id']), lit(r.get('audit_team')),
+              arr(sorted({emp(x) for x in json.loads(r.get('participated_json') or '[]')})), arr(sorted({emp(x) for x in json.loads(r.get('receiver_json') or '[]')})),
+              lit(r['datetime'], 'timestamptz'), lit(r['total_score'], 'numeric'), lit(r['percent_score'], 'numeric'), lit(r.get('result')), lit(r.get('status') or 'COMPLETED')] for r in audits]
+        ) + f'\n) v(audit_no, year, audit_type, code, team, auditors, receivers, audited_at, total, percent, result, status)\njoin public.mt_{k}_area ar on ar.code = v.code\non conflict (audit_no) do nothing;')
 
-    out.append('\n-- committee plan (area x month x week)')
-    out.append(f'insert into public.mt_{k}_audit_plan (year, area_id, month, week, round, team)\nselect v.year, ar.id, v.month, v.week, v.round, v.team from (values\n  ' + values(
-        [[lit(r['audit_year'], 'integer'), lit(r['area_id']), lit(r['audit_month'], 'integer'), lit(item_no(r['audit_week']), 'integer'), lit(r.get('audit_round'), 'integer'), lit(r.get('audit_team'))] for r in plans]
-    ) + f'\n) v(year, code, month, week, round, team)\njoin public.mt_{k}_area ar on ar.code = v.code\non conflict (year, area_id, month, week) do update set round = excluded.round, team = excluded.team;')
+        out.append('\n-- scores (no01..no25 -> one row per item)')
+        rows = []
+        for r in audits:
+            for n in range(1, 101):
+                key = f'no{n:02d}'
+                if key in r and r[key] not in (None, ''):
+                    rows.append([lit(r['audit_id']), lit(n, 'integer'), lit(r[key], 'numeric')])
+        out.append(f'insert into public.tx_{k}_audit_score (audit_id, checklist_id, score)\nselect au.id, c.id, v.score from (values\n  ' + values(rows) +
+                   '\n) v(audit_no, item_no, score)\n' f'join public.tx_{k}_audit au on au.audit_no = v.audit_no\n'
+                   f'join public.mt_{k}_checklist c on c.year = au.year and c.item_no = v.item_no\non conflict (audit_id, checklist_id) do nothing;')
 
-    out.append('\n-- audits')
-    out.append(f'insert into public.tx_{k}_audit (audit_no, year, audit_type, area_id, team, auditors, receivers, audited_at, total_score, percent_score, result, status)\nselect v.audit_no, v.year, v.audit_type, ar.id, v.team, v.auditors, v.receivers, v.audited_at, v.total, v.percent, v.result, v.status from (values\n  ' + values(
-        [[lit(r['audit_id']), lit(r['datetime'].year, 'integer'), lit(r['audit_type']), lit(r['area_id']), lit(r.get('audit_team')),
-          arr(sorted({emp(x) for x in json.loads(r.get('participated_json') or '[]')})), arr(sorted({emp(x) for x in json.loads(r.get('receiver_json') or '[]')})),
-          lit(r['datetime'], 'timestamptz'), lit(r['total_score'], 'numeric'), lit(r['percent_score'], 'numeric'), lit(r.get('result')), lit(r.get('status') or 'COMPLETED')] for r in audits]
-    ) + f'\n) v(audit_no, year, audit_type, code, team, auditors, receivers, audited_at, total, percent, result, status)\njoin public.mt_{k}_area ar on ar.code = v.code\non conflict (audit_no) do nothing;')
+        out.append('\n-- issues')
+        urls = lambda raw: [ph.get('file_url') if isinstance(ph, dict) else ph for ph in json.loads(raw or '[]')]
+        out.append(f'insert into public.tx_{k}_issue (issue_no, audit_id, area_id, checklist_id, score, description, photo_before, photo_after, issue_date, responsible_id, due_date, action_description, action_date, status, verify_audit_no, final_score, closed_by, closed_at)\n'
+                   'select v.issue_no, au.id, ar.id, c.id, v.score, v.description, v.photo_before, v.photo_after, v.issue_date, v.responsible_id, v.due_date, v.action_description, v.action_date, v.status, v.verify_audit_no, v.final_score, v.closed_by, v.closed_at from (values\n  ' + values(
+            [[lit(r['issue_id']), lit(r['audit_id']), lit(r['area_id']), lit(item_no(r['list_no']), 'integer'), lit(r['score'], 'numeric'), lit(r.get('issue_description') or '-'),
+              arr(urls(r.get('issue_photo'))), arr(urls(r.get('action_photo'))),
+              lit(r.get('issue_date'), 'date'), lit(emp(r.get('responsible_id'))), lit(r.get('due_date'), 'date'), lit(r.get('action_description')), lit(r.get('action_date'), 'date'),
+              lit(r.get('status') or 'OPEN'), lit(r.get('verify_audit_id')), lit(r.get('final_score'), 'numeric'), lit(emp(r.get('close_by'))), lit(r.get('close_date'), 'date')] for r in issues]
+        ) + '\n) v(issue_no, audit_no, code, item_no, score, description, photo_before, photo_after, issue_date, responsible_id, due_date, action_description, action_date, status, verify_audit_no, final_score, closed_by, closed_at)\n'
+            f'join public.tx_{k}_audit au on au.audit_no = v.audit_no\n'
+            f'join public.mt_{k}_area ar on ar.code = v.code\n'
+            f'join public.mt_{k}_checklist c on c.year = au.year and c.item_no = v.item_no\non conflict (issue_no) do nothing;')
 
-    out.append('\n-- scores (no01..no25 -> one row per item)')
-    rows = []
-    for r in audits:
-        for n in range(1, 101):
-            key = f'no{n:02d}'
-            if key in r and r[key] not in (None, ''):
-                rows.append([lit(r['audit_id']), lit(n, 'integer'), lit(r[key], 'numeric')])
-    out.append(f'insert into public.tx_{k}_audit_score (audit_id, checklist_id, score)\nselect au.id, c.id, v.score from (values\n  ' + values(rows) +
-               '\n) v(audit_no, item_no, score)\n' f'join public.tx_{k}_audit au on au.audit_no = v.audit_no\n'
-               f'join public.mt_{k}_checklist c on c.year = au.year and c.item_no = v.item_no\non conflict (audit_id, checklist_id) do nothing;')
+        out.append('\ncommit;')
+        out.append('\n-- check: expect ' + ', '.join(f'{k} {v}' for k, v in (('areas', len(areas)), ('team', len(team) + len(admins)), ('checklist', len(checklist)), ('plans', len(plans)), ('audits', len(audits)), ('issues', len(issues)))))
+        out.append(f"select (select count(*) from public.mt_{k}_area) as areas,\n"
+                   f"  (select count(*) from public.mt_{k}_team where role <> 'owner') as team,\n"
+                   f"  (select count(*) from public.mt_{k}_team where role = 'owner') as owners,\n"
+                   f"  (select count(*) from public.mt_{k}_checklist) as checklist,\n"
+                   f"  (select count(*) from public.mt_{k}_audit_plan) as plans,\n"
+                   f"  (select count(*) from public.tx_{k}_audit) as audits,\n"
+                   f"  (select count(*) from public.tx_{k}_issue) as issues;")
+        out_path.write_text('\n'.join(out) + '\n', encoding='utf-8')
+    elif out_path.exists():
+        # Update the 4 master sections in existing import_5s.sql while preserving the transaction sections
+        existing = out_path.read_text(encoding='utf-8')
+        marker = '\n-- committee plan (area x month x week)'
+        if marker in existing:
+            admins = [{'employee_id': '2102899'}, {'employee_id': '2103100'}]
+            head = [f'-- generated {datetime.now():%Y-%m-%d %H:%M} from {Path(a.master).name} + transaction_5s.xlsx · activity {a.activity}', 'begin;']
+            head.extend(master_sections(k, a.year, areas, team, checklist, admins))
+            out_path.write_text('\n'.join(head) + existing[existing.index(marker):], encoding='utf-8')
 
-    out.append('\n-- issues')
-    urls = lambda raw: [ph.get('file_url') if isinstance(ph, dict) else ph for ph in json.loads(raw or '[]')]  # Google Drive links from the old system
-    out.append(f'insert into public.tx_{k}_issue (issue_no, audit_id, area_id, checklist_id, score, description, photo_before, photo_after, issue_date, responsible_id, due_date, action_description, action_date, status, verify_audit_no, final_score, closed_by, closed_at)\n'
-               'select v.issue_no, au.id, ar.id, c.id, v.score, v.description, v.photo_before, v.photo_after, v.issue_date, v.responsible_id, v.due_date, v.action_description, v.action_date, v.status, v.verify_audit_no, v.final_score, v.closed_by, v.closed_at from (values\n  ' + values(
-        [[lit(r['issue_id']), lit(r['audit_id']), lit(r['area_id']), lit(item_no(r['list_no']), 'integer'), lit(r['score'], 'numeric'), lit(r.get('issue_description') or '-'),
-          arr(urls(r.get('issue_photo'))), arr(urls(r.get('action_photo'))),
-          lit(r.get('issue_date'), 'date'), lit(emp(r.get('responsible_id'))), lit(r.get('due_date'), 'date'), lit(r.get('action_description')), lit(r.get('action_date'), 'date'),
-          lit(r.get('status') or 'OPEN'), lit(r.get('verify_audit_id')), lit(r.get('final_score'), 'numeric'), lit(emp(r.get('close_by'))), lit(r.get('close_date'), 'date')] for r in issues]
-    ) + '\n) v(issue_no, audit_no, code, item_no, score, description, photo_before, photo_after, issue_date, responsible_id, due_date, action_description, action_date, status, verify_audit_no, final_score, closed_by, closed_at)\n'
-        f'join public.tx_{k}_audit au on au.audit_no = v.audit_no\n'
-        f'join public.mt_{k}_area ar on ar.code = v.code\n'
-        f'join public.mt_{k}_checklist c on c.year = au.year and c.item_no = v.item_no\non conflict (issue_no) do nothing;')
-
-    out.append('\ncommit;')
-    out.append('\n-- check: expect ' + ', '.join(f'{k} {v}' for k, v in (('areas', len(areas)), ('team', len(team) + len(admins)), ('checklist', len(checklist)), ('plans', len(plans)), ('audits', len(audits)), ('issues', len(issues)))))
-    out.append(f"select (select count(*) from public.mt_{k}_area) as areas,\n"
-               f"  (select count(*) from public.mt_{k}_team where role <> 'owner') as team,\n"
-               f"  (select count(*) from public.mt_{k}_team where role = 'owner') as owners,\n"
-               f"  (select count(*) from public.mt_{k}_checklist) as checklist,\n"
-               f"  (select count(*) from public.mt_{k}_audit_plan) as plans,\n"
-               f"  (select count(*) from public.tx_{k}_audit) as audits,\n"
-               f"  (select count(*) from public.tx_{k}_issue) as issues;")
-    Path(a.out).write_text('\n'.join(out) + '\n', encoding='utf-8')
-    # The same statements one section per file, for SQL editors that refuse a large paste.
-    parts_dir = Path(a.out).with_suffix('')
+    parts_dir = out_path.with_suffix('')
     parts_dir.mkdir(exist_ok=True)
-    for old in parts_dir.glob('*.sql'):
-        old.unlink()
-    sections = []
-    for chunk in out[2:]:
-        if chunk.startswith('\n-- ') and not chunk.startswith('\n-- check:'):
-            sections.append([chunk.strip()])
-        elif sections and chunk.strip() != 'commit;' and not chunk.startswith('\n-- check:') and not chunk.startswith('select (select count'):
-            sections[-1].append(chunk)
-    for i, sec in enumerate(sections, 1):
-        name = ''.join(ch if ch.isalnum() else '_' for ch in sec[0].lstrip('- ').split(' (')[0]).strip('_').lower()
-        (parts_dir / f'{i:02d}_{name}.sql').write_text('\n'.join(sec) + '\n', encoding='utf-8')
+    for i, sec in enumerate(master_sections(k, a.year, areas, team, checklist, [{'employee_id': '2102899'}, {'employee_id': '2103100'}]), 1):
+        lines = sec.strip().splitlines()
+        name = ''.join(ch if ch.isalnum() else '_' for ch in lines[0].lstrip('- ').split(' (')[0]).strip('_').lower()
+        (parts_dir / f'{i:02d}_{name}.sql').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
     sys.stdout.reconfigure(encoding='utf-8')
-    print(f'wrote {len(sections)} parts in {parts_dir}')
-    print(f'wrote {a.out}: areas {len(areas)}, team {len(team) + len(admins)}, checklist {len(checklist)}, plans {len(plans)}, audits {len(audits)}, issues {len(issues)}')
+    print(f'wrote {a.setup_out}: areas {len(areas)}, owners {len(areas)}, audit_team {len(team)}, checklist {len(checklist)}')
+    print(f'updated {out_path} and {parts_dir}')
 
 
 if __name__ == '__main__':

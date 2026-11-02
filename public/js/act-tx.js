@@ -87,7 +87,7 @@ const atxHeads = { audits: { sort: '', dir: 'asc', filters: {} }, issues: { sort
 async function atxAudits(body, activity, me) {
   const data = await a5Api(activity, `audits?year=${a5Year}`);
   const canAudit = me.access.admin || me.access.chairman || me.access.auditor || me.access.ownerAreaIds.length > 0;
-  const areas = [...new Map(data.audits.map((a) => [a.area_id, a])).values()].sort((x, y) => String(x.areaCode).localeCompare(String(y.areaCode)));
+  const areas = [...new Map([...(data.areas || []), ...data.audits].map((a) => [a.area_id, a])).values()].sort((x, y) => String(x.areaCode).localeCompare(String(y.areaCode)));
   body.innerHTML = `
     <div class="toolbar a5-filters">
       ${field('ไตรมาส', `<select id="atx-f-quarter">${options(Object.keys(ATX_QUARTERS), atxFilter.quarter, (k) => ATX_QUARTERS[k])}</select>`)}

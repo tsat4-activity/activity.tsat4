@@ -1,5 +1,6 @@
 import { tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
+import { ensure5sMaster } from './audit.js';
 import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, roundTo, tablesOf, yearOf } from './common.js';
 
 // Checklist audits — transaction: record Self / Committee audits and follow Issues to closure.
@@ -71,7 +72,11 @@ async function settingsOf(activity) {
 }
 
 export function mountTransaction(app) {
-  const route = actRoute(app);
+  const baseRoute = actRoute(app);
+  const route = (method, path, handler) => baseRoute(method, path, async (req, res, activity, t) => {
+    await ensure5sMaster(activity);
+    return handler(req, res, activity, t);
+  });
 
   // Open Issues of an area with how many after photos they have (for the committee form and verification).
   // exceptAuditId leaves out the Issues an audit opened itself (used when that audit is edited).
@@ -275,7 +280,7 @@ export function mountTransaction(app) {
     if (!access.member) return fail(res, 403, `ดูได้เฉพาะทีมของกิจกรรมนี้ปี ${year}`);
     const [audits, areas] = await Promise.all([
       fetchAll(() => tx.from(t.audit).select('id,audit_no,audit_type,area_id,team,audited_at,total_score,percent_score,result,status,created_by').eq('year', year).order('audited_at', { ascending: false })),
-      fetchAll(() => tx.from(t.area).select('id,code,name,area_type'))
+      fetchAll(() => tx.from(t.area).select('id,code,name,area_type,status').order('code'))
     ]);
     const issues = await fetchIn(() => tx.from(t.issue).select('audit_id,status'), 'audit_id', audits.map((a) => a.id));
     const areaById = new Map(areas.map((x) => [x.id, x]));
@@ -287,6 +292,7 @@ export function mountTransaction(app) {
     res.json({
       year,
       canDelete: access.admin,
+      areas: areas.filter((a) => a.status !== 'Inactive').map((a) => ({ area_id: a.id, areaCode: a.code, areaName: a.name, areaType: a.area_type })),
       audits: audits.map((a) => {
         const canEdit = access.admin || a.created_by === req.user.employeeId;
         const area = areaById.get(a.area_id) || {};

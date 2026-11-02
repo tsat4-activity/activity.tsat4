@@ -11,6 +11,101 @@ const ROLES = ['admin', 'chairman', 'vice', 'advisor', 'smart', 'auditor', 'owne
 const AUDIT_ONLY = ['owner', 'auditor'];
 const AUDIT_TYPES = ['SELF', 'COMMITTEE'];
 
+// Default 5S master data from inbox/master_5s.xlsx (34 areas + area owners, 17 audit team members, 25 checklist items for 2026).
+const SEED_5S_AREAS = [
+  ['A01', 'โรงงาน', 'HDF', 'HDF', '2103918'], ['A02', 'โรงงาน', 'SHOP DIE', 'SHOP DIE', '2103411'],
+  ['A03', 'โรงงาน', 'SHOP MTN', 'SHOP MTN', '2102396'], ['A04', 'โรงงาน', 'SHOP JIG', 'SHOP JIG', '2101728'],
+  ['A05', 'โรงงาน', 'WH,DEL', 'WH,DEL', '2103906'], ['A06', 'โรงงาน', 'RACK', 'RACK', '2101643'],
+  ['A07', 'โรงงาน', 'HRM EXT', 'HRM EXT', '2103895'], ['A08', 'โรงงาน', 'QA IQA', 'QA IQA', '2101974'],
+  ['A09', 'โรงงาน', 'QA PD1,2', 'QA PD1,2', '2102194'], ['A10', 'โรงงาน', 'QA PD3,4', 'QA PD3,4', '2103864'],
+  ['A11', 'โรงงาน', 'LINE C,D,E PD1', 'LINE C,D,E PD1', '2102613'], ['A12', 'โรงงาน', 'LINE A PD1', 'LINE A PD1', '2102695'],
+  ['A13', 'โรงงาน', 'LINE B PD1', 'LINE B PD1', '2102613'], ['A14', 'โรงงาน', 'ASSY PD2', 'ASSY PD2', '2101991'],
+  ['A15', 'โรงงาน', 'ASSY PD3', 'ASSY PD3', '2101990'], ['A16', 'โรงงาน', 'ASSY PD4', 'ASSY PD4', '2103669'],
+  ['A17', 'โรงงาน', 'STO RAW', 'STO RAW', '2102159'], ['A18', 'โรงงาน', 'STO SEMI', 'STO SEMI', '2102159'],
+  ['A19', 'โรงงาน', 'STO PUR', 'STO PUR', '2102159'], ['B01', 'สำนักงาน', 'ACC', 'ACC', '2103127'],
+  ['B02', 'สำนักงาน', 'HRM', 'HRM', '2102597'], ['B03', 'สำนักงาน', 'QSM,PUR', 'QSM,PUR', '2103270'],
+  ['B04', 'สำนักงาน', 'PE', 'PE', '2102652'], ['B05', 'สำนักงาน', 'PLN,STO,SALE', 'PLN,STO,SALE', '2101999'],
+  ['B06', 'สำนักงาน', 'PD1,2', 'PD1,2', '2103523'], ['B07', 'สำนักงาน', 'PD3', 'PD3', '2103790'],
+  ['B08', 'สำนักงาน', 'PD4,JIG', 'PD4,JIG', '2101861'], ['B09', 'สำนักงาน', 'MTN', 'MTN', '2102600'],
+  ['B10', 'สำนักงาน', 'DIE', 'DIE', '2102600'], ['B11', 'สำนักงาน', 'QA', 'QA', '2103724'],
+  ['B12', 'สำนักงาน', 'QA CMM1', 'QA CMM1', '2101741'], ['B13', 'สำนักงาน', 'QA CMM2', 'QA CMM2', '2103724'],
+  ['B14', 'สำนักงาน', 'CIC', 'CIC', '2102569'], ['B15', 'สำนักงาน', 'WH,DEL', 'WH,DEL', '2103433']
+];
+const SEED_5S_AUDIT_TEAM = [
+  ['2102899', 'chairman', null], ['2103100', 'chairman', null],
+  ['2103100', 'auditor', 'A'], ['2102899', 'auditor', 'B'], ['2101861', 'auditor', 'C'],
+  ['2101990', 'auditor', 'D'], ['2103396', 'auditor', 'D'], ['2101946', 'auditor', 'E'],
+  ['2103570', 'auditor', 'E'], ['2103669', 'auditor', 'F'], ['2103391', 'auditor', 'F'],
+  ['2101744', 'auditor', 'G'], ['2103865', 'auditor', 'G'], ['2102901', 'auditor', 'H'],
+  ['2103906', 'auditor', 'H'], ['2102396', 'auditor', 'I'], ['2103864', 'auditor', 'I']
+];
+const SEED_5S_CHECKLIST = [
+  [1, 1, 'มีเฉพาะสิ่งของที่จำเป็นในพื้นที่เท่านั้น'], [2, 1, 'สิ่งของที่ไม่จำเป็นถูกแยกออกจากพื้นที่'],
+  [3, 1, 'มีการกำจัดหรือเคลื่อนย้ายของที่ไม่ใช้งานตามขั้นตอน'], [4, 1, 'มีการระบุสิ่งของที่ควรกำจัดได้อย่างชัดเจน'],
+  [5, 1, 'เครื่องมือ/อุปกรณ์วางตามจุดที่กำหนด'], [6, 2, 'มีป้าย Label หรือ Tag แสดงชื่อและตำแหน่งจัดเก็บ'],
+  [7, 2, 'อุปกรณ์ถูกจัดวางอย่างเป็นระเบียบ ใช้งานได้ทันที'], [8, 2, 'มีแผนภาพหรือแผนผังแสดงตำแหน่งจัดเก็บชัดเจน'],
+  [9, 2, 'มีระบบแยกประเภทหรือหมวดหมู่ของใช้อย่างชัดเจน'], [10, 2, 'สามารถค้นหาสิ่งของที่จำเป็นได้ภายใน 30 วินาที'],
+  [11, 3, 'พื้นที่โดยรวมสะอาด ไม่มีฝุ่น คราบ หรือสิ่งสกปรก'], [12, 3, 'เครื่องมือ/อุปกรณ์สะอาด และดูแลรักษาอย่างเหมาะสม'],
+  [13, 3, 'มีตารางทำความสะอาด และมีการบันทึกตามแผน'], [14, 3, 'ไม่มีขยะ/วัสดุเหลือทิ้งในพื้นที่ทำงาน'],
+  [15, 3, 'มีผู้รับผิดชอบชัดเจนในการดูแลความสะอาดแต่ละพื้นที่'], [16, 4, 'มีมาตรฐานการทำงาน (WI, SOP, 5S) ติดไว้ชัดเจน'],
+  [17, 4, 'พื้นที่มีการทำเส้นแบ่งเขต ป้ายบอกสี และสัญลักษณ์มาตรฐาน'], [18, 4, 'การแต่งกาย PPE เป็นไปตามข้อกำหนด และควบคุมได้จริง'],
+  [19, 4, 'ป้ายบ่งชี้/ชื่อเครื่องจักรไม่ลอกจางหรือหลุดหาย'], [20, 4, 'มีการอบรมหรือให้ความรู้เกี่ยวกับ 5ส จากทีมวิชาการ'],
+  [21, 5, 'มีการตรวจ Self Audit ตามแผน'], [22, 5, 'มีรายงานผลกรณีประเมินตนเองต่ำกว่าเป้าหมาย'],
+  [23, 5, 'มีการแก้ไข Kadai ภายใน 60วัน หรือแผนที่วางไว้'], [24, 5, 'ความร่วมมือ/ตรงต่อเวลาในการรับตรวจประเมิน'],
+  [25, 5, 'มีการทบทวน/ปรับปรุงมาตรฐาน 5ส ให้สอดคล้องกับสภาพงาน']
+];
+
+let master5sReady = null;
+export async function ensure5sMaster(activity) {
+  if (activity !== '5s') return;
+  if (!master5sReady) master5sReady = seed5sMaster().catch(() => { master5sReady = null; });
+  await master5sReady;
+}
+
+async function seed5sMaster() {
+  const [areaRes, checkRes, teamRes, empRes] = await Promise.all([
+    tx.from('mt_5s_area').select('id,code'),
+    tx.from('mt_5s_checklist').select('item_no').eq('year', 2026),
+    tx.from('mt_5s_team').select('id,employee_id,role,unit,team,area_id').eq('year', 2026),
+    mx.from('mt_main_employee').select('employee_id')
+  ]);
+  if (areaRes.error || checkRes.error || teamRes.error) return;
+  let areas = areaRes.data || [];
+  const areaCodes = new Set(areas.map((a) => a.code));
+  if (SEED_5S_AREAS.some(([code]) => !areaCodes.has(code))) {
+    await tx.from('mt_5s_area').upsert(SEED_5S_AREAS.map(([code, area_type, name, section]) => ({ code, area_type, name, section, status: 'Active' })), { onConflict: 'code' });
+    const reread = await tx.from('mt_5s_area').select('id,code');
+    if (!reread.error) areas = reread.data || [];
+  }
+  const checkNos = new Set((checkRes.data || []).map((c) => Number(c.item_no)));
+  if (SEED_5S_CHECKLIST.some(([item_no]) => !checkNos.has(item_no))) {
+    await tx.from('mt_5s_checklist').upsert(SEED_5S_CHECKLIST.map(([item_no, s_group, title]) => ({ year: 2026, item_no, s_group, title, score_max: 5, status: 'Active' })), { onConflict: 'year,item_no' });
+  }
+  const teamRows = teamRes.data || [];
+  const noUnitIds = teamRows.filter((r) => !r.unit && ['owner', 'auditor', 'chairman', 'admin'].includes(r.role)).map((r) => r.id);
+  if (noUnitIds.length) await tx.from('mt_5s_team').update({ unit: AUDIT_UNIT }).in('id', noUnitIds);
+  const validEmps = new Set((empRes.data || []).map((e) => String(e.employee_id)));
+  const canUseEmp = (id) => !validEmps.size || validEmps.has(id);
+  const areaIdByCode = new Map(areas.map((a) => [a.code, Number(a.id)]));
+  const ownedAreas = new Set(teamRows.filter((r) => r.role === 'owner' && r.area_id).map((r) => Number(r.area_id)));
+  const auditKeys = new Set(teamRows.map((r) => `${r.employee_id}:${r.role}:${r.team || ''}`));
+  const toInsert = [];
+  for (const [code, , , , ownerEmp] of SEED_5S_AREAS) {
+    const areaId = areaIdByCode.get(code);
+    if (areaId && !ownedAreas.has(areaId) && canUseEmp(ownerEmp)) {
+      toInsert.push({ year: 2026, employee_id: ownerEmp, role: 'owner', unit: AUDIT_UNIT, area_id: areaId, status: 'Active' });
+    }
+  }
+  for (const [empId, role, team] of SEED_5S_AUDIT_TEAM) {
+    if (!auditKeys.has(`${empId}:${role}:${team || ''}`) && canUseEmp(empId)) {
+      toInsert.push({ year: 2026, employee_id: empId, role, unit: AUDIT_UNIT, team, status: 'Active' });
+    }
+  }
+  if (toInsert.length) {
+    await Promise.all(toInsert.map((row) => tx.from('mt_5s_team').insert(row)));
+  }
+}
+
 const round1 = (n) => roundTo(n, 1);
 const round2 = (n) => roundTo(n, 2);
 const avg = (list) => (list.length ? list.reduce((s, n) => s + Number(n), 0) / list.length : null);
@@ -98,7 +193,11 @@ function areaScores(audits, groups) {
 }
 
 export function mountAudit(app) {
-  const route = actRoute(app);
+  const baseRoute = actRoute(app);
+  const route = (method, path, handler) => baseRoute(method, path, async (req, res, activity, t) => {
+    await ensure5sMaster(activity);
+    return handler(req, res, activity, t);
+  });
 
   // ---------- read: everyone signed in ----------
 

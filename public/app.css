@@ -443,25 +443,27 @@ body[data-zone] .plan-cell.is-today .plan-day,
 body[data-zone] .plan-col.is-today .plan-col-head{color:var(--zone-ink)}
 body[data-zone] .plan-col.is-today{border-color:var(--zone)}
 
-/* Page toolbar (core.js pageBar): left = tabs + search, right = filters + year + buttons, one row that wraps on small screens */
-.page-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
-.page-bar-left,.page-bar-right{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+/* Page toolbar (core.js pageBar): left = tabs + search, right = filters + year + buttons, one row on desktop */
+.page-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px}
+.page-bar-left,.page-bar-right{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-width:0}
 .page-bar-left{flex-wrap:nowrap}
 .page-bar-right{margin-left:auto;justify-content:flex-end}
 .page-bar-slot{display:contents}
-.page-bar .field{width:auto;flex:0 0 auto;min-width:0;max-width:260px;flex-direction:row;align-items:center;gap:6px;white-space:nowrap}.page-bar .field > select,.page-bar .field > input{min-width:84px;max-width:190px}
-.page-bar .field select{padding-right:22px}
-.page-bar .search-slot{flex:0 1 200px;min-width:150px;width:auto}
+.page-bar .a5-year .field{width:auto}
+.page-bar .field{width:auto;flex:0 1 auto;min-width:0;max-width:240px;flex-direction:row;align-items:center;gap:4px;white-space:nowrap}.page-bar .field > select,.page-bar .field > input{width:auto;flex:1 1 auto;min-width:52px;max-width:150px}
+.page-bar .field select{padding:0 20px 0 6px}
+.page-bar .search-slot{flex:0 1 165px;min-width:96px;width:auto}
 .page-bar .search-slot .btn{padding:0 8px}
 .page-bar .search-slot .field{flex:1 1 auto;min-width:0;max-width:none}.page-bar .search-slot .field > input{width:100%;min-width:0;max-width:none}
-.page-bar .action-bar{margin-left:0;align-items:flex-end;align-self:flex-end}
-.page-bar .action-bar .btn,.page-bar-right > .btn,.toolbar .action-bar .btn{align-self:flex-end}
+.page-bar .action-bar{margin-left:0;align-items:center;align-self:center;flex-wrap:nowrap;gap:4px;flex:0 0 auto}
+.page-bar .action-bar .btn{padding:0 8px}
+.page-bar .action-bar .btn,.page-bar-right > .btn,.toolbar .action-bar .btn{align-self:center}
 .page-bar .seg,.page-bar .a5-year,.page-bar .btn{flex:0 0 auto;white-space:nowrap}
-@media(min-width:1280px){
-  /* tabs never shrink under the tools: when both do not fit, the tools wrap to the next line (right aligned) */
-  .page-bar-left{flex:0 0 auto}
-  .page-bar-right{flex:1 1 auto;flex-wrap:nowrap}
-  .page-bar .field{min-width:84px}
+@media(min-width:901px){
+  /* keep left tabs and right filters/actions on a single row */
+  .page-bar{flex-wrap:nowrap}
+  .page-bar-left{flex:0 0 auto;flex-wrap:nowrap}
+  .page-bar-right{flex:1 1 0%;flex-wrap:nowrap;min-width:0}
 }
 @media(max-width:900px){
   .page-bar-left{flex-wrap:wrap}
