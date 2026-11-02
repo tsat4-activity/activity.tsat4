@@ -18,6 +18,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Antigravity [5S] · แยกการตั้งเป้าหมาย (target) ระหว่าง Self Audit และ Committee Audit: บันทึก `pass_self:<year>` และ `pass_committee:<year>` ลง `mt_5s_setting`, ขยายสิทธิ์บันทึกให้ admin และ chairman (`access.admin || access.chairman`) เพื่อแก้ Error 403, ปรับหน้าต่าง popup ให้ตั้งเป้าหมายของทั้งสองประเภทพร้อมกัน, ปรับเส้นประ Target/ป้ายกำกับ/คำอธิบายกราฟ Self Audit และ Committee Audit ให้แสดงตามเป้าหมายของแต่ละประเภทอย่างถูกต้อง (`public/js/act-5s.js`, `server/modules/act/audit.js`, `server/modules/act/transaction.js`)
+
 - 2026-11-02 · Antigravity [5S] · แก้ไขบั๊ก `Cannot read properties of undefined (reading 'admin')` ในหน้า 5S Summary โดยเพิ่ม fallback โหลดข้อมูล `me` และตัวแปร `isAdmin = Boolean(me?.access?.admin)` ใน `a5DrawSummary` (`public/js/act-5s.js`)
 
 - 2026-11-02 · Claude [5S] · CFO id ของ EF ตามเอกสาร CFO อบก. (ก.พ. 2569 = ค่าเดียวกับ EF TGO AR5 V2): EF พลังงาน + GWP สารเคมี CFO-0001…0123 · mt_cfo_ef.ref_id FK → mt_cfo_ef_ref (กิจกรรมเก่าเติมให้ 26/34, CO2 แก๊สเชื่อม + บ่อเกรอะไม่มีในเอกสาร) · หน้ากิจกรรมมีคอลัมน์ EF id · ต้องรัน db/act/cfo.sql

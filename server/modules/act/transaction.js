@@ -6,7 +6,7 @@ import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesO
 // Checklist audits — transaction: record Self / Committee audits and follow Issues to closure.
 // Rules: docs/specs/act-5s.md ("transaction", "Issue"). Pure rule functions are exported for scripts/test-act-audit.js.
 const AUDIT_TYPES = ['SELF', 'COMMITTEE'];
-const DEFAULTS = { pass_percent: 80, issue_score: 3, issue_due_days_before_next: 15, issue_photo_max: 1, self_audit_due_day: 10 };
+const DEFAULTS = { pass_percent: 80, pass_self: 80, pass_committee: 80, issue_score: 3, issue_due_days_before_next: 15, issue_photo_max: 1, self_audit_due_day: 10 };
 
 const todayIso = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 const addDays = (iso, days) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
@@ -71,6 +71,12 @@ async function settingsOf(activity, year) {
   if (year) {
     const yearPass = (data || []).find((r) => r.key === `pass_percent:${year}`);
     if (yearPass && Number(yearPass.value)) out.pass_percent = Number(yearPass.value);
+    const yearSelf = (data || []).find((r) => r.key === `pass_self:${year}`);
+    if (yearSelf && Number(yearSelf.value)) out.pass_self = Number(yearSelf.value);
+    else out.pass_self = out.pass_self ?? out.pass_percent;
+    const yearComm = (data || []).find((r) => r.key === `pass_committee:${year}`);
+    if (yearComm && Number(yearComm.value)) out.pass_committee = Number(yearComm.value);
+    else out.pass_committee = out.pass_committee ?? out.pass_percent;
   }
   return out;
 }
@@ -184,7 +190,8 @@ export function mountTransaction(app) {
     const undescribed = needIssue.filter((i) => !described.get(i.id)).map((i) => i.item_no);
     if (undescribed.length) return fail(res, 400, `ข้อที่ได้ ${settings.issue_score} หรือต่ำกว่า ต้องเปิด Issue พร้อมรายละเอียด (ข้อที่ ${undescribed.join(', ')})`);
 
-    const score = scoreAudit(items, scores, settings.pass_percent);
+    const passPercent = (audit.audit_type === 'SELF' ? settings.pass_self : settings.pass_committee) ?? settings.pass_percent;
+    const score = scoreAudit(items, scores, passPercent);
     const auditPatch = { audited_at: `${auditedAt}T05:00:00Z`, team, total_score: score.total, percent_score: score.percent, result: score.result };
     if (Array.isArray(body.participated) || Array.isArray(body.receivers)) {
       auditPatch.auditors = idList(body.participated).length ? idList(body.participated) : [audit.created_by].filter(Boolean);
@@ -247,7 +254,8 @@ export function mountTransaction(app) {
     const undescribed = needIssue.filter((i) => !described.get(i.id)).map((i) => i.item_no);
     if (undescribed.length) return fail(res, 400, `ข้อที่ได้ ${settings.issue_score} หรือต่ำกว่า ต้องเปิด Issue พร้อมรายละเอียด (ข้อที่ ${undescribed.join(', ')})`);
 
-    const score = scoreAudit(items, scores, settings.pass_percent);
+    const passPercent = (type === 'SELF' ? settings.pass_self : settings.pass_committee) ?? settings.pass_percent;
+    const score = scoreAudit(items, scores, passPercent);
     const prefix = `${type === 'SELF' ? 'S' : 'C'}-${area.code}-${auditedAt.slice(8, 10)}${auditedAt.slice(5, 7)}${auditedAt.slice(2, 4)}-`;
     const same = must(await tx.from(t.audit).select('audit_no').like('audit_no', `${prefix}%`));
     const auditNo = `${prefix}${String(same.length + 1).padStart(2, '0')}`;

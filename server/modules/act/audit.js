@@ -224,10 +224,16 @@ export function mountAudit(app) {
       areasOf(activity),
       auditsOf(activity, year),
       areaId ? ownersOf(activity, year, [areaId]) : null,
-      tx.from(tablesOf(activity).setting).select('key,value').in('key', [`pass_percent:${year}`, 'pass_percent'])
+      tx.from(tablesOf(activity).setting).select('key,value').in('key', [
+        `pass_percent:${year}`, 'pass_percent',
+        `pass_self:${year}`, 'pass_self',
+        `pass_committee:${year}`, 'pass_committee'
+      ])
     ]);
     const passMap = new Map((passSettings.data || []).map((r) => [r.key, Number(r.value)]));
-    const pass = passMap.get(`pass_percent:${year}`) ?? passMap.get('pass_percent') ?? 80;
+    const passBase = passMap.get(`pass_percent:${year}`) ?? passMap.get('pass_percent') ?? 80;
+    const passSelf = passMap.get(`pass_self:${year}`) ?? passMap.get('pass_self') ?? passBase;
+    const passCommittee = passMap.get(`pass_committee:${year}`) ?? passMap.get('pass_committee') ?? passBase;
     const allowed = new Set(areas.filter((a) => (!areaType || a.area_type === areaType) && (!areaId || a.id === areaId)).map((a) => a.id));
     // Every type in one read: the KPI cards follow the ประเภท filter, the monthly charts show Self and Committee apart.
     const all = rawAudits.filter((a) => allowed.has(a.area_id));
@@ -239,7 +245,9 @@ export function mountAudit(app) {
       owner ? namesOf([owner]) : null
     ]);
     res.json({
-      pass,
+      pass: passCommittee,
+      passSelf,
+      passCommittee,
       areas: areas.filter((a) => a.status === 'Active' || allowed.has(a.id)).map((a) => ({ id: a.id, code: a.code, name: a.name, areaType: a.area_type })),
       ...summarize(audits, groups),
       byType: Object.fromEntries(AUDIT_TYPES.map((t) => [t, summarize(all.filter((a) => a.audit_type === t), []).months])),
@@ -598,15 +606,30 @@ export function mountAudit(app) {
     res.json({ ok: true });
   });
 
-  // Yearly target (% pass): distinct per year (e.g. 2026 = 80%, 2027 = 85%)
+  // Yearly target (% pass): distinct per year and audit type (Self Audit vs Committee Audit)
   route('put', '/api/act/:activity/target', async (req, res, activity) => {
     const year = yearOf(req.body?.year);
-    const target = Number(req.body?.target);
-    if (!year || !Number.isInteger(target) || target < 1 || target > 100) return fail(res, 400, 'ระบุปีและเป้าหมาย 1–100%');
-    if (!(await requireAdmin(req, res, activity, year))) return;
+    if (!year) return fail(res, 400, 'ระบุปีให้ถูกต้อง');
+    const access = await accessOf(req, activity, year);
+    if (!access.admin && !access.chairman) return fail(res, 403, `แก้ได้เฉพาะ admin หรือประธานของกิจกรรมนี้ปี ${year}`);
+
+    const selfRaw = req.body?.self ?? req.body?.targetSelf ?? req.body?.target;
+    const commRaw = req.body?.committee ?? req.body?.targetCommittee ?? req.body?.target;
+    const targetSelf = Number(selfRaw);
+    const targetCommittee = Number(commRaw);
+
+    if (!Number.isInteger(targetSelf) || targetSelf < 1 || targetSelf > 100 ||
+        !Number.isInteger(targetCommittee) || targetCommittee < 1 || targetCommittee > 100) {
+      return fail(res, 400, 'ระบุเป้าหมาย Self Audit และ Committee Audit เป็นตัวเลข 1–100%');
+    }
+
     const t = tablesOf(activity);
-    const { error } = await tx.from(t.setting).upsert({ key: `pass_percent:${year}`, value: String(target) }, { onConflict: 'key' });
+    const { error } = await tx.from(t.setting).upsert([
+      { key: `pass_self:${year}`, value: String(targetSelf) },
+      { key: `pass_committee:${year}`, value: String(targetCommittee) },
+      { key: `pass_percent:${year}`, value: String(targetCommittee) }
+    ], { onConflict: 'key' });
     throwIf(error);
-    res.json({ ok: true, year, target });
+    res.json({ ok: true, year, self: targetSelf, committee: targetCommittee, targetSelf, targetCommittee });
   });
 }
