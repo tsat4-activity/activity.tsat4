@@ -6,6 +6,10 @@
 
 ## SQL ที่รอผู้ใช้รัน
 
+- [5S] `inbox/mock_5s_audits_2026.sql`: ข้อมูลจำลองผลการตรวจประเมิน 5S ปี 2026 ตามเงื่อนไข:
+  - **Self Audit:** ทุกเดือน (ม.ค.–พ.ย. รวม 11 เดือน) ก่อนวันที่ 10 ของเดือน คะแนนเฉลี่ย 83%–92% ครบทั้ง 34 พื้นที่ (รวม 374 ใบตรวจ + 9,350 รายการคะแนน)
+  - **Committee Audit:** ทุก 3 เดือน เริ่มที่ มี.ค. (มี.ค., มิ.ย., ก.ย. รวม 3 ไตรมาส) คะแนนเฉลี่ย 80%–90% ครบทั้ง 34 พื้นที่ (รวม 102 ใบตรวจ + 2,550 รายการคะแนน)
+  - **เดือน ธ.ค.:** ยังไม่สร้างตามคำขอ
 - [5S] `inbox/import_5s_setup.sql` (หรือระบบจะ seed ให้อัตโนมัติทันทีที่เปิดหน้า 5S หลัง Render deploy): พื้นที่ตรวจประเมิน 34 พื้นที่ (`A01`–`A19` โรงงาน, `B01`–`B15` สำนักงาน), ตัวแทนพื้นที่ตามรหัสพนักงาน 34 พื้นที่ (`role = 'owner', unit = 'audit'`), ทีมตรวจประเมิน 17 รายชื่อ (`chairman` 2 + `auditor` กลุ่ม A–I 15 ใน `unit = 'audit'`), และหัวข้อตรวจประเมิน 25 ข้อ (`year = 2026`)
 - [SMF] `db/act/smf.sql` (หรือ `db/setup.sql`) ใน Tx Data (activity01): ตาราง `mt_smf_team`, `mt_smf_setting`, `mt_smf_task`, `mt_smf_project` (พร้อม `target_name`, `unit`), และตาราง `tx_smf_project_month` (เป้าหมายและผลงานรายเดือน)
 
@@ -17,6 +21,8 @@
 - ข้อมูลเดิมจาก TSAT4 SMF (พนักงาน, ผลตรวจ 5S, CFO) ยังไม่ได้ย้ายมา · มีไฟล์นำเข้า `inbox/import_5s.sql`, `inbox/import_cfo.sql` (ไม่อยู่ใน git) ทดสอบแล้วใน test:act
 
 ## บันทึก (อันใหม่อยู่บนสุด)
+
+- 2026-11-02 · Antigravity [5S] · สคริปต์สุ่มสร้างข้อมูลผลการตรวจประเมิน 5S ปี 2026 (`scripts/generate_5s_mock_data.py` -> `inbox/mock_5s_audits_2026.sql`): Self Audit 374 ใบ (ม.ค.–พ.ย. ทุกพื้นที่ ก่อนวันที่ 10 คะแนนเฉลี่ย 83%–92%) และ Committee Audit 102 ใบ (รอบ มี.ค., มิ.ย., ก.ย. ทุกพื้นที่ คะแนนเฉลี่ย 80%–90%) ไม่รวมเดือน ธ.ค. ตามคำขอ พร้อมคะแนนครบทั้ง 25 ข้อย่อย 11,900 แถว นำเข้าได้ทันทีใน Supabase SQL Editor (`tx_5s_audit`, `tx_5s_audit_score`)
 
 - 2026-11-02 · Antigravity [5S] · แยกการตั้งเป้าหมาย (target) ระหว่าง Self Audit และ Committee Audit: บันทึก `pass_self:<year>` และ `pass_committee:<year>` ลง `mt_5s_setting`, ขยายสิทธิ์บันทึกให้ admin และ chairman (`access.admin || access.chairman`) เพื่อแก้ Error 403, ปรับหน้าต่าง popup ให้ตั้งเป้าหมายของทั้งสองประเภทพร้อมกัน, ปรับเส้นประ Target/ป้ายกำกับ/คำอธิบายกราฟ Self Audit และ Committee Audit ให้แสดงตามเป้าหมายของแต่ละประเภทอย่างถูกต้อง (`public/js/act-5s.js`, `server/modules/act/audit.js`, `server/modules/act/transaction.js`)
 
