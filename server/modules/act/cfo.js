@@ -410,6 +410,33 @@ export function mountCfo(app) {
     must(await tx.from(t.efRef).update(row).eq('id', current.id));
     res.json({ ok: true });
   });
+  // Import a reference table from Excel / CSV (ผู้ใช้กำหนด 2026-11-02): a row with id of this table = update, without id = add.
+  // Every row is checked first; nothing is saved when one fails (the reply names the row numbers of the file).
+  route('post', '/api/act/:activity/cfo/ref/import', async (req, res, activity, t) => {
+    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
+    const sheet = REF_SHEETS.includes(req.body?.sheet) ? req.body.sheet : null;
+    const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
+    if (!sheet) return fail(res, 400, 'เลือกตาราง');
+    if (!list.length) return fail(res, 400, 'ไฟล์ไม่มีข้อมูล');
+    const have = new Map((await fetchAll(() => tx.from(t.efRef).select('id,sort_no').eq('sheet', sheet))).map((r) => [r.id, r]));
+    let next = Math.max(0, ...[...have.values()].map((r) => r.sort_no || 0));
+    const adds = [];
+    const updates = [];
+    const errors = [];
+    for (const [i, b] of list.entries()) {
+      const { row, error } = await refInput(t, { ...b, sheet, ...(sheet === 'ipcc' && !b.unit ? { unit: 'TJ' } : {}) });
+      if (error) { errors.push(`แถว ${b.line || i + 2}: ${error}`); continue; }
+      const id = Number(b.id);
+      if (id && have.has(id)) updates.push({ id, row: { ...row, sort_no: row.sort_no ?? have.get(id).sort_no } });
+      else adds.push({ ...row, sort_no: row.sort_no ?? (next += 1) });
+    }
+    if (errors.length) return fail(res, 400, `ไม่ได้บันทึก มี ${errors.length} แถวที่ผิด: ${errors.slice(0, 5).join(' · ')}${errors.length > 5 ? ' …' : ''}`);
+    if (req.body?.save !== true) return res.json({ ok: true, saved: false, add: adds.length, update: updates.length });
+    for (let i = 0; i < adds.length; i += 500) must(await tx.from(t.efRef).insert(adds.slice(i, i + 500)));
+    for (const u of updates) must(await tx.from(t.efRef).update(u.row).eq('id', u.id));
+    await logRev(t, req, 'Emission Factor', `นำเข้า ${sheet}`, `เพิ่ม ${adds.length} · แก้ ${updates.length} รายการ`);
+    res.json({ ok: true, saved: true, add: adds.length, update: updates.length });
+  });
   route('delete', '/api/act/:activity/cfo/ref/:id', async (req, res, activity, t) => {
     if (!(await requireAdmin(req, res, activity, thisYear()))) return;
     must(await tx.from(t.efRef).delete().eq('id', Number(req.params.id)));

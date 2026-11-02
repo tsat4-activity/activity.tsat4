@@ -66,6 +66,7 @@ POST /api/act/:activity/cfo/material-usage auth
 POST /api/act/:activity/cfo/materials auth
 POST /api/act/:activity/cfo/photo auth
 POST /api/act/:activity/cfo/ref auth
+POST /api/act/:activity/cfo/ref/import auth
 POST /api/act/:activity/cfo/revisions auth
 POST /api/act/:activity/checklist auth
 POST /api/act/:activity/checklist/copy auth

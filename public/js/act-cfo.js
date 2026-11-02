@@ -1054,7 +1054,7 @@ function cfoSetRef(body, m, rerender, sheet) {
     <div class="toolbar a5-filters">${cfoEfPicker()}
       ${field('สถานะ', `<select id="cfo-f-status">${options(['', 'Active', 'Inactive'], cfoFilter.status, (v) => v || 'ทั้งหมด')}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'ชื่อ หรืออ้างอิง' })}
-      ${m.admin ? `<div class="action-bar">${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
+      <div class="action-bar">${button('cfo-export', 'Export')}${m.admin ? `${button('cfo-import', 'Import')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}` : ''}</div>
     </div>
     <div class="table-wrap sheet" id="cfo-rows"></div>
     <p class="sum-meta">${esc(spec.title)} · ${rows.length} รายการ · ${sheet === 'cfp' ? 'กรอกเอง หรือคัดลอกจาก Excel แล้ววางในหน้าต่างเพิ่ม' : 'ตารางอ้างอิงตามแผ่น EF TGO AR5 V2 ไว้ดูค่าและที่มา'}${spec.cols.some((c) => c[0] === 'co2') ? ` · Total ว่าง = คิดจาก GWP ${esc(gwp.code || '')} (CO₂ + Fossil CH₄ × ${gwp.ch4_fossil ?? '-'} + CH₄ × ${gwp.ch4 ?? '-'} + N₂O × ${gwp.n2o ?? '-'})` : ''}</p>`;
@@ -1065,7 +1065,11 @@ function cfoSetRef(body, m, rerender, sheet) {
   const search = () => { cfoFilter.q = $('cfo-f-q').value; draw(); };
   $('cfo-f-search').onclick = search;
   onEnter('cfo-f-q', search);
+  // Export / Import (ผู้ใช้กำหนด 2026-11-02): one file per table, the first row = column names (CFO_REF_FILE) · id = the row to update
+  $('cfo-export').onclick = () => cfoDownload(`EF_${sheet}_${new Date().toISOString().slice(0, 10)}.csv`,
+    [CFO_REF_FILE.map(([k]) => k), CFO_REF_FILE.map(([, label]) => label), ...rows.map((r) => CFO_REF_FILE.map(([k]) => r[k] ?? ''))]);
   if (!m.admin) return;
+  $('cfo-import').onclick = () => cfoRefImport(sheet, spec, rerender);
   const fields = spec.cols.map(([key, label, unit, num]) => ({ key, label: unit ? `${label} ${unit}` : label, type: num ? 'number' : undefined }));
   const fixed = sheet === 'ipcc' ? { unit: 'TJ' } : {};
   $('cfo-add').onclick = () => {
@@ -1267,6 +1271,84 @@ async function cfoSetMaterial(body, m, rerender) {
       $('cfo-u-result').innerHTML = `<b>${r.lines.toLocaleString()} บรรทัด → คิดได้ ${r.counted.toLocaleString()} รายการ = ${cfoT(r.tco2e)} tCO₂e</b>${r.skipped ? ` · ข้าม ${r.skipped.toLocaleString()} บรรทัดที่ปริมาณ 0 หรือติดลบ` : ''}
         ${list('ยังไม่มี EF (ไม่คิด)', r.noEf)}${list('หน่วยไม่ตรงกับที่จับคู่ (ไม่คิด)', r.unitWrong, (x) => ` (จับคู่ไว้ ${esc(x.sap_unit)})`)}${list('ไม่มีในรายการวัสดุ (ไม่คิด)', r.unknown)}`;
     }).catch(onErr);
+  };
+}
+
+// File columns of a reference table (Export writes them, Import reads them by the key in row 1; row 2 = Thai label, skipped)
+const CFO_REF_FILE = [['id', 'id (ว่าง = เพิ่มใหม่)'], ['grp', 'กลุ่ม'], ['name', 'ชื่อ / รายการ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'],
+  ['co2', 'CO2'], ['ch4_fossil', 'Fossil CH4'], ['ch4', 'CH4'], ['n2o', 'N2O'], ['total', 'Total / EF / ค่า'], ['ratio', 'สัดส่วนชีวมวล'],
+  ['reference', 'แหล่งข้อมูล'], ['remark', 'หมายเหตุ'], ['sort_no', 'ลำดับ'], ['status', 'สถานะ (Active / Inactive)']];
+
+// CSV text → rows of cells (quotes, "" inside quotes, commas and new lines inside quotes)
+function cfoCsv(text) {
+  const out = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i += 1; } else if (c === '"') quoted = false; else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i += 1; row.push(cell); out.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); out.push(row); }
+  return out;
+}
+
+// .xlsx / .xls need SheetJS: loaded from cdnjs the first time an Excel file is imported
+let cfoXlsx = null;
+const cfoLoadXlsx = () => cfoXlsx || (cfoXlsx = new Promise((resolve, reject) => {
+  const tag = document.createElement('script');
+  tag.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  tag.onload = () => resolve(window.XLSX);
+  tag.onerror = () => { cfoXlsx = null; reject(new Error('โหลดตัวอ่าน Excel ไม่ได้ ลองบันทึกไฟล์เป็น CSV แล้ว Import อีกครั้ง')); };
+  document.head.append(tag);
+}));
+
+async function cfoReadSheetFile(file) {
+  if (/\.csv$/i.test(file.name)) return cfoCsv((await file.text()).replace(/^﻿/, ''));
+  const XLSX = await cfoLoadXlsx();
+  const book = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { header: 1, raw: true, defval: '' });
+}
+
+// Import popup: choose the file → check (counts of new / updated rows) → save. Columns are found by the key or Thai label
+// of row 1, so a file from Export (or the same columns typed by hand) works.
+function cfoRefImport(sheet, spec, rerender) {
+  let rows = null;
+  openPopup(`Import: ${spec.title}`, `
+    ${field('ไฟล์ Excel (.xlsx) หรือ CSV', '<input id="cfo-imp-file" type="file" accept=".xlsx,.xls,.csv">')}
+    <p class="sum-meta">ใช้ไฟล์จากปุ่ม Export เป็นแบบฟอร์ม · แถวแรก = ชื่อคอลัมน์ · แถวที่มี id = แก้รายการเดิม · id ว่าง = เพิ่มใหม่ · Total ว่าง + มีค่าแยกก๊าซ = คิดจาก GWP · ระบบตรวจทุกแถวก่อน ถ้ามีแถวผิดจะไม่บันทึกเลย</p>
+    <div id="cfo-imp-result" class="sum-meta"></div>`, async () => {
+    if (!rows) throw new Error('เลือกไฟล์ก่อน');
+    const r = await a5Api(CFO, 'cfo/ref/import', { method: 'POST', body: { sheet, rows, save: true } });
+    toast(`นำเข้าแล้ว เพิ่ม ${r.add} · แก้ ${r.update} รายการ`);
+    closePopup();
+    rerender();
+  }, 'นำเข้า');
+  $('cfo-imp-file').onchange = async () => {
+    const file = $('cfo-imp-file').files[0];
+    rows = null;
+    $('cfo-imp-result').textContent = 'กำลังอ่านไฟล์...';
+    try {
+      const cells = (await cfoReadSheetFile(file)).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
+      const name = (h) => String(h ?? '').trim().toLowerCase();
+      const head = (cells[0] || []).map(name);
+      const at = Object.fromEntries(CFO_REF_FILE.map(([k, label]) => [k, head.findIndex((h) => h === k || h === name(label))]));
+      if (at.name < 0) throw new Error('ไม่พบคอลัมน์ name (ชื่อ / รายการ) ในแถวแรก ใช้ไฟล์จากปุ่ม Export เป็นแบบ');
+      const isLabelRow = (r) => name(r[at.name]) === name('ชื่อ / รายการ');
+      rows = cells.slice(1).map((r, i) => ({ r, line: i + 2 })).filter(({ r }) => !isLabelRow(r) && String(r[at.name] ?? '').trim())
+        .map(({ r, line }) => ({ line, ...Object.fromEntries(CFO_REF_FILE.filter(([k]) => at[k] >= 0).map(([k]) => [k, String(r[at[k]] ?? '').trim()])) }));
+      if (!rows.length) throw new Error('ไม่พบแถวข้อมูล');
+      const check = await a5Api(CFO, 'cfo/ref/import', { method: 'POST', body: { sheet, rows, save: false } });
+      $('cfo-imp-result').innerHTML = `<b>${rows.length} แถว · เพิ่มใหม่ ${check.add} · แก้รายการเดิม ${check.update}</b> · กด นำเข้า เพื่อบันทึก`;
+    } catch (err) {
+      rows = null;
+      $('cfo-imp-result').innerHTML = `<span class="form-error">${esc(err.message)}</span>`;
+    }
   };
 }
 
