@@ -339,7 +339,6 @@ function a5EmployeeSearch(activity, onPick, year = a5Year) {
 
 // One field: type, pick from the list under it (core.js SEARCH_BOXES); value = the current choice shown in the field.
 const a5EmpField = (label = 'ค้นพนักงาน', value = '') => searchBlock(searchSlot(label, 'a5-emp-q', 'a5-emp-search', { placeholder: 'รหัส ชื่อ หรือหน่วยงาน', value }), 'a5-emp-list');
-const A5_EMP_FIELDS = a5EmpField();
 const a5Heads = { areas: { sort: '', dir: 'asc', filters: {} }, team: { sort: '', dir: 'asc', filters: {} }, check: { sort: '', dir: 'asc', filters: {} } };
 
 async function a5SetAreas(body, activity, admin, rerender) {

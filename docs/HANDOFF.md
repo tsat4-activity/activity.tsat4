@@ -32,6 +32,7 @@
 
 - 2026-11-02 · Antigravity [5S] · แก้ไขบั๊ก `Cannot read properties of undefined (reading 'admin')` ในหน้า 5S Summary โดยเพิ่ม fallback โหลดข้อมูล `me` และตัวแปร `isAdmin = Boolean(me?.access?.admin)` ใน `a5DrawSummary` (`public/js/act-5s.js`)
 
+- 2026-11-02 · Claude [5S] · core.js fit ทำใน requestAnimationFrame เมื่อเนื้อหาเปลี่ยน (เดิมรอ 120 ms → scrollbar ของหน้ากระพริบตอนเปลี่ยนหน้า/ตาราง) · ลบโค้ดไม่ใช้: route POST/PATCH/DELETE cfo/ef (หน้า EF ที่ใช้คำนวณถูกลบแล้ว) + efInput/EF_*, A5_EMP_FIELDS, CSS popup-wide/badge-over/apl-owner/cfo-org*/cfo-photos/cfo-bar/cfo-s3-pct
 - 2026-11-02 · Claude [5S] · core.js fit: ตารางหลักยืดถึงล่างแล้วหักส่วนที่ล้น (margin บรรทัดหมายเหตุ) → หน้าไม่มี scrollbar นอกตาราง (เห็นที่ CFO GWP) · ตรวจ 5S/CFO/SMF Setting + Transaction แล้ว · กฎใน AGENTS.md
 - 2026-11-02 · Claude [5S] · CFO Fr-04.1 น้ำมัน 3 ส่วนตามตัวอย่าง VerificationSheet: ฟอร์มกิจกรรมเลือก 3-3 = EF CFP อบก. ให้อัตโนมัติ (ดีเซล/B7 → CFP-0041 · แก๊สโซฮอล์ → แก๊สโซลีน · LPG → ก๊าซหุงต้มจากโรงกลั่น) · EF ต่อ kg × ความหนาแน่น (Fuel Properties) = ต่อลิตร แก้ตัวคูณได้ · สำเนา ref:<id>:3-3:x<ตัวคูณ> · ไม่ต้องรัน SQL
 - 2026-11-02 · Claude [5S] · CFO id ของ EF ตามเอกสาร CFO อบก. (ก.พ. 2569 = ค่าเดียวกับ EF TGO AR5 V2): EF พลังงาน + GWP สารเคมี CFO-0001…0123 · mt_cfo_ef.ref_id FK → mt_cfo_ef_ref (กิจกรรมเก่าเติมให้ 26/34, CO2 แก๊สเชื่อม + บ่อเกรอะไม่มีในเอกสาร) · หน้ากิจกรรมมีคอลัมน์ EF id · ต้องรัน db/act/cfo.sql

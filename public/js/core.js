@@ -651,12 +651,16 @@ const DASH_ROW_MAX = 44;
     });
   };
   const later = () => { clearTimeout(timer); timer = setTimeout(fit, 120); };
+  // New page content is fitted before it is painted (ผู้ใช้กำหนด 2026-11-02): with the 120 ms wait a new, taller table
+  // overflowed the page for a few frames and the page scrollbar flashed at the right edge when switching pages
+  let frame = 0;
+  const now = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; fit(); }); };
   window.addEventListener('resize', later);
   // Fonts change line heights after the first render.
   document.fonts?.ready.then(later);
   window.addEventListener('load', later);
   // Re-fit when the page content changes, not when a chart's hover tip does.
-  new MutationObserver((list) => { if (list.some((m) => !m.target.closest?.('.ch-tip'))) later(); }).observe(view, { childList: true, subtree: true });
+  new MutationObserver((list) => { if (list.some((m) => !m.target.closest?.('.ch-tip'))) now(); }).observe(view, { childList: true, subtree: true });
 })();
 
 // Text cut off with … shows in full on hover (ผู้ใช้กำหนด 2026-10-29, ย้ำ 2026-11-01): one floating box for the whole app,

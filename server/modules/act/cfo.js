@@ -10,10 +10,6 @@ const SETTING_KEYS = ['company_name', 'company_address', 'company_area', 'compan
   's3_w_magnitude', 's3_w_influence', 's3_w_risk', 's3_w_opportunity', 's3_pass', 's3_mag_bands'];
 // production_<year> = pieces produced that year (Carbon intensity = tCO2e / pieces)
 const settingKey = (k) => SETTING_KEYS.includes(k) || /^production_\d{4}$/.test(k);
-// Values an EF keeps once entries use it (Fr-04.1 gas columns included).
-const EF_NUMBERS = ['kgco2e', 'co2', 'ch4_fossil', 'ch4', 'n2o', 'sf6', 'nf3', 'hfc', 'hfc_gwp', 'pfc', 'pfc_gwp', 'other', 'other_gwp', 'co2_bio'];
-const EF_VALUES = [...EF_NUMBERS, 'unit', 'scope_code', 'separate'];
-const EF_SOURCES = ['self', 'supplier', 'th_lci', 'tgo', 'thai_res', 'int_db', 'other'];
 const GWP_GASES = ['co2', 'ch4_fossil', 'ch4', 'n2o', 'sf6', 'nf3'];
 // mt_cfo_ef_ref: energy = EF ต่อหน่วย · chemical = GWP สารเคมี · ipcc = EF ต่อ TJ · fuel = ค่าความร้อน / ความหนาแน่น / ตัวแปลงหน่วย · cfp = EF ของ CFP
 const REF_SHEETS = ['energy', 'chemical', 'ipcc', 'fuel', 'cfp'];
@@ -293,47 +289,8 @@ export function mountCfo(app) {
     });
   });
 
-  const efInput = (b) => {
-    const row = { scope_code: text(b.scope_code, 10), kind: text(b.kind, 120), name: text(b.name, 300), detail: text(b.detail, 1000), unit: text(b.unit, 30), reference: text(b.reference, 500), year: numOrNull(b.year), status: b.status === 'Inactive' ? 'Inactive' : 'Active',
-      separate: b.separate === true || b.separate === 'true', source_type: EF_SOURCES.includes(b.source_type) ? b.source_type : null, substitute: text(b.substitute, 300) };
-    for (const k of EF_NUMBERS) row[k] = numOrNull(b[k]);
-    if (!row.scope_code || !row.name || !row.unit) return { error: 'ระบุหมวด ชื่อ และหน่วย' };
-    if ([...EF_NUMBERS, 'year'].some((k) => Number.isNaN(row[k]))) return { error: 'ค่าตัวเลขไม่ถูกต้อง' };
-    if (row.status === 'Active' && row.kgco2e == null) return { error: 'EF ที่ใช้งานต้องมีค่า kgCO2e ต่อหน่วย' };
-    return { row };
-  };
-  route('post', '/api/act/:activity/cfo/ef', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
-    const { row, error } = efInput(req.body || {});
-    if (error) return fail(res, 400, error);
-    must(await tx.from(t.ef).insert(row));
-    await logRev(t, req, 'Emission Factor', `${row.scope_code} ${row.name}`, `เพิ่ม EF ${row.kgco2e ?? '-'} kgCO2e/${row.unit}`);
-    res.status(201).json({ ok: true });
-  });
-  // An EF that entries already use keeps its values: add a new row and set the old one Inactive.
-  route('patch', '/api/act/:activity/cfo/ef/:id', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
-    const id = Number(req.params.id);
-    const current = must(await tx.from(t.ef).select('*').eq('id', id).maybeSingle());
-    if (!current) return fail(res, 404, 'ไม่พบ EF');
-    const { row, error } = efInput(req.body || {});
-    if (error) return fail(res, 400, error);
-    const used = must(await tx.from(t.entry).select('id').eq('ef_id', id).limit(1)).length > 0;
-    if (used && EF_VALUES.some((k) => String(row[k] ?? '') !== String(current[k] ?? ''))) return fail(res, 400, 'EF นี้ถูกใช้แล้ว แก้ค่าไม่ได้ ให้เพิ่ม EF ใหม่แล้วปิดตัวเดิม');
-    must(await tx.from(t.ef).update(row).eq('id', id));
-    await logRev(t, req, 'Emission Factor', current.code || `${current.scope_code} ${current.name}`, changes(current, row, Object.keys(row)));
-    res.json({ ok: true });
-  });
-  route('delete', '/api/act/:activity/cfo/ef/:id', async (req, res, activity, t) => {
-    if (!(await requireAdmin(req, res, activity, thisYear()))) return;
-    const id = Number(req.params.id);
-    const [u1, u2] = await Promise.all([tx.from(t.activity).select('id').eq('ef_id', id).limit(1), tx.from(t.entry).select('id').eq('ef_id', id).limit(1)]);
-    const usedBy = must(u1).length + must(u2).length;
-    if (usedBy) return fail(res, 400, 'EF นี้ถูกใช้แล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
-    const gone = must(await tx.from(t.ef).delete().eq('id', id).select('code,scope_code,name'));
-    if (gone[0]) await logRev(t, req, 'Emission Factor', gone[0].code || `${gone[0].scope_code} ${gone[0].name}`, 'ลบ EF');
-    res.json({ ok: true });
-  });
+  // EF copies (mt_cfo_ef) are made from the reference tables when an activity is saved (efFromRef): no direct add / edit
+  // since the page "EF ที่ใช้คำนวณ" was removed (ผู้ใช้กำหนด 2026-11-01)
 
   // ---------- Setting > Emission Factor: GWP + reference tables (EF TGO AR5 V2, ผู้ใช้กำหนด 2026-11-01) ----------
   // A GWP set that activities or entries point at keeps its values (v_cfo_entry reads them live): add a new code instead.
