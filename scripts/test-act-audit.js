@@ -311,6 +311,13 @@ if (!fs.existsSync(cfoFile)) {
   ok(await throws(db, `insert into mt_cfo_material (material, name, scope_code) values ('x', 'x', '1-1')`), 'a material belongs to a Scope 3 category');
   ok(await throws(db, `insert into mt_cfo_s3_assess (year, scope_code) values (2026, '1-1')`), 'Fr-03.2 rows are Scope 3 categories only');
   {
+    // Fr-03.2 weighted (VerificationSheet CFO): M 5 · I 3 · R 3 · O 5 = 2.00 + 0.90 + 0.45 + 0.75 = 4.10 · all 1 = 1.00 · 13.19% → level 2
+    const { s3Rule, s3Weighted, s3MagLevel } = await import('../server/modules/act/cfo.js');
+    const rule = s3Rule({});
+    ok(s3Weighted({ magnitude: 5, influence: 3, risk: 3, opportunity: 5 }, rule) === 4.1 && s3Weighted({ magnitude: 1, influence: 1, risk: 1, opportunity: 1 }, rule) === 1
+      && s3MagLevel(13.19, rule) === 2 && s3MagLevel(9.99, rule) === 1 && s3MagLevel(40, rule) === 5 && rule.pass === 3, 'Fr-03.2 score = 0.40 M + 0.30 I + 0.15 R + 0.15 O, Magnitude bands 10/20/30/40%');
+  }
+  {
     // Fr-03.2 criteria were ✓ / × (boolean) and are now % scores: ✓ = 1.00, × = 0, and the file runs again cleanly
     const old = new PGlite();
     await old.exec(`create table mt_cfo_s3_assess (year integer, scope_code text, has_source boolean not null default true, magnitude boolean not null default false,

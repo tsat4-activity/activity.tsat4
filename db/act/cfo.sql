@@ -242,7 +242,10 @@ create table if not exists public.tx_cfo_entry (
 create index if not exists tx_cfo_entry_month on public.tx_cfo_entry (month);
 
 -- TGO Fr-03.2 ประเมินความมีนัยสำคัญ Scope 3: 1 แถว = ปี × หมวด 3-1…3-15 · เกณฑ์ 6 ข้อเป็นคะแนน % (เช่น 5.00) ตามไฟล์ผู้ใช้
--- มีนัยสำคัญ = มีแหล่งปล่อย และมีคะแนนอย่างน้อย 1 เกณฑ์ (คำนวณตอนแสดง ไม่เก็บ)
+-- เกณฑ์แบบถ่วงน้ำหนัก (ผู้ใช้กำหนด 2026-11-02, แบบฟอร์ม VerificationSheet CFO): ระดับ 1–5 ต่อประเด็น
+-- magnitude = ระดับจาก % GHG ของหมวด เทียบ Scope 1+2+3 (server คิดจากข้อมูลจริง เก็บไว้ ณ ตอนบันทึก) · influence / risk / opportunity = ระดับ 1–5
+-- sector = 1 ถ้า Sector guidance แนะนำ (มีนัยสำคัญทันที) · คะแนน = Σ ระดับ × น้ำหนัก (mt_cfo_setting s3_w_*) · ≥ s3_pass (3) = มีนัยสำคัญ
+-- outsourcing / engagement = องค์กรไม่พิจารณา (เก็บคอลัมน์ไว้ ไม่ใช้)
 create table if not exists public.mt_cfo_s3_assess (
   year integer not null check (year between 2000 and 2100),
   scope_code text not null references public.mt_cfo_scope (code) check (scope_code like '3-%'),
@@ -267,6 +270,7 @@ do $$ declare c text; begin
     end if;
   end loop;
 end $$;
+alter table public.mt_cfo_s3_assess add column if not exists opportunity numeric(6, 2) not null default 0;
 
 -- บันทึกการปรับปรุง (ฟอร์ม TGO): server เขียนให้เองเมื่อผู้จัดทำแก้ master / ค่าตั้งต้น / ยืนยันเดือน · เพิ่มเองได้ ไม่มีการลบ
 create table if not exists public.tx_cfo_revision (
@@ -282,7 +286,10 @@ create index if not exists tx_cfo_revision_at on public.tx_cfo_revision (at desc
 -- ค่าตั้งต้นบ่อเกรอะ (IPCC): kg CH4 = คน × วัน × BOD × 0.001 × B0 × MCF × I · เป้าลด
 insert into public.mt_cfo_setting (key, value) values
   ('septic_bod', '40'), ('septic_b0', '0.6'), ('septic_mcf', '0.5'), ('septic_i', '1'),
-  ('target_percent', '5')                 -- เป้าลดจากปีฐาน (%) ค่าเดิมของ TSATP4-CFO
+  ('target_percent', '5'),                -- เป้าลดจากปีฐาน (%) ค่าเดิมของ TSATP4-CFO
+  -- Fr-03.2: น้ำหนัก (%) · เกณฑ์ผ่าน · ช่วง % GHG ของ Magnitude ระดับ 2 / 3 / 4 / 5 (≥10, ≥20, ≥30, ≥40)
+  ('s3_w_magnitude', '40'), ('s3_w_influence', '30'), ('s3_w_risk', '15'), ('s3_w_opportunity', '15'),
+  ('s3_pass', '3'), ('s3_mag_bands', '10,20,30,40')
 on conflict (key) do nothing;
 
 -- EF การได้มาของเชื้อเพลิง (Scope 3-3, ผู้ใช้กำหนด 2026-11-01): ปริมาณเดียวกันของกิจกรรมคิดอีกบรรทัดใน 3-3

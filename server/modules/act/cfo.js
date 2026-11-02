@@ -6,7 +6,8 @@ import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesO
 // Tables: db/act/cfo.sql (scripts/act-sql.js cfoSql) · spec: docs/specs/act-cfo.md
 export const CFO_ON = ['cfo'];
 const SETTING_KEYS = ['company_name', 'company_address', 'company_area', 'company_business', 'company_customers', 'company_employees', 'company_updated',
-  'company_photo1', 'company_photo2', 'company_register', 'base_year', 'target_percent', 'septic_bod', 'septic_b0', 'septic_mcf', 'septic_i'];
+  'company_photo1', 'company_photo2', 'company_register', 'base_year', 'target_percent', 'septic_bod', 'septic_b0', 'septic_mcf', 'septic_i',
+  's3_w_magnitude', 's3_w_influence', 's3_w_risk', 's3_w_opportunity', 's3_pass', 's3_mag_bands'];
 // production_<year> = pieces produced that year (Carbon intensity = tCO2e / pieces)
 const settingKey = (k) => SETTING_KEYS.includes(k) || /^production_\d{4}$/.test(k);
 // Values an EF keeps once entries use it (Fr-04.1 gas columns included).
@@ -19,10 +20,18 @@ const REF_SHEETS = ['energy', 'chemical', 'ipcc', 'fuel', 'cfp'];
 // tables an activity can take its EF from (per unit of what it records; IPCC is per TJ and fuel holds properties)
 const REF_PICK = ['energy', 'chemical', 'cfp'];
 const REF_NUMBERS = ['co2', 'ch4_fossil', 'ch4', 'n2o', 'total', 'ratio'];
-// TGO Fr-03.2 criteria as % scores (e.g. 5.00), like the user's sheet: significant = has a source and scores on at least one.
-export const S3_CRITERIA = ['magnitude', 'influence', 'risk', 'sector', 'outsourcing', 'engagement'];
-// 0–100 with 2 decimals (an old ✓ / × column reads true / false = 1 / 0).
-export const s3Score = (v) => Math.min(100, Math.max(0, Math.round((Number(v) || 0) * 100) / 100));
+// Weighted Fr-03.2 (ผู้ใช้กำหนด 2026-11-02): levels 1–5 · score = Σ level × weight · significant = source and (sector ✓ or score ≥ pass)
+export const S3_LEVELS = ['magnitude', 'influence', 'risk', 'opportunity'];
+export const s3Rule = (settings = {}) => {
+  const num = (k, d) => (Number.isFinite(Number(settings[k])) && settings[k] !== '' && settings[k] != null ? Number(settings[k]) : d);
+  const bands = String(settings.s3_mag_bands || '10,20,30,40').split(',').map(Number).filter(Number.isFinite);
+  return { weights: { magnitude: num('s3_w_magnitude', 40), influence: num('s3_w_influence', 30), risk: num('s3_w_risk', 15), opportunity: num('s3_w_opportunity', 15) },
+    pass: num('s3_pass', 3), bands: bands.length === 4 ? bands : [10, 20, 30, 40] };
+};
+// % GHG of the category → level 1 (<10%) … 5 (≥40%) with the bands of the rule
+export const s3MagLevel = (pct, rule) => 1 + rule.bands.filter((b) => pct >= b).length;
+export const s3Level = (v) => Math.min(5, Math.max(0, Math.round(Number(v) || 0)));
+export const s3Weighted = (r, rule) => Math.round(S3_LEVELS.reduce((sum, k) => sum + s3Level(r[k]) * (rule.weights[k] / 100), 0) * 100) / 100;
 
 const text = (v, max = 500) => String(v ?? '').trim().slice(0, max) || null;
 const numOrNull = (v) => (v === '' || v == null ? null : Number.isFinite(Number(v)) ? Number(v) : NaN);
@@ -700,21 +709,33 @@ export function mountCfo(app) {
   route('get', '/api/act/:activity/cfo/s3', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
-    const [scopes, rows, access] = await Promise.all([
+    const [scopes, rows, access, settings, entries] = await Promise.all([
       fetchAll(() => tx.from(t.cfoScope).select('code,name,name_th').eq('scope', 3)),
       fetchAll(() => tx.from(t.s3Assess).select('*').lte('year', year).order('year', { ascending: false })),
-      accessOf(req, activity, year)
+      accessOf(req, activity, year),
+      settingsOf(t),
+      fetchAll(() => tx.from(t.entryView).select('scope,scope_code,tco2e,separate').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`))
     ]);
+    // Magnitude = tCO2e of the category ÷ Scope 1+2+3 of the year (รายงานแยก not counted), as the form's % GHG
+    const rule = s3Rule(settings);
+    const counted = entries.filter((e) => !e.separate);
+    const total = counted.reduce((sum, e) => sum + Number(e.tco2e), 0);
+    const byCat = counted.filter((e) => e.scope === 3).reduce((acc, e) => ({ ...acc, [e.scope_code]: (acc[e.scope_code] || 0) + Number(e.tco2e) }), {});
     const fromYear = rows.some((r) => r.year === year) ? year : rows[0]?.year || null;
     const byCode = new Map(rows.filter((r) => r.year === fromYear).map((r) => [r.scope_code, r]));
     const sorted = scopes.sort((a, b) => Number(a.code.split('-')[1]) - Number(b.code.split('-')[1]));
     res.json({
-      year, fromYear, admin: access.admin, criteria: S3_CRITERIA,
+      year, fromYear, admin: access.admin, rule, total: Math.round(total * 1000) / 1000,
       rows: sorted.map((s) => {
-        const r = byCode.get(s.code) || { has_source: true };
-        const marks = Object.fromEntries(S3_CRITERIA.map((k) => [k, s3Score(r[k])]));
-        return { scope_code: s.code, name: s.name, name_th: s.name_th, has_source: r.has_source !== false, ...marks, remark: r.remark || '',
-          significant: r.has_source !== false && S3_CRITERIA.some((k) => marks[k] > 0), updated_by: r.updated_by || null, updated_at: r.updated_at || null };
+        const r = byCode.get(s.code) || { has_source: !!byCat[s.code] };
+        const tco2e = Math.round((byCat[s.code] || 0) * 1000) / 1000;
+        const share = total ? Math.round((tco2e / total) * 10000) / 100 : 0;
+        const levels = { magnitude: s3MagLevel(share, rule), influence: s3Level(r.influence), risk: s3Level(r.risk), opportunity: s3Level(r.opportunity) };
+        const score = s3Weighted(levels, rule);
+        const has = r.has_source !== false;
+        const sector = Number(r.sector) > 0;
+        return { scope_code: s.code, name: s.name, name_th: s.name_th, has_source: has, tco2e, share, ...levels, sector, score, remark: r.remark || '',
+          significant: has && (sector || score >= rule.pass), updated_by: r.updated_by || null, updated_at: r.updated_at || null };
       })
     });
   });
@@ -723,18 +744,20 @@ export function mountCfo(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     if (!(await requireAdmin(req, res, activity, year))) return;
     const list = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    // levels 0–5 (0 = ยังไม่ประเมิน) · magnitude is the level the page showed from the data of the year
     const rows = list.filter((r) => /^3-\d{1,2}$/.test(String(r?.scope_code))).map((r) => ({
       year, scope_code: r.scope_code, has_source: r.has_source !== false, remark: text(r.remark, 1000),
-      ...Object.fromEntries(S3_CRITERIA.map((k) => [k, s3Score(r[k])])), updated_by: req.user.employeeId, updated_at: new Date().toISOString()
+      ...Object.fromEntries(S3_LEVELS.map((k) => [k, s3Level(r[k])])), sector: r.sector === true || Number(r.sector) > 0 ? 1 : 0,
+      updated_by: req.user.employeeId, updated_at: new Date().toISOString()
     }));
     if (!rows.length) return fail(res, 400, 'ไม่มีข้อมูลให้บันทึก');
     const before = new Map((await fetchAll(() => tx.from(t.s3Assess).select('*').eq('year', year))).map((r) => [r.scope_code, r]));
     const saved = await tx.from(t.s3Assess).upsert(rows, { onConflict: 'year,scope_code' });
     // 22P02: the criteria columns are still ✓ / × (boolean) until db/act/cfo.sql is run again
-    if (saved.error?.code === '22P02') return fail(res, 503, 'เกณฑ์ Fr-03.2 เป็นคะแนน % แล้ว ต้องรัน db/act/cfo.sql ใน Tx Data อีกรอบก่อนบันทึก');
+    if (['22P02', 'PGRST204', '42703'].includes(saved.error?.code)) return fail(res, 503, 'เกณฑ์ Fr-03.2 แบบถ่วงน้ำหนักต้องรัน db/act/cfo.sql ใน Tx Data อีกรอบก่อนบันทึก');
     must(saved);
     const changed = rows.map((r) => {
-      const d = changes(before.get(r.scope_code), r, ['has_source', ...S3_CRITERIA, 'remark']);
+      const d = changes(before.get(r.scope_code), r, ['has_source', ...S3_LEVELS, 'sector', 'remark']);
       return d && `${r.scope_code} ${d}`;
     }).filter(Boolean);
     await logRev(t, req, 'Fr-03.2', `ปี ${year}`, before.size ? changed.join(' | ') : 'ประเมินครั้งแรกของปี');

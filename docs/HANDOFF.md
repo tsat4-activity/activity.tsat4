@@ -17,6 +17,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Claude [5S] · CFO Fr-03.2 ถ่วงน้ำหนักตามแบบฟอร์ม VerificationSheet: Magnitude อัตโนมัติจาก % tCO₂e · Influence / Risk / Opportunity ระดับ 1–5 · คะแนน 0.40M+0.30I+0.15R+0.15O ≥ 3 · Sector ✓ = มีนัยสำคัญ · คอลัมน์ใหม่ opportunity + ค่าตั้ง s3_* → ต้องรัน db/act/cfo.sql
+
 - 2026-11-02 · Antigravity [SMF] · Audit & ปรับความเร็วโค้ดทั้งระบบ: Parallelize คำสั่งอ่าน/บันทึก DB ด้วย `Promise.all` (`common.js` `fetchIn`, `audit.js`, `transaction.js`, `planner.js`, `overview.js`, `smf.js`, `cfo.js` รวมทั้ง batch โหลดวัสดุ SAP คราวเดียวแทนยิงทีละแถว) · เปลี่ยนการค้นหาซ้ำในลูป `.find()`/`.filter()` เป็น `Map`/`Set` O(1) ทั้งฝั่ง Server และตารางแผน 5S 48 สัปดาห์ (`a5Grid` ใน `act-5s.js`) · ยุบโค้ดซ้ำสร้าง Issue (`insertIssues` ใน `transaction.js`) และคำนวณผลต่าง/เปอร์เซ็นต์ SMF (`smfDiffPct` ใน `act-planner.js`) · โหลดฟอร์มแก้ไขใบตรวจและอัปโหลดรูป Issue แบบขนาน (`act-tx.js`) · แก้บั๊ก `smf.js` ขาด import `accessOf` · ลบโค้ดและ CSS เก่าที่ไม่ได้ใช้ของ Store / Kaizen / QCC (`core.js`, `app.css`)
 
 - 2026-11-02 · Claude [5S] · FK employee_id → mt_main_employee ใน mt_<act>_team และ owner_id ใน mt_<act>_task (NOT VALID, สร้างเมื่อ mt_main_* อยู่ฐานเดียวกัน) · System > mt_main_user แสดงหน่วยงานจากข้อมูลพนักงาน · สิทธิ์ผู้ใช้ใน inbox/users_access.sql (ผู้ใช้รัน) · ต้องรัน db/act/*.sql ใหม่

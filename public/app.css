@@ -719,4 +719,5 @@ body[data-zone="work"]{--ch-1:#ea580c}
 .smf-month-table td { padding: 6px 10px; vertical-align: middle; }
 .smf-month-table .smf-diff-cell, .smf-month-table .smf-pct-cell { font-size: 13px; }
 .smf-month-table tfoot td { font-weight: 600; border-top: 2px solid var(--border-color, #e2e8f0); }
-
+/* Fr-03.2 weighted: rule table + result */
+.cfo-s3-rule td{white-space:normal;font-size:12px}.cfo-s3 select{min-width:140px;height:28px}.cfo-s3 td:nth-child(2){min-width:210px}.cfo-s3-yes{color:var(--mo-success)}

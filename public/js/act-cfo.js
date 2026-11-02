@@ -9,15 +9,18 @@ const CFO_BASE_COLORS = CHART_THEMES.cool.base;
 const CFO_ROLE_LABEL = { ...ACT_TEAM_ROLES, admin: 'ผู้ประสานงาน (ผู้จัดทำ)', member: 'สมาชิก (ตัวแทนหน่วยงาน)' }; // TGO forms call the coordinator ผู้จัดทำ
 const CFO_DASH_TABS = { summary: 'Summary', scope: 'Scope', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
 const CFO_SET_TABS = { team: 'ทีม', activities: 'กิจกรรม', ef: 'Emission Factor', material: 'วัสดุ (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'บริษัท' };
-// TGO Fr-03.2 criteria (server S3_CRITERIA) and their explanation from the form (หัวข้อ 12 ข้อกำหนด CFO)
-const CFO_S3_CRITERIA = [
-  ['magnitude', 'Magnitude', 'ขนาด: สันนิษฐานว่ามีปริมาณการปล่อยหรือดูดกลับในปริมาณมากอย่างมีนัยสำคัญ'],
-  ['influence', 'Level of influence', 'ระดับของแรงจูงใจ: องค์กรตรวจติดตามและลดการปล่อยจากกิจกรรมนั้นได้ (ประสิทธิภาพพลังงาน การออกแบบเชิงนิเวศ ข้อตกลงกับลูกค้า ข้อกำหนดจากผู้ว่าจ้าง)'],
-  ['risk', 'Risk or opportunity', 'ทำให้องค์กรได้รับความเสี่ยง (การเงิน กฎระเบียบ ห่วงโซ่อุปทาน สินค้าและลูกค้า คดีความ ชื่อเสียง) หรือโอกาสทางธุรกิจ (ตลาดใหม่ ธุรกิจรูปแบบใหม่)'],
-  ['sector', 'Sector guidance', 'ถือว่ามีนัยสำคัญสำหรับอุตสาหกรรมนั้น ตามคู่มือหรือแนวทางเฉพาะของอุตสาหกรรม'],
-  ['outsourcing', 'Outsourcing', 'เกิดจากการจ้างบุคคลหรือหน่วยงานภายนอกมาทำกิจกรรมที่เป็นกิจกรรมหลักขององค์กร'],
-  ['engagement', 'Employee engagement', 'ส่งเสริมให้พนักงานมีส่วนร่วมลดการปล่อย (อนุรักษ์พลังงาน เดินทางร่วมกัน ราคาคาร์บอนภายในองค์กร)']
+// TGO Fr-03.2 weighted criteria (server s3Rule, ผู้ใช้กำหนด 2026-11-02): level 1–5 per issue · Magnitude comes from the data
+const CFO_S3_LEVELS = [
+  ['magnitude', 'Magnitude', '% GHG ของหมวด เทียบ Scope 1+2+3 (ระบบคิดจากข้อมูลจริง)'],
+  ['influence', 'Level of influence', '1 ไม่มีศักยภาพในการลด · 3 มีแผนเบื้องต้นแต่ยังไม่ได้ตั้งเป้า · 5 มีเป้าหมายในการลด'],
+  ['risk', 'Risk', '1 ไม่มีความเสี่ยง · 3 ปานกลาง · 5 มีความเสี่ยง'],
+  ['opportunity', 'Opportunity', '1 ไม่มีโอกาส · 3 ปานกลาง · 5 มีโอกาส']
 ];
+const CFO_S3_CHOICE = {
+  influence: ['ยังไม่ประเมิน', '1 ไม่มีศักยภาพในการลด', '2', '3 มีแผนแต่ยังไม่ตั้งเป้า', '4', '5 มีเป้าหมายในการลด'],
+  risk: ['ยังไม่ประเมิน', '1 ไม่มีความเสี่ยง', '2', '3 ปานกลาง', '4', '5 มีความเสี่ยง'],
+  opportunity: ['ยังไม่ประเมิน', '1 ไม่มีโอกาส', '2', '3 ปานกลาง', '4', '5 มีโอกาส']
+};
 // Quantity formulas (server CFO_CALCS): what the record form asks for and what it turns into.
 const CFO_CALCS = {
   septic: { label: 'บ่อเกรอะ (คน × วัน → kg CH₄)', short: 'บ่อเกรอะ', out: 'kg CH₄', fields: [['people', 'จำนวนคน', 1], ['days', 'จำนวนวันทำงาน', 1]],
@@ -28,7 +31,9 @@ const CFO_CALCS = {
 const CFO_SOURCE_TYPES = [['self', 'Self collect (1st)'], ['supplier', 'Supplier (1st)'], ['th_lci', 'TH LCI DB (2nd)'], ['tgo', 'TGO EF (2nd)'], ['thai_res', 'Thai Res. (2nd)'], ['int_db', 'Int. DB (2nd)'], ['other', 'Other']];
 const CFO_COMPANY = [['company_name', 'ชื่อธุรกิจ'], ['company_address', 'สถานที่ตั้ง'], ['company_area', 'พื้นที่โรงงาน'], ['company_business', 'ประเภทธุรกิจ'],
   ['company_customers', 'กลุ่มลูกค้าหลัก'], ['company_employees', 'จำนวนพนักงาน'], ['company_updated', 'อัพเดท (วันที่)'], ['company_register', 'วันที่ขอขึ้นทะเบียน'], ['company_photo1', 'ลิงก์รูป 1'], ['company_photo2', 'ลิงก์รูป 2'],
-  ['base_year', 'ปีฐาน'], ['target_percent', 'เป้าลด (% จากปีฐาน)'], ['septic_bod', 'บ่อเกรอะ BOD (g/คน/วัน)'], ['septic_b0', 'บ่อเกรอะ B0'], ['septic_mcf', 'บ่อเกรอะ MCF'], ['septic_i', 'บ่อเกรอะ I']];
+  ['base_year', 'ปีฐาน'], ['target_percent', 'เป้าลด (% จากปีฐาน)'], ['septic_bod', 'บ่อเกรอะ BOD (g/คน/วัน)'], ['septic_b0', 'บ่อเกรอะ B0'], ['septic_mcf', 'บ่อเกรอะ MCF'], ['septic_i', 'บ่อเกรอะ I'],
+  ['s3_w_magnitude', 'Fr-03.2 น้ำหนัก Magnitude (%)'], ['s3_w_influence', 'Fr-03.2 น้ำหนัก Influence (%)'], ['s3_w_risk', 'Fr-03.2 น้ำหนัก Risk (%)'],
+  ['s3_w_opportunity', 'Fr-03.2 น้ำหนัก Opportunity (%)'], ['s3_pass', 'Fr-03.2 เกณฑ์มีนัยสำคัญ (คะแนน ≥)'], ['s3_mag_bands', 'Fr-03.2 ช่วง % Magnitude ระดับ 2,3,4,5']];
 let cfoDashTab = 'summary';
 let cfoSetTab = 'team';
 // Setting > Emission Factor (ผู้ใช้กำหนด 2026-11-01): GWP + separate reference tables of the TGO sheet
@@ -275,52 +280,67 @@ function cfoDownload(name, rows) {
 
 // ---------- TGO forms ----------
 
-// Fr-03.2 criteria are % scores (e.g. 5.00%) shown with a data bar as long as the column's largest score, like the user's sheet.
-const cfoS3Pct = (v) => (Number(v) > 0 ? `${Number(v).toFixed(2)}%` : '');
-const cfoS3Bar = (v, max) => (Number(v) > 0 ? ` style="--w:${Math.round((Number(v) / (max || 1)) * 100)}%"` : '');
+// Fr-03.2 (ผู้ใช้กำหนด 2026-11-02): weighted score of levels 1–5, ≥ pass = significant; Sector guidance ✓ = significant at once.
 const cfoS3Name = (r) => `${esc(r.name)}${r.name_th ? `<div class="sum-meta">${esc(r.name_th)}</div>` : ''}`;
-const cfoS3Explain = () => `<details class="cfo-explain"><summary>อธิบายหลักเกณฑ์ในการประเมินความมีนัยสำคัญ</summary><dl>
-  <dt>Source of GHG</dt><dd>องค์กรมีแหล่งปล่อยก๊าซเรือนกระจกนี้หรือไม่</dd>
-  ${CFO_S3_CRITERIA.map(([, label, text]) => `<dt>${label}</dt><dd>${text}</dd>`).join('')}</dl>
-  <p class="sum-meta">แต่ละเกณฑ์ให้คะแนนเป็น % · มีนัยสำคัญ = มีแหล่งปล่อย (P) และมีคะแนนอย่างน้อย 1 เกณฑ์ → นำไปคำนวณ · ที่มา: หัวข้อที่ 12 ข้อกำหนดในการคำนวณและรายงานคาร์บอนฟุตพริ้นท์ขององค์กร</p></details>`;
-const cfoS3Head = `<tr><th>No</th><th>Category</th><th class="cfo-c">Source of GHG</th>${CFO_S3_CRITERIA.map(([, label]) => `<th class="cfo-c">${label}</th>`).join('')}<th class="cfo-c">มีนัยสำคัญ</th><th>Remark</th></tr>`;
+const cfoS3Score = (r, rule) => Math.round(CFO_S3_LEVELS.reduce((sum, [k]) => sum + (Number(r[k]) || 0) * (rule.weights[k] / 100), 0) * 100) / 100;
+const cfoS3Explain = (rule) => {
+  const b = rule.bands;
+  return `<details class="cfo-explain"><summary>หลักเกณฑ์การประเมินความมีนัยสำคัญ (ถ่วงน้ำหนัก)</summary>
+  <div class="table-wrap"><table class="mo-data-table cfo-s3-rule"><thead><tr><th>ประเด็น</th><th class="cfo-c">1</th><th class="cfo-c">2</th><th class="cfo-c">3</th><th class="cfo-c">4</th><th class="cfo-c">5</th><th class="num">น้ำหนัก</th></tr></thead><tbody>
+    <tr><td>Magnitude (% GHG เทียบ Scope 1+2+3)</td><td class="cfo-c">&lt;${b[0]}%</td><td class="cfo-c">${b[0]}–&lt;${b[1]}%</td><td class="cfo-c">${b[1]}–&lt;${b[2]}%</td><td class="cfo-c">${b[2]}–&lt;${b[3]}%</td><td class="cfo-c">≥${b[3]}%</td><td class="num">${rule.weights.magnitude}%</td></tr>
+    <tr><td>Level of influence</td><td class="cfo-c">ไม่มีศักยภาพในการลด</td><td></td><td class="cfo-c">มีแผนเบื้องต้นแต่ยังไม่ได้ตั้งเป้า</td><td></td><td class="cfo-c">มีเป้าหมายในการลด</td><td class="num">${rule.weights.influence}%</td></tr>
+    <tr><td>Risk</td><td class="cfo-c">ไม่มีความเสี่ยง</td><td></td><td class="cfo-c">ปานกลาง</td><td></td><td class="cfo-c">มีความเสี่ยง</td><td class="num">${rule.weights.risk}%</td></tr>
+    <tr><td>Opportunity</td><td class="cfo-c">ไม่มีโอกาส</td><td></td><td class="cfo-c">ปานกลาง</td><td></td><td class="cfo-c">มีโอกาส</td><td class="num">${rule.weights.opportunity}%</td></tr>
+    <tr><td>Sector guidance</td><td class="cfo-c" colspan="5">✓ = Sector guidance แนะนำให้ใช้ประเมิน ถือว่า Category นั้นมีนัยสำคัญ</td><td class="num">—</td></tr>
+    <tr><td>Outsourcing · Employee engagement</td><td class="cfo-c" colspan="5">องค์กรไม่พิจารณาประเด็นนี้</td><td class="num">—</td></tr>
+  </tbody></table></div>
+  <p class="sum-meta">คะแนน = Magnitude × ${rule.weights.magnitude}% + Influence × ${rule.weights.influence}% + Risk × ${rule.weights.risk}% + Opportunity × ${rule.weights.opportunity}% · ≥ ${rule.pass} = มีนัยสำคัญ นับรวมในขอบเขต · &lt; ${rule.pass} = ไม่มีนัยสำคัญ · น้ำหนักและเกณฑ์แก้ที่ Setting > บริษัท · ที่มา: หัวข้อที่ 12 ข้อกำหนดในการคำนวณและรายงานคาร์บอนฟุตพริ้นท์ขององค์กร</p></details>`;
+};
+const cfoS3Head = `<tr><th>No</th><th>Category</th><th class="cfo-c">Source of GHG</th><th class="num">tCO₂e</th><th class="num">% GHG</th>${CFO_S3_LEVELS.map(([, label]) => `<th class="cfo-c">${label}</th>`).join('')}<th class="cfo-c">Sector guidance</th><th class="num">คะแนน</th><th class="cfo-c">ผล</th><th>Remark</th></tr>`;
+const cfoS3Result = (r, rule) => (!r.has_source ? '-' : r.sector || cfoS3Score(r, rule) >= rule.pass ? '<b class="cfo-s3-yes">มีนัยสำคัญ</b>' : '<span class="sum-meta">ไม่มีนัยสำคัญ</span>');
 
 // Dashboard > Fr-03.2 ประเมินความมีนัยสำคัญ Scope 3 (read only; Setting > Scope 3 edits).
 async function cfoDrawS3(body) {
   const d = await a5Api(CFO, `cfo/s3?year=${a5Year}`);
   const note = d.fromYear === d.year ? '' : d.fromYear ? `ยังไม่ได้ประเมินปี ${d.year} · แสดงผลของปี ${d.fromYear}` : `ยังไม่ได้ประเมินปี ${d.year}`;
-  const max = Object.fromEntries(CFO_S3_CRITERIA.map(([k]) => [k, Math.max(0, ...d.rows.filter((r) => r.has_source).map((r) => Number(r[k]) || 0))]));
-  body.innerHTML = chartCard(`ประเมินความมีนัยสำคัญของการปล่อยก๊าซเรือนกระจกทางอ้อม (Scope 3) ปี ${d.year}`, `${cfoS3Explain()}
+  body.innerHTML = chartCard(`ประเมินความมีนัยสำคัญของการปล่อยก๊าซเรือนกระจกทางอ้อม (Scope 3) ปี ${d.year}`, `${cfoS3Explain(d.rule)}
     <div class="table-wrap cfo-s3"><table class="mo-data-table"><thead>${cfoS3Head}</thead><tbody>${d.rows.map((r, i) => `<tr class="${r.significant ? 'is-significant' : 'is-muted'}">
-      <td>${i + 1}</td><td>${cfoS3Name(r)}</td><td class="cfo-c">${r.has_source ? 'P' : '×'}</td>${CFO_S3_CRITERIA.map(([k]) => (r.has_source ? `<td class="num cfo-bar"${cfoS3Bar(r[k], max[k])}>${cfoS3Pct(r[k])}</td>` : '<td></td>')).join('')}
-      <td class="cfo-c"><b>${r.significant ? 'มี' : '-'}</b></td><td>${esc(r.remark)}</td></tr>`).join('')}</tbody></table></div>`,
-    `${note ? `${note} · ` : ''}มีนัยสำคัญ ${d.rows.filter((r) => r.significant).length} / ${d.rows.length} หมวด`);
+      <td>${i + 1}</td><td>${cfoS3Name(r)}</td><td class="cfo-c">${r.has_source ? '✓' : '×'}</td><td class="num">${r.tco2e ? cfoT(r.tco2e) : ''}</td><td class="num">${r.has_source ? `${r.share.toFixed(2)}%` : ''}</td>
+      ${CFO_S3_LEVELS.map(([k]) => `<td class="cfo-c">${r.has_source && r[k] ? r[k] : ''}</td>`).join('')}<td class="cfo-c">${r.has_source && r.sector ? '✓' : ''}</td>
+      <td class="num">${r.has_source ? r.score.toFixed(2) : ''}</td><td class="cfo-c">${cfoS3Result(r, d.rule)}</td><td>${esc(r.remark)}</td></tr>`).join('')}</tbody></table></div>`,
+    `${note ? `${note} · ` : ''}มีนัยสำคัญ ${d.rows.filter((r) => r.significant).length} / ${d.rows.length} หมวด · Scope 1+2+3 ปีนี้ ${cfoT(d.total)} tCO₂e`);
 }
 
-// Setting > Scope 3 (Fr-03.2): P / × per category and a % score per criterion, then save the year.
+// Setting > Scope 3 (Fr-03.2): Source ✓ · Magnitude from the data (read only) · Influence / Risk / Opportunity 1–5 ·
+// Sector guidance ✓ · the score and the result follow each change; Save keeps the year (with the Magnitude shown).
 async function cfoSetS3(body, rerender) {
   const d = await a5Api(CFO, `cfo/s3?year=${a5Year}`);
-  const box = (i, k, on, disabled = false) => `<input type="checkbox" data-s3="${i}" data-k="${k}"${on ? ' checked' : ''}${d.admin && !disabled ? '' : ' disabled'}>`;
-  const pct = (i, k, v, disabled = false) => `<span class="cfo-s3-pct"><input type="number" min="0" max="100" step="0.01" data-s3="${i}" data-k="${k}" value="${Number(v) > 0 ? Number(v) : ''}" placeholder="0"${d.admin && !disabled ? '' : ' disabled'}>%</span>`;
+  const off = d.admin ? '' : ' disabled';
+  const pick = (i, k, v) => `<select data-s3="${i}" data-k="${k}"${off}>${CFO_S3_CHOICE[k].map((label, n) => `<option value="${n}"${Number(v) === n ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
   body.innerHTML = `
     ${d.admin ? `<div class="action-bar a5-actions">${button('cfo-s3-save', 'บันทึก', 'primary')}</div>` : ''}
     ${d.fromYear !== d.year ? `<p class="sum-meta">${d.fromYear ? `ยังไม่ได้ประเมินปี ${d.year} · ตั้งต้นจากปี ${d.fromYear} กดบันทึกเพื่อใช้เป็นของปีนี้` : `ยังไม่ได้ประเมินปี ${d.year}`}</p>` : ''}
-    ${cfoS3Explain()}
+    ${cfoS3Explain(d.rule)}
     <div class="table-wrap cfo-s3"><table class="mo-data-table"><thead>${cfoS3Head}</thead><tbody>${d.rows.map((r, i) => `<tr>
-      <td>${i + 1}</td><td>${cfoS3Name(r)}</td><td class="cfo-c">${box(i, 'has_source', r.has_source)}</td>
-      ${CFO_S3_CRITERIA.map(([k]) => `<td class="cfo-c">${pct(i, k, r[k], !r.has_source)}</td>`).join('')}
-      <td class="cfo-c" id="cfo-s3-sig-${i}"></td><td><input data-s3-remark="${i}" maxlength="1000" value="${esc(r.remark)}"${d.admin ? '' : ' readonly'}></td></tr>`).join('')}</tbody></table></div>`;
+      <td>${i + 1}</td><td>${cfoS3Name(r)}</td><td class="cfo-c"><input type="checkbox" data-s3="${i}" data-k="has_source"${r.has_source ? ' checked' : ''}${off}></td>
+      <td class="num">${r.tco2e ? cfoT(r.tco2e) : ''}</td><td class="num">${r.share.toFixed(2)}%</td><td class="cfo-c" title="จาก % GHG ของปี ${d.year}"><b>${r.magnitude}</b></td>
+      ${['influence', 'risk', 'opportunity'].map((k) => `<td class="cfo-c">${pick(i, k, r[k])}</td>`).join('')}
+      <td class="cfo-c"><input type="checkbox" data-s3="${i}" data-k="sector"${r.sector ? ' checked' : ''}${off}></td>
+      <td class="num" id="cfo-s3-score-${i}"></td><td class="cfo-c" id="cfo-s3-sig-${i}"></td><td><input data-s3-remark="${i}" maxlength="1000" value="${esc(r.remark)}"${d.admin ? '' : ' readonly'}></td></tr>`).join('')}</tbody></table></div>
+    <p class="sum-meta">Magnitude คิดจากข้อมูลปี ${d.year}: tCO₂e ของหมวด ÷ Scope 1+2+3 (${cfoT(d.total)} tCO₂e) · บันทึกแล้วเก็บระดับ ณ วันนั้น</p>`;
   a5Lift(body);
-  const read = (i) => ({ ...d.rows[i], has_source: body.querySelector(`[data-s3="${i}"][data-k="has_source"]`).checked,
-    ...Object.fromEntries(CFO_S3_CRITERIA.map(([k]) => [k, Number(body.querySelector(`[data-s3="${i}"][data-k="${k}"]`).value) || 0])),
+  const val = (i, k) => body.querySelector(`[data-s3="${i}"][data-k="${k}"]`);
+  const read = (i) => ({ ...d.rows[i], has_source: val(i, 'has_source').checked, sector: val(i, 'sector').checked,
+    influence: Number(val(i, 'influence').value), risk: Number(val(i, 'risk').value), opportunity: Number(val(i, 'opportunity').value),
     remark: body.querySelector(`[data-s3-remark="${i}"]`).value });
   const mark = (i) => {
     const r = read(i);
-    CFO_S3_CRITERIA.forEach(([k]) => { body.querySelector(`[data-s3="${i}"][data-k="${k}"]`).disabled = !d.admin || !r.has_source; });
-    $(`cfo-s3-sig-${i}`).innerHTML = r.has_source && CFO_S3_CRITERIA.some(([k]) => r[k] > 0) ? '<b>มี</b>' : '-';
+    ['influence', 'risk', 'opportunity', 'sector'].forEach((k) => { val(i, k).disabled = !d.admin || !r.has_source; });
+    $(`cfo-s3-score-${i}`).textContent = r.has_source ? cfoS3Score(r, d.rule).toFixed(2) : '';
+    $(`cfo-s3-sig-${i}`).innerHTML = cfoS3Result(r, d.rule);
   };
   d.rows.forEach((_, i) => mark(i));
-  body.querySelectorAll('[data-s3]').forEach((node) => { node.onchange = () => mark(Number(node.dataset.s3)); node.oninput = node.onchange; });
+  body.querySelectorAll('[data-s3]').forEach((node) => { node.onchange = () => mark(Number(node.dataset.s3)); });
   if (!d.admin) return;
   $('cfo-s3-save').onclick = async () => {
     await a5Api(CFO, 'cfo/s3', { method: 'PUT', body: { year: a5Year, rows: d.rows.map((_, i) => read(i)) } });
