@@ -645,7 +645,9 @@ export function mountCfo(app) {
   // An activity picks its EF from Setting > Emission Factor (EF พลังงาน / GWP สารเคมี / EF CFP, ผู้ใช้กำหนด 2026-11-01):
   // the reference row is copied into mt_cfo_ef (code ref:<id>:<scope>) because entries keep the EF they were saved with.
   // The copy is reused while the reference values stay the same; after an edit a new copy is made, old entries keep theirs.
-  const efFromRef = async (t, refId, scopeCode, direct = false) => {
+  // conv = { factor, unit }: the 3-3 line of a fuel used in litres with an EF CFP per kg (Fr-04.1 ผู้ใช้กำหนด 2026-11-02):
+  // EF per litre = EF per kg × density (kg/l, Setting > Fuel Properties) · the copy keeps the unit of the activity
+  const efFromRef = async (t, refId, scopeCode, direct = false, conv = null) => {
     const ref = must(await tx.from(t.efRef).select('*').eq('id', refId).maybeSingle());
     if (!ref || !REF_PICK.includes(ref.sheet)) return { error: 'ไม่พบ EF ในตารางอ้างอิง' };
     if (!ref.unit || ref.total == null) return { error: 'รายการนี้เป็นหัวข้อ ไม่มีค่า EF ให้เลือกรายการย่อย' };
@@ -664,9 +666,14 @@ export function mountCfo(app) {
       if (pair?.total != null) row.co2_bio = Number(pair.total);
     }
     if (ref.sheet === 'chemical') Object.assign(row, nonKyoto ? { other: 1, other_gwp: Number(ref.total) } : { hfc: 1, hfc_gwp: Number(ref.total) });
-    const base = `ref:${ref.id}:${scopeCode}${direct ? ':sep' : ''}`;
+    const factor = conv && Number(conv.factor) > 0 && Number(conv.factor) !== 1 ? Number(conv.factor) : null;
+    if (factor) {
+      Object.assign(row, { unit: conv.unit, kgco2e: Math.round(Number(ref.total) * factor * 1e6) / 1e6, co2: null, ch4_fossil: null, ch4: null, n2o: null, co2_bio: null,
+        detail: `${ref.total} kgCO₂e/${ref.unit} × ${factor} ${ref.unit}/${conv.unit}${ref.formula ? ` · ${ref.formula}` : ''}`.slice(0, 500) });
+    }
+    const base = `ref:${ref.id}:${scopeCode}${direct ? ':sep' : ''}${factor ? `:x${factor}` : ''}`;
     const copies = must(await tx.from(t.ef).select('id,code,kgco2e,unit,co2_bio').like('code', `${base}*`).order('id', { ascending: false }))
-      .filter((c) => direct || !c.code.slice(base.length).startsWith(':sep'));
+      .filter((c) => !/^:(sep|x)/.test(c.code.slice(base.length)));
     const same = copies.find((c) => c.unit === row.unit && Number(c.kgco2e) === row.kgco2e && Number(c.co2_bio ?? 0) === Number(row.co2_bio ?? 0));
     if (same) return { id: same.id };
     row.code = copies.length ? `${base}:${copies.length + 1}` : base;
@@ -700,7 +707,10 @@ export function mountCfo(app) {
     if (b.ef3 !== undefined) {
       const [kind, id] = String(b.ef3 || '').split(':');
       if (kind === 'ref') {
-        const up = await efFromRef(t, Number(id), '3-3');
+        const main = must(await tx.from(t.ef).select('unit').eq('id', row.ef_id).maybeSingle());
+        const factor = Number(b.ef3_factor);
+        if (b.ef3_factor !== undefined && b.ef3_factor !== '' && !(factor > 0)) return { error: 'ตัวคูณแปลงหน่วย 3-3 ต้องมากกว่า 0' };
+        const up = await efFromRef(t, Number(id), '3-3', false, factor > 0 ? { factor, unit: main?.unit } : null);
         if (up.error) return up;
         row.ef3_id = up.id;
       } else row.ef3_id = kind === 'ef' && Number(id) ? Number(id) : null;

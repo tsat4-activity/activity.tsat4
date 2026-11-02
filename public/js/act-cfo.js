@@ -861,14 +861,15 @@ function cfoSetActivities(body, m, rerender) {
       ${field('EF id (กรอกได้เลย เช่น CFP-0001)', `<input id="cfo-a-efcode" maxlength="40" list="cfo-ef-codes" autocomplete="off"><datalist id="cfo-ef-codes">${m.refs.filter((x) => x.code && x.unit && x.total != null).map((x) => `<option value="${esc(x.code)}">${esc(x.name)}</option>`).join('')}</datalist>`)}
       ${field('Emission factor', '<select id="cfo-a-ef"></select>')}
       <p class="sum-meta" id="cfo-a-hint"></p>
-      <div id="cfo-a-up">${field('EF การได้มาของเชื้อเพลิง / ไฟฟ้า (Scope 3-3)', '<select id="cfo-a-ef3"></select>')}<p class="sum-meta" id="cfo-a-hint3"></p></div>
+      <div id="cfo-a-up">${field('EF การได้มาของเชื้อเพลิง / ไฟฟ้า (Scope 3-3)', '<select id="cfo-a-ef3"></select>')}<div id="cfo-a-f3box">${field('ตัวคูณแปลงหน่วย (ความหนาแน่น kg/ลิตร)', '<input id="cfo-a-f3" type="number" step="any" min="0">')}</div><p class="sum-meta" id="cfo-a-hint3"></p></div>
       ${field('GWP', `<select id="cfo-a-gwp">${options(m.gwp.map((g) => g.code), a?.gwp_code || m.gwp[0]?.code)}</select>`)}
       ${field('สถานะ', `<select id="cfo-a-status">${options(['Active', 'Inactive'], a?.status || 'Active')}</select>`)}`, async () => {
       const [kind, id] = $('cfo-a-ef').value.split(':');
       const ef3 = $('cfo-a-up').hidden ? '' : $('cfo-a-ef3').value;
+      const f3 = ef3.startsWith('ref:') && !$('cfo-a-f3box').hidden ? $('cfo-a-f3').value : '';
       const body2 = { department: $('cfo-a-dept').value, name: $('cfo-a-name').value, detail: $('cfo-a-detail').value, gwp_code: $('cfo-a-gwp').value, calc: $('cfo-a-calc').value, status: $('cfo-a-status').value,
         type: $('cfo-a-type').value, scope_code: $('cfo-a-scope').value, ...(kind === 'ref' ? { ref_id: id } : kind === 'ef' ? { ef_id: id } : {}),
-        ...(ef3 || a?.ef3_id ? { ef3 } : {}) }; // ef3 only when used, so saving works before db/act/cfo.sql adds the column
+        ...(ef3 || a?.ef3_id ? { ef3 } : {}), ...(f3 ? { ef3_factor: f3 } : {}) }; // ef3 only when used, so saving works before db/act/cfo.sql adds the column
       await a5Api(CFO, `cfo/activities${a ? `/${a.id}` : ''}`, { method: a ? 'PATCH' : 'POST', body: body2 });
       toast('บันทึกแล้ว');
       closePopup();
@@ -909,7 +910,20 @@ function cfoSetActivities(body, m, rerender) {
       fillEf3();
     };
     // Scope 1 fuel and Scope 2 electricity: the same quantity is also counted in 3-3 (การได้มาของเชื้อเพลิง / ไฟฟ้า)
-    // with an EF of the same unit, like the TGO Fr-04.1 sheet (ผู้ใช้กำหนด 2026-11-01)
+    // with an EF of the same unit, like the TGO Fr-04.1 sheet (ผู้ใช้กำหนด 2026-11-01). A fuel in litres can also use an EF CFP
+    // per kg (การได้มาของเชื้อเพลิง ของ อบก. เป็น kg): × density of Setting > Fuel Properties (ผู้ใช้กำหนด 2026-11-02)
+    const fuelOf = (name) => (/diesel|ดีเซล|\bB\d+\b/i.test(name) ? 'Diesel' : /gasohol|gasoline|เบนซิน|โซฮอล|\bE\d+\b/i.test(name) ? 'Gasoline' : /LPG|ก๊าซหุงต้ม/i.test(name) ? 'LPG' : null);
+    // [name, detail]: ก๊าซหุงต้ม has two TGO items, the one from the refinery (กลั่นน้ำมันดิบ) is the LPG bought as fuel
+    const CFP_UPSTREAM = { Diesel: [/^น้ำมันดีเซล/], Gasoline: [/^แก๊สโซลีน$/], LPG: [/^ก๊าซหุงต้ม$/, /กลั่น/] };
+    const densityOf = (fuel) => m.refs.find((r) => r.sheet === 'fuel' && r.grp === 'Density' && r.name === fuel)?.total;
+    const fillF3 = (mainUnit, mainName) => {
+      const [kind, id] = $('cfo-a-ef3').value.split(':');
+      const up = kind === 'ref' && m.refs.find((r) => String(r.id) === id);
+      const convert = up && cfoUnitKey(mainUnit) === 'l' && cfoUnitKey(up.unit) === 'kg';
+      $('cfo-a-f3box').hidden = !convert;
+      if (convert && !$('cfo-a-f3').value) $('cfo-a-f3').value = densityOf(fuelOf(mainName)) ?? '';
+      return convert;
+    };
     const fillEf3 = () => {
       const [kind, id] = $('cfo-a-ef').value.split(':');
       const unit = kind === 'ref' ? m.refs.find((r) => String(r.id) === id)?.unit : kind === 'ef' ? current?.unit : null;
@@ -920,7 +934,9 @@ function cfoSetActivities(body, m, rerender) {
       const box = $('cfo-a-ef3');
       const keep = box.value || (a?.ef3_id ? `ef:${a.ef3_id}` : '');
       const own = a?.ef3_id ? m.ef.find((e) => e.id === a.ef3_id) : null;
-      const groups = unit ? cfoEfGroups((r) => (r.sheet === 'cfp' || r.sheet === 'energy') && !cfoBio(r) && cfoUnitKey(r.unit) === cfoUnitKey(unit) && r.id !== Number(id)) : '';
+      const mainName = kind === 'ref' ? m.refs.find((r) => String(r.id) === id)?.name || '' : current?.name || '';
+      const fits = (r) => cfoUnitKey(r.unit) === cfoUnitKey(unit) || (r.sheet === 'cfp' && cfoUnitKey(unit) === 'l' && cfoUnitKey(r.unit) === 'kg');
+      const groups = unit ? cfoEfGroups((r) => (r.sheet === 'cfp' || r.sheet === 'energy') && !cfoBio(r) && fits(r) && r.id !== Number(id)) : '';
       box.innerHTML = `<option value="">- ไม่คิด 3-3 -</option>${own ? `<optgroup label="EF ที่ใช้อยู่"><option value="ef:${own.id}">${esc(cfoEfLabel(own))}</option></optgroup>` : ''}${groups}`;
       if (keep && box.querySelector(`option[value="${keep}"]`)) box.value = keep;
       else if (kind === 'ref') {
@@ -929,8 +945,16 @@ function cfoSetActivities(body, m, rerender) {
         const years = /ปี (\d{4}-\d{4})/.exec(main?.name || '')?.[1];
         const pair = years && m.refs.find((r) => r.sheet === main.sheet && r.grp === main.grp && r.name.includes(years) && /SCOPE 3/i.test(r.name));
         if (pair && box.querySelector(`option[value="ref:${pair.id}"]`)) box.value = `ref:${pair.id}`;
+        // fuel: the TGO "การได้มาของเชื้อเพลิง" item (EF CFP) of the same fuel, e.g. Diesel B7 → น้ำมันดีเซล / น้ำมันโซล่าร์
+        const [name, detail] = CFP_UPSTREAM[fuelOf(mainName)] || [];
+        const fuelUp = !pair && name && m.refs.find((r) => r.sheet === 'cfp' && name.test(r.name) && (!detail || detail.test(r.formula || '')) && box.querySelector(`option[value="ref:${r.id}"]`));
+        if (fuelUp) { box.value = `ref:${fuelUp.id}`; $('cfo-a-f3').value = ''; }
       }
-      $('cfo-a-hint3').textContent = unit ? `ปริมาณเดียวกัน (${unit}) คิดอีกบรรทัดใน 3-3 · ${type === '2' ? 'ไฟฟ้า grid mix เลือกแถว SCOPE 3 ของปีเดียวกันให้' : `EF การได้มาของเชื้อเพลิง เพิ่มที่ Setting > Emission Factor > EF CFP (หน่วย ${unit})`}` : 'เลือก EF ด้านบนก่อน';
+      const convert = fillF3(unit, mainName);
+      const up = m.refs.find((r) => `ref:${r.id}` === box.value);
+      $('cfo-a-hint3').textContent = !unit ? 'เลือก EF ด้านบนก่อน' : convert
+        ? `ปริมาณเดียวกัน (${unit}) คิดใน 3-3 · ${up.code || ''} ${cfoRefNum(up.total)} kgCO₂e/kg × ${$('cfo-a-f3').value || '?'} kg/ลิตร = ${cfoRefNum(up.total * Number($('cfo-a-f3').value || 0))} kgCO₂e/ลิตร`
+        : `ปริมาณเดียวกัน (${unit}) คิดอีกบรรทัดใน 3-3 · ${type === '2' ? 'ไฟฟ้า grid mix เลือกแถว SCOPE 3 ของปีเดียวกันให้' : 'EF การได้มาของเชื้อเพลิง: EF CFP ของ อบก. (หน่วย kg คูณความหนาแน่นให้)'}`;
     };
     fillScope();
     fillCalc();
@@ -952,6 +976,8 @@ function cfoSetActivities(body, m, rerender) {
       else $('cfo-a-hint').textContent = `${hit.code} ไม่ตรงกับ Scope / หมวด / สูตรที่เลือก ให้เปลี่ยน Scope หรือหมวดก่อน`;
     };
     $('cfo-a-ef').onchange = () => { showCode(); fillEf3(); };
+    $('cfo-a-ef3').onchange = () => { $('cfo-a-f3').value = ''; fillEf3(); };
+    $('cfo-a-f3').oninput = () => fillEf3();
     showCode();
   };
   $('cfo-add').onclick = () => form(null);
