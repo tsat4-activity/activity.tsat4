@@ -239,8 +239,9 @@ if (!fs.existsSync(importFile)) {
   const by = Object.fromEntries(v.updates.map((u) => [u.id, u.status]));
   ok(v.scores.get(1) === 0 && by[10] === 'OVERDUE', 'no action -> item 0 + OVERDUE');
   ok(by[11] === 'CLOSED' && v.scores.get(2) === 4, 'action + score 4 -> CLOSED');
-  ok(by[12] === 'OPEN' && v.updates.find((u) => u.id === 12).carry, 'action + score 2 (still below 3) -> carries on');
-  ok(verifyIssues([open[2]], new Map([[3, 3]])).updates[0].status === 'CLOSED', 'action + score 3 (no longer below 3) -> CLOSED');
+  ok(by[12] === 'OPEN' && v.updates.find((u) => u.id === 12).carry, 'action + score 2 (still 3 or below) -> carries on');
+  ok(verifyIssues([open[2]], new Map([[3, 3]])).updates[0].status === 'OPEN', 'action + score 3 (still 3 or below) -> carries on');
+  ok(verifyIssues([open[2]], new Map([[3, 4]])).updates[0].status === 'CLOSED', 'action + score 4 (>= 4) -> CLOSED');
   ok(by[13] === 'OVERDUE' && v.scores.get(4) === 0, 'action text without after photo counts as no action');
   ok(weekStartIso(2026, 10, 3) === '2026-10-15', 'week 3 starts on the 15th');
   const plans = [{ year: 2026, month: 10, week: 1 }, { year: 2027, month: 1, week: 2 }, { year: 2026, month: 9, week: 1 }];

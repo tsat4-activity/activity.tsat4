@@ -157,7 +157,7 @@ async function atxAuditDetail(activity, id) {
       <p class="sum-meta">${esc(ATX_TYPES[a.audit_type])} · ${esc(a.area?.code || '')} ${esc(a.area?.name || '')} · ${atxDate(a.audited_at)}${a.team ? ` · ทีม ${esc(a.team)}` : ''}</p>
       <p><strong>${Number(a.total_score)}</strong> คะแนน · <strong>${Number(a.percent_score).toFixed(2)}%</strong> · ${a.result === 'PASS' ? 'PASS' : 'ต้องปรับปรุง'}</p>
       <p class="sum-meta">ผู้ตรวจ: ${people('participated')} · ผู้รับตรวจ: ${people('receiver')}</p>
-      ${groups.map((g) => `<div class="atx-detail-group"><strong>${esc(a5GroupName(activity, g))}</strong>${d.scores.filter((s) => s.s_group === g).map((s) => `<div class="atx-detail-row"><span>${s.item_no}. ${esc(s.title)}</span><span class="${Number(s.score) < 3 ? 'atx-low' : ''}">${Number(s.score)}/${s.score_max}</span></div>`).join('')}</div>`).join('')}
+      ${groups.map((g) => `<div class="atx-detail-group"><strong>${esc(a5GroupName(activity, g))}</strong>${d.scores.filter((s) => s.s_group === g).map((s) => `<div class="atx-detail-row"><span>${s.item_no}. ${esc(s.title)}</span><span class="${Number(s.score) <= 3 ? 'atx-low' : ''}">${Number(s.score)}/${s.score_max}</span></div>`).join('')}</div>`).join('')}
       ${d.issues.length ? `<p><strong>Issue ${d.issues.length} รายการ</strong></p>${d.issues.map((i) => `<div class="atx-detail-row"><span>${esc(i.issue_no)} · ${esc(i.description)}</span>${atxBadge(i.status)}</div>`).join('')}` : ''}
     </div>`, () => closePopup(), 'ปิด');
 }
@@ -204,12 +204,12 @@ async function atxForm(body, activity, me, editId = 0) {
       const issue = open.get(item.id);
       const locked = forcedZero(issue);
       const value = scoreOf(item);
-      const needIssue = state.type === 'COMMITTEE' && !issue && !state.ownItems.has(item.id) && value != null && value < form.settings.issue_score;
+      const needIssue = state.type === 'COMMITTEE' && !issue && !state.ownItems.has(item.id) && value != null && value <= form.settings.issue_score;
       return `<div class="atx-item${value == null ? '' : ' is-scored'}">
         <div class="atx-item-title"><span>${item.item_no}.</span> ${esc(actNoLead(item.title))}${issue ? `<div class="atx-carry">Issue เดิม ${esc(issue.issue_no)}: ${esc(issue.description)} · ${locked ? '<b>ยังไม่มี Action → ข้อนี้ได้ 0</b>' : 'มี Action แล้ว ให้ ≥ 4 เพื่อปิด Issue'}</div>` : ''}</div>
-        <div class="atx-scores">${locked ? '<span class="atx-zero">0</span>' : Array.from({ length: item.score_max }, (_, i) => i + 1).map((n) => `<button type="button" class="atx-score${value === n ? ' is-on' : ''}${n < form.settings.issue_score ? ' is-low' : ''}" data-score="${item.id}:${n}">${n}</button>`).join('')}</div>
+        <div class="atx-scores">${locked ? '<span class="atx-zero">0</span>' : Array.from({ length: item.score_max }, (_, i) => i + 1).map((n) => `<button type="button" class="atx-score${value === n ? ' is-on' : ''}${n <= form.settings.issue_score ? ' is-low' : ''}" data-score="${item.id}:${n}">${n}</button>`).join('')}</div>
         ${needIssue ? `<div class="atx-issue">
-          ${field(`เปิด Issue (ได้ต่ำกว่า ${form.settings.issue_score}) รายละเอียดปัญหา`, `<textarea id="atx-text-${item.id}" rows="2" maxlength="2000" data-text="${item.id}">${esc(state.text[item.id] || '')}</textarea>`)}
+          ${field(`เปิด Issue (ได้ ${form.settings.issue_score} หรือต่ำกว่า) รายละเอียดปัญหา`, `<textarea id="atx-text-${item.id}" rows="2" maxlength="2000" data-text="${item.id}">${esc(state.text[item.id] || '')}</textarea>`)}
           ${field('รูปปัญหา 16:9', `<input id="atx-photo-${item.id}" type="file" accept="image/*"><img id="atx-photo-${item.id}-preview" class="atx-photo${state.photo[item.id] ? '' : ' d-none'}" src="${state.photo[item.id] || ''}" alt="">`)}
         </div>` : ''}
       </div>`;
@@ -268,7 +268,7 @@ async function atxForm(body, activity, me, editId = 0) {
 function atxSave(body, activity, me, state, form, open) {
   const missing = form.items.filter((i) => state.scores[i.id] == null && !(open.get(i.id) && !(String(open.get(i.id).action_description || '').trim() && open.get(i.id).after_photos > 0))).map((i) => i.item_no);
   if (missing.length) return toast(`ให้คะแนนให้ครบ (ข้อที่ ${missing.join(', ')})`, 'error');
-  const need = state.type === 'COMMITTEE' ? form.items.filter((i) => !open.get(i.id) && !state.ownItems.has(i.id) && state.scores[i.id] < form.settings.issue_score) : [];
+  const need = state.type === 'COMMITTEE' ? form.items.filter((i) => !open.get(i.id) && !state.ownItems.has(i.id) && state.scores[i.id] <= form.settings.issue_score) : [];
   const noText = need.filter((i) => !String(state.text[i.id] || '').trim()).map((i) => i.item_no);
   if (noText.length) return toast(`ใส่รายละเอียด Issue (ข้อที่ ${noText.join(', ')})`, 'error');
   const noPhoto = need.filter((i) => !state.photo[i.id]).map((i) => i.item_no);

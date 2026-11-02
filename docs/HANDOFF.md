@@ -18,6 +18,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Antigravity [5S] · ปรับเกณฑ์เปิด Issue 5S: ข้อที่ได้คะแนน 3 หรือต่ำกว่า (≤ 3 คือ 1, 2, 3) ต้องเปิด Issue พร้อมรูปและรายละเอียดปัญหา (ปุ่ม 1–3 แสดงสีแดง และเปิดช่อง Issue ทันทีเมื่อเลือกคะแนน) และปิด Issue เมื่อมี Action พร้อมตรวจประเมินรอบถัดไปได้คะแนน ≥ 4 (4 หรือ 5) ตรงตามข้อความแนะนำและข้อมูลจริงเดิม (`public/js/act-tx.js`, `server/modules/act/transaction.js`, `scripts/act-sql.js`, `db/act/5s.sql`, `db/setup.sql`)
+
 - 2026-11-02 · Claude [5S] · CFO EF CFP เรียงคอลัมน์ตาม อบก. + id (mt_cfo_ef_ref.code, CFP-0001…) ใช้กรอกในกิจกรรม / วัสดุ · item_no = ลำดับ อบก. · ต้องรัน db/act/cfo.sql
 
 - 2026-11-02 · Antigravity [5S] · อ่าน `inbox/master_5s.xlsx` เพิ่มข้อมูลตั้งต้น 5S ครบ 4 ส่วน: พื้นที่ตรวจประเมิน 34 พื้นที่ (`mt_5s_area`), ตัวแทนพื้นที่ตามรหัสพนักงาน 34 พื้นที่ (`role = 'owner', unit = 'audit'`), ทีมตรวจประเมิน 17 รายชื่อ (`chairman` 2 + `auditor` A–I 15 ใน `unit = 'audit'`), และหัวข้อตรวจประเมิน 25 ข้อ (`mt_5s_checklist` ปี 2026) ทั้งผ่านสคริปต์ `scripts/import_5s_excel.py` (`inbox/import_5s_setup.sql`, `inbox/import_5s/01`–`04`) และ auto-seed อัตโนมัติบนเซิร์ฟเวอร์ (`ensure5sMaster` ใน `audit.js`) · ปรับ `.page-bar` ใน `public/app.css` ให้อยู่แถวเดียวกันบนจอ Desktop และส่งรายชื่อพื้นที่ทั้งหมดใน `GET /api/act/:activity/audits` เพื่อให้ตัวกรองพื้นที่ใน `5S > Transaction` แสดงครบแม้ยังไม่มีใบตรวจ

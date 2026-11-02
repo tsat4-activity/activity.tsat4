@@ -138,7 +138,7 @@ create table if not exists public.mt_5s_audit_plan (
 
 insert into public.mt_5s_setting (key, value) values
   ('pass_percent', '80'),                -- ผ่านเมื่อ % ≥ 80
-  ('issue_score', '3'),                  -- Committee: ข้อที่ได้ต่ำกว่า 3 ต้องเปิด Issue (รูป 16:9 + รายละเอียด)
+  ('issue_score', '3'),                  -- Committee: ข้อที่ได้ 3 หรือต่ำกว่า (≤ 3) ต้องเปิด Issue (รูป 16:9 + รายละเอียด)
   ('issue_due_days_before_next', '15'),  -- ผู้รับผิดชอบพื้นที่ Action ให้เสร็จก่อนตรวจรอบถัดไป 15 วัน
   ('issue_photo_max', '1'),              -- รูปปัญหา 16:9 1 รูป
   ('self_audit_due_day', '10')           -- Self Audit ภายในวันที่ 10 ของเดือน
