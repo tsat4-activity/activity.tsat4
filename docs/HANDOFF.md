@@ -24,6 +24,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Antigravity [5S] · ตรวจสอบและลบไฟล์ที่ไม่ใช้งาน/ไฟล์ซ้ำซ้อนในระบบ: ลบ `db/act/5s_team_roles.sql` (ไฟล์ stub เก่าที่มีเพียงคำสั่ง note ย้ายบทบาท), ลบ `db/act/5s_checklist_seed.sql` (ข้อมูลหัวข้อตรวจประเมินซ้ำซ้อนกับ `inbox/import_5s_setup.sql` และระบบ auto-seed บน server), ลบไฟล์ชั่วคราวใน inbox (`inbox/check_login.sql`, `inbox/drop_activity02.sql`, `inbox/cfp_tgo.json`), และปรับปรุง `db/README.md` ให้สะท้อนไฟล์ SQL ที่ใช้งานจริงในปัจจุบัน
+
 - 2026-11-02 · Antigravity [5S] · ปรับการสุ่มคะแนน 5S ให้กระจายช่วงอย่างสมจริง (Self: 82%–93%, Committee: 82%–90%) พร้อมสุ่มแผนตรวจและให้ใบตรวจ Committee ตรวจตามแผนงาน: สร้าง `mt_5s_audit_plan` 102 แถว (3 รอบ มี.ค., มิ.ย., ก.ย. กระจาย 4 สัปดาห์ตามทีม A–I), ปรับ `tx_5s_audit` ให้สัปดาห์และทีมตรงตามแผนงานเป๊ะ, แก้ไข `.ch-target` และ `.ch-target-line` บนกราฟให้คลิกเพื่อปรับเป้าหมายได้จริงด้วย `pointer-events: auto` และรองรับ auto-seed บน server (`public/js/act-5s.js`, `public/app.css`, `server/modules/act/audit.js`, `server/modules/act/audit-mock.js`, `scripts/generate_5s_mock_data.py`, `inbox/mock_5s_audits_2026.sql`)
 
 - 2026-11-02 · Antigravity [5S] · สคริปต์สุ่มสร้างข้อมูลผลการตรวจประเมิน 5S ปี 2026 (`scripts/generate_5s_mock_data.py` -> `inbox/mock_5s_audits_2026.sql`): Self Audit 374 ใบ (ม.ค.–พ.ย. ทุกพื้นที่ ก่อนวันที่ 10 คะแนนเฉลี่ย 83%–92%) และ Committee Audit 102 ใบ (รอบ มี.ค., มิ.ย., ก.ย. ทุกพื้นที่ คะแนนเฉลี่ย 80%–90%) ไม่รวมเดือน ธ.ค. ตามคำขอ พร้อมคะแนนครบทั้ง 25 ข้อย่อย 11,900 แถว นำเข้าได้ทันทีใน Supabase SQL Editor (`tx_5s_audit`, `tx_5s_audit_score`)
