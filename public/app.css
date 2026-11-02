@@ -180,6 +180,9 @@ body[data-zone]{--th-bg:color-mix(in srgb,var(--zone) 18%,var(--mo-surface));--t
 th{background:var(--th-bg);color:var(--th-ink);font-weight:500;font-size:11px}
 table.mo-data-table thead th{position:sticky;top:0;z-index:5;height:40px;background:var(--th-bg);color:var(--th-ink);box-shadow:inset 0 -1px 0 var(--th-line)}
 table.mo-data-table thead th.has-menu{height:44px}
+/* every table (ผู้ใช้กำหนด 2026-11-02): a text cell stays within 320px and ends in … — the full text shows on hover
+   (core.js OVERFLOW_TIP) · group / band rows (colspan) keep the full width · a page may set its own column widths */
+table.mo-data-table td{max-width:320px}table.mo-data-table td[colspan]{max-width:none}
 .table-wrap.sheet{--table-head:44px}
 tbody tr:hover{background:var(--drive-hover)}
 table.mo-data-table tbody tr.row-pick{cursor:pointer}
@@ -745,7 +748,13 @@ td.cfo-ref{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:no
 .cfo-person strong{font-size:12.5px;font-weight:500;text-align:center}.cfo-person small{font-size:11px;color:var(--mo-text-muted)}
 .cfo-tier-rule{display:flex;align-items:center;gap:8px;color:var(--tier);font-size:13px;font-weight:500}
 .cfo-tier-rule::before{content:"";flex:1;border-top:2px dashed var(--tier)}
-.cfo-scope-table td:nth-child(-n+3){white-space:normal;min-width:110px}
+/* CFO Transaction (Scope 1 / 2 / 3): fixed share per column, long text … (full on hover) */
+.cfo-scope-table :is(td,th):nth-child(1){width:140px;max-width:140px}.cfo-scope-table :is(td,th):nth-child(2){width:220px;max-width:220px}
+.cfo-scope-table :is(td,th):nth-child(3){width:200px;max-width:200px}.cfo-scope-table :is(td,th):nth-child(4){width:90px;max-width:90px}
+.cfo-scope-table :is(td,th):nth-child(5){width:150px;max-width:150px}.cfo-scope-table :is(td,th):nth-child(6){width:90px;max-width:90px}
+.cfo-scope-table :is(td,th):nth-child(7){width:60px;max-width:60px}.cfo-scope-table :is(td,th):nth-child(8){width:90px;max-width:90px}
+.cfo-scope-table :is(td,th):nth-child(9){width:100px;max-width:100px}.cfo-scope-table :is(td,th):nth-child(10){width:40px;max-width:40px}
+.cfo-scope-table td[colspan]{max-width:none}
 /* CFO Summary (carbon-form style, cool green). Marks: solid border, same colour inside 60% transparent. */
 /* Shared charts (core.js chartPlot / chartKpi / chartCard / chartPill): one frame and size everywhere.
    Tone by section (CHART_THEMES): ระบบงาน warm, ระบบกิจกรรม cool. Marks: solid edge + same colour inside 60% transparent. */
