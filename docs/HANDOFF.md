@@ -18,6 +18,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Antigravity [5S] · แก้ไขบั๊ก `Cannot read properties of undefined (reading 'admin')` ในหน้า 5S Summary โดยเพิ่ม fallback โหลดข้อมูล `me` และตัวแปร `isAdmin = Boolean(me?.access?.admin)` ใน `a5DrawSummary` (`public/js/act-5s.js`)
+
 - 2026-11-02 · Claude [5S] · CFO id ของ EF ตามเอกสาร CFO อบก. (ก.พ. 2569 = ค่าเดียวกับ EF TGO AR5 V2): EF พลังงาน + GWP สารเคมี CFO-0001…0123 · mt_cfo_ef.ref_id FK → mt_cfo_ef_ref (กิจกรรมเก่าเติมให้ 26/34, CO2 แก๊สเชื่อม + บ่อเกรอะไม่มีในเอกสาร) · หน้ากิจกรรมมีคอลัมน์ EF id · ต้องรัน db/act/cfo.sql
 
 - 2026-11-02 · Antigravity [5S] · ปรับระยะห่างคอลัมน์ตาราง 5S Summary ให้เท่ากันทุกช่อง (`colgroup` เดือน 28%, ข้อมูล 4 ช่องละ 18% เท่ากัน) และเพิ่มระบบปรับ target รายปี (`PUT /api/act/:activity/target`, จัดเก็บ `pass_percent:<year>` แยกตามปีพร้อม fallback ค่าตั้งต้น): แอดมินสามารถคลิกที่ป้าย Target บนกราฟหรือปุ่มเป้าหมายในแถบเครื่องมือเพื่อปรับเป้าหมายของแต่ละปีได้ทันที (`public/js/act-5s.js`, `public/app.css`, `server/modules/act/audit.js`, `server/modules/act/transaction.js`)
