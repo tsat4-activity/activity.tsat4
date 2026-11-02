@@ -18,6 +18,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-02 · Claude [5S] · CFO EF CFP เรียงคอลัมน์ตาม อบก. + id (mt_cfo_ef_ref.code, CFP-0001…) ใช้กรอกในกิจกรรม / วัสดุ · item_no = ลำดับ อบก. · ต้องรัน db/act/cfo.sql
+
 - 2026-11-02 · Antigravity [5S] · อ่าน `inbox/master_5s.xlsx` เพิ่มข้อมูลตั้งต้น 5S ครบ 4 ส่วน: พื้นที่ตรวจประเมิน 34 พื้นที่ (`mt_5s_area`), ตัวแทนพื้นที่ตามรหัสพนักงาน 34 พื้นที่ (`role = 'owner', unit = 'audit'`), ทีมตรวจประเมิน 17 รายชื่อ (`chairman` 2 + `auditor` A–I 15 ใน `unit = 'audit'`), และหัวข้อตรวจประเมิน 25 ข้อ (`mt_5s_checklist` ปี 2026) ทั้งผ่านสคริปต์ `scripts/import_5s_excel.py` (`inbox/import_5s_setup.sql`, `inbox/import_5s/01`–`04`) และ auto-seed อัตโนมัติบนเซิร์ฟเวอร์ (`ensure5sMaster` ใน `audit.js`) · ปรับ `.page-bar` ใน `public/app.css` ให้อยู่แถวเดียวกันบนจอ Desktop และส่งรายชื่อพื้นที่ทั้งหมดใน `GET /api/act/:activity/audits` เพื่อให้ตัวกรองพื้นที่ใน `5S > Transaction` แสดงครบแม้ยังไม่มีใบตรวจ
 
 - 2026-11-02 · Claude [5S] · CFO ตาราง EF อ้างอิงมีปุ่ม Export (CSV) / Import (.xlsx ผ่าน SheetJS cdnjs หรือ .csv) · POST cfo/ref/import ตรวจทุกแถวก่อน มี id = แก้ ไม่มี = เพิ่ม · ไม่ต้องรัน SQL

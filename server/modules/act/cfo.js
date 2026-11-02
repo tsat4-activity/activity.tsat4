@@ -20,6 +20,9 @@ const REF_SHEETS = ['energy', 'chemical', 'ipcc', 'fuel', 'cfp'];
 // tables an activity can take its EF from (per unit of what it records; IPCC is per TJ and fuel holds properties)
 const REF_PICK = ['energy', 'chemical', 'cfp'];
 const REF_NUMBERS = ['co2', 'ch4_fossil', 'ch4', 'n2o', 'total', 'ratio'];
+// id shown to users (mt_cfo_ef_ref.code): prefix per table, CFP-0001 … · a code is typed in activities and materials
+const REF_PREFIX = { cfp: 'CFP' };
+const refCode = (v) => String(v ?? '').trim().toUpperCase().slice(0, 40) || null;
 // Weighted Fr-03.2 (ผู้ใช้กำหนด 2026-11-02): levels 1–5 · score = Σ level × weight · significant = source and (sector ✓ or score ≥ pass)
 export const S3_LEVELS = ['magnitude', 'influence', 'risk', 'opportunity'];
 export const s3Rule = (settings = {}) => {
@@ -376,7 +379,8 @@ export function mountCfo(app) {
   // Reference rows are for reading and copying only (nothing is computed from them), so they stay editable.
   // Total left empty with gas values = CO₂ + gas × GWP of the Active set (AR5 first), like the sheet's formula.
   const refInput = async (t, b) => {
-    const row = { sheet: REF_SHEETS.includes(b.sheet) ? b.sheet : null, grp: text(b.grp, 120), name: text(b.name, 300), formula: text(b.formula, 120), unit: text(b.unit, 30),
+    const row = { sheet: REF_SHEETS.includes(b.sheet) ? b.sheet : null, grp: text(b.grp, 120), name: text(b.name, 300), formula: text(b.formula, 300), unit: text(b.unit, 30),
+      code: refCode(b.code), item_no: text(String(b.item_no ?? '').replace(/\.$/, ''), 20),
       reference: text(b.reference, 1000), remark: text(b.remark, 1000), status: b.status === 'Inactive' ? 'Inactive' : 'Active' };
     for (const k of REF_NUMBERS) row[k] = numOrNull(b[k]);
     row.sort_no = numOrNull(b.sort_no);
@@ -389,10 +393,20 @@ export function mountCfo(app) {
     }
     return { row };
   };
+  const nextCodes = async (t, sheet) => {
+    const prefix = REF_PREFIX[sheet];
+    if (!prefix) return () => null;
+    const used = must(await tx.from(t.efRef).select('code').like('code', `${prefix}-*`));
+    let n = Math.max(0, ...used.map((r) => Number(String(r.code).slice(prefix.length + 1)) || 0));
+    return () => `${prefix}-${String((n += 1)).padStart(4, '0')}`;
+  };
+  const codeTaken = async (t, code, id) => code && must(await tx.from(t.efRef).select('id').eq('code', code)).some((r) => r.id !== id);
   route('post', '/api/act/:activity/cfo/ref', async (req, res, activity, t) => {
     if (!(await requireAdmin(req, res, activity, thisYear()))) return;
     const { row, error } = await refInput(t, req.body || {});
     if (error) return fail(res, 400, error);
+    if (await codeTaken(t, row.code)) return fail(res, 400, `id ${row.code} มีอยู่แล้ว`);
+    if (!row.code) row.code = (await nextCodes(t, row.sheet))();
     if (row.sort_no == null) {
       const last = must(await tx.from(t.efRef).select('sort_no').eq('sheet', row.sheet).order('sort_no', { ascending: false }).limit(1));
       row.sort_no = (last[0]?.sort_no || 0) + 1;
@@ -407,6 +421,8 @@ export function mountCfo(app) {
     const { row, error } = await refInput(t, req.body || {});
     if (error) return fail(res, 400, error);
     if (row.sort_no == null) row.sort_no = current.sort_no;
+    if (await codeTaken(t, row.code, current.id)) return fail(res, 400, `id ${row.code} มีอยู่แล้ว`);
+    if (!row.code) delete row.code;
     must(await tx.from(t.efRef).update(row).eq('id', current.id));
     res.json({ ok: true });
   });
@@ -418,17 +434,27 @@ export function mountCfo(app) {
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
     if (!sheet) return fail(res, 400, 'เลือกตาราง');
     if (!list.length) return fail(res, 400, 'ไฟล์ไม่มีข้อมูล');
-    const have = new Map((await fetchAll(() => tx.from(t.efRef).select('id,sort_no').eq('sheet', sheet))).map((r) => [r.id, r]));
+    const all = await fetchAll(() => tx.from(t.efRef).select('id,sheet,code,sort_no'));
+    const have = new Map(all.filter((r) => r.sheet === sheet).map((r) => [r.id, r]));
+    const byCode = new Map(all.filter((r) => r.code).map((r) => [r.code, r]));
     let next = Math.max(0, ...[...have.values()].map((r) => r.sort_no || 0));
+    const newCode = await nextCodes(t, sheet);
     const adds = [];
     const updates = [];
     const errors = [];
+    const seen = new Set();
+    let group = null;
     for (const [i, b] of list.entries()) {
-      const { row, error } = await refInput(t, { ...b, sheet, ...(sheet === 'ipcc' && !b.unit ? { unit: 'TJ' } : {}) });
-      if (error) { errors.push(`แถว ${b.line || i + 2}: ${error}`); continue; }
-      const id = Number(b.id);
-      if (id && have.has(id)) updates.push({ id, row: { ...row, sort_no: row.sort_no ?? have.get(id).sort_no } });
-      else adds.push({ ...row, sort_no: row.sort_no ?? (next += 1) });
+      const line = b.line || i + 2;
+      group = String(b.grp ?? '').trim() || group; // the TGO file merges กลุ่ม over its rows
+      const { row, error } = await refInput(t, { ...b, grp: group, sheet, ...(sheet === 'ipcc' && !b.unit ? { unit: 'TJ' } : {}) });
+      if (error) { errors.push(`แถว ${line}: ${error}`); continue; }
+      if (row.code && seen.has(row.code)) { errors.push(`แถว ${line}: id ${row.code} ซ้ำในไฟล์`); continue; }
+      if (row.code) seen.add(row.code);
+      const old = (row.code && byCode.get(row.code)) || (!row.code && Number(b.id) && have.get(Number(b.id))) || null;
+      if (old && old.sheet !== sheet) { errors.push(`แถว ${line}: id ${row.code} เป็นของตารางอื่น`); continue; }
+      if (old) updates.push({ id: old.id, row: { ...row, code: row.code || old.code, sort_no: row.sort_no ?? old.sort_no } });
+      else adds.push({ ...row, code: row.code || newCode(), sort_no: row.sort_no ?? (next += 1) });
     }
     if (errors.length) return fail(res, 400, `ไม่ได้บันทึก มี ${errors.length} แถวที่ผิด: ${errors.slice(0, 5).join(' · ')}${errors.length > 5 ? ' …' : ''}`);
     if (req.body?.save !== true) return res.json({ ok: true, saved: false, add: adds.length, update: updates.length });
@@ -481,9 +507,11 @@ export function mountCfo(app) {
     if (given('ef_ref_id') || given('ef_name')) {
       if (b.ef_name !== undefined && String(b.ef_name || '').trim()) {
         const want = String(b.ef_name).trim().toLowerCase();
-        const refs = preloadedRefs || must(await tx.from(t.efRef).select('id,name,sheet,unit,total').in('sheet', MAT_SHEETS));
-        const hit = refs.find((r) => r.name.replace(/^-\s*/, '').trim().toLowerCase() === want && r.unit && r.total != null);
-        if (!hit) return { error: `ไม่พบ EF ชื่อ "${b.ef_name}" ในตาราง EF CFP / EF พลังงาน` };
+        const refs = preloadedRefs || must(await tx.from(t.efRef).select('id,code,name,sheet,unit,total').in('sheet', MAT_SHEETS));
+        // the EF id (CFP-0001) first, then the name as written in the table
+        const hit = refs.find((r) => String(r.code || '').toLowerCase() === want && r.unit && r.total != null)
+          || refs.find((r) => r.name.replace(/^-\s*/, '').trim().toLowerCase() === want && r.unit && r.total != null);
+        if (!hit) return { error: `ไม่พบ EF id หรือชื่อ "${b.ef_name}" ในตาราง EF CFP / EF พลังงาน` };
         row.ef_ref_id = hit.id;
       } else row.ef_ref_id = Number(b.ef_ref_id) || null;
     }
@@ -504,7 +532,7 @@ export function mountCfo(app) {
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [req.body || {}];
     const needRefs = list.some((b) => b.ef_name !== undefined && String(b.ef_name || '').trim());
     const [refs, existingList] = await Promise.all([
-      needRefs ? tx.from(t.efRef).select('id,name,sheet,unit,total').in('sheet', MAT_SHEETS).then(must) : null,
+      needRefs ? tx.from(t.efRef).select('id,code,name,sheet,unit,total').in('sheet', MAT_SHEETS).then(must) : null,
       fetchIn(() => tx.from(t.material).select('material'), 'material', list.map((b) => matCode(b.material)))
     ]);
     const existing = new Set(existingList.map((r) => r.material));

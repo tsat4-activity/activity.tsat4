@@ -472,6 +472,15 @@ create table if not exists public.mt_cfo_ef_ref (
 create index if not exists mt_cfo_ef_ref_sheet on public.mt_cfo_ef_ref (sheet, sort_no);
 alter table public.mt_cfo_ef_ref drop constraint if exists mt_cfo_ef_ref_sheet_check;
 alter table public.mt_cfo_ef_ref add constraint mt_cfo_ef_ref_sheet_check check (sheet in ('energy', 'chemical', 'ipcc', 'fuel', 'cfp'));
+-- code = id ที่ผู้ใช้เห็นและกรอกในกิจกรรม / วัสดุ (ผู้ใช้กำหนด 2026-11-02, เริ่มที่ EF CFP: CFP-0001 …) · ไม่ซ้ำทั้งตาราง
+-- item_no = ลำดับตามไฟล์ อบก. (เริ่มใหม่ทุกกลุ่ม) · ตาราง EF CFP เรียงคอลัมน์ตาม อบก.: กลุ่ม · ลำดับ · ชื่อ · รายละเอียด · หน่วย · ค่าแฟคเตอร์ · ข้อมูลอ้างอิง · วันที่อัพเดท (remark)
+alter table public.mt_cfo_ef_ref add column if not exists code text, add column if not exists item_no text;
+create unique index if not exists mt_cfo_ef_ref_code on public.mt_cfo_ef_ref (code) where code is not null;
+update public.mt_cfo_ef_ref r set code = 'CFP-' || lpad((x.n + x.base)::text, 4, '0')
+from (select id, row_number() over (order by sort_no, id) as n,
+        coalesce((select max(substring(code from 5)::int) from public.mt_cfo_ef_ref where code ~ '^CFP-[0-9]+$'), 0) as base
+      from public.mt_cfo_ef_ref where sheet = 'cfp' and code is null) x
+where r.id = x.id;
 
 -- วัสดุจาก SAP (Store usage, Scope 3 ผู้ใช้กำหนด 2026-11-01): รายการวัสดุ + EF ที่จับคู่ (ตารางอ้างอิง) + ตัวแปลงหน่วย
 -- factor = 1 หน่วย SAP เท่ากับกี่หน่วยของ EF (เช่น กระดาษ A4 80g 1 รีม = 2.495 kg) · ไม่มี EF = ไม่คิด

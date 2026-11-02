@@ -57,7 +57,7 @@ function cfoEfGroups(keep) {
       const label = [CFO_EF_VIEWS[sheet], r.grp, section].filter(Boolean).join(' · ');
       out.set(label, [...(out.get(label) || []), r]);
     });
-    return [...out].map(([label, list]) => `<optgroup label="${esc(label)}">${list.map((r) => `<option value="ref:${r.id}">${esc(`${r.name.replace(/^-\s*/, '')} (${cfoRefNum(r.total)} kgCO₂e/${r.unit})`)}</option>`).join('')}</optgroup>`).join('');
+    return [...out].map(([label, list]) => `<optgroup label="${esc(label)}">${list.map((r) => `<option value="ref:${r.id}">${esc(`${r.code ? `[${r.code}] ` : ''}${r.name.replace(/^-\s*/, '')}${r.formula && r.sheet === 'cfp' ? ` · ${r.formula}` : ''} (${cfoRefNum(r.total)} kgCO₂e/${r.unit})`)}</option>`).join('')}</optgroup>`).join('');
   }).join('');
 }
 let cfoMaster = null; // Setting master data of the open page (cfoEfGroups reads it)
@@ -91,7 +91,11 @@ const CFO_REF_COLS = {
   // grp = Heating value / Density / Conversion Factor: the band row names what the value is
   fuel: { title: 'Defaults for Fuel Heating Value (LHV, NCV) & Other Properties', cols: [['name', 'Fuel'], ['total', 'ค่า', '(ตาม Unit)', 1], ['unit', 'Unit'], ['reference', 'Reference']] },
   // EF ของ CFP (Carbon Footprint of Product) ไว้คำนวณย่อย (ผู้ใช้ขอ 2026-11-01) · grp = หมวด (วัสดุ / ขนส่ง / ของเสีย ...)
-  cfp: { title: 'Emission Factor ของ CFP (Carbon Footprint of Product) สำหรับคำนวณย่อย', cols: [['name', 'รายการ'], ['formula', 'รายละเอียด'], ['unit', 'Unit'], ['total', 'EF', '(kgCO₂-eq/unit)', 1], ['reference', 'แหล่งข้อมูล'], ['remark', 'หมายเหตุ / วันที่ปรับปรุง']] }
+  // EF CFP in the column order of อบก. (thaicarbonlabel.tgo.or.th) + id (code) typed in activities / materials (ผู้ใช้กำหนด 2026-11-02)
+  // groupCol: กลุ่ม is a column (no band rows) · file = Export / Import columns, one Thai header row like the TGO table
+  cfp: { title: 'Emission Factor (CFP) ตาม อบก.', groupCol: true,
+    cols: [['code', 'id'], ['grp', 'กลุ่ม'], ['item_no', 'ลำดับ'], ['name', 'ชื่อ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'], ['total', 'ค่าแฟคเตอร์', '(kgCO₂e)', 1], ['reference', 'ข้อมูลอ้างอิง'], ['remark', 'วันที่อัพเดท']],
+    file: [['code', 'id'], ['grp', 'กลุ่ม'], ['item_no', 'ลำดับ'], ['name', 'ชื่อ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'], ['total', 'ค่าแฟคเตอร์ (kgCO2e)'], ['reference', 'ข้อมูลอ้างอิง'], ['remark', 'วันที่อัพเดท'], ['status', 'สถานะ']] }
 };
 const cfoFilter = { scope: '', department: '', q: '', status: '' };
 // page: Summary หน้า 1 (monthly accumulation) / หน้า 2 (summary by Scope), picked in the dropdown before the year
@@ -100,7 +104,7 @@ const cfoDash = { department: '', chartScope: '', scope: '1', page: '1' };
 const cfoTx = { scope: '1', month: String(new Date().getMonth() + 1), category: '', activity: '' };
 const cfoHeads = { entries: { sort: '', dir: 'asc', filters: {} }, activities: { sort: '', dir: 'asc', filters: {} } };
 // width class of a reference-table column (app.css .cfo-efgrid .c-*): every EF table lines up (ผู้ใช้กำหนด 2026-11-01)
-const cfoCol = (key, num) => (num ? 'c-num' : ['name', 'formula', 'unit', 'reference', 'remark'].includes(key) ? `c-${key}` : 'c-name');
+const cfoCol = (key, num) => (num ? 'c-num' : ['name', 'formula', 'unit', 'reference', 'remark'].includes(key) ? `c-${key}` : ['code', 'item_no'].includes(key) ? 'c-unit' : key === 'grp' ? 'c-formula' : 'c-name');
 // reference tables: 5 decimals like the user asked (ผู้ใช้กำหนด 2026-11-01) · the full value is in the cell's tooltip
 const cfoRefNum = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 }));
 // small EF values (1.02e-6) stay readable: exponent below 0.001, else up to 6 decimals like the sheet
@@ -850,6 +854,7 @@ function cfoSetActivities(body, m, rerender) {
       ${field('Scope', `<select id="cfo-a-type">${options(Object.keys(CFO_ACT_TYPES), type0, (v) => CFO_ACT_TYPES[v])}</select>`)}
       ${field('หมวด', '<select id="cfo-a-scope"></select>')}
       ${field('สูตรปริมาณ', '<select id="cfo-a-calc"></select>')}
+      ${field('EF id (กรอกได้เลย เช่น CFP-0001)', `<input id="cfo-a-efcode" maxlength="40" list="cfo-ef-codes" autocomplete="off"><datalist id="cfo-ef-codes">${m.refs.filter((x) => x.code && x.unit && x.total != null).map((x) => `<option value="${esc(x.code)}">${esc(x.name)}</option>`).join('')}</datalist>`)}
       ${field('Emission factor', '<select id="cfo-a-ef"></select>')}
       <p class="sum-meta" id="cfo-a-hint"></p>
       <div id="cfo-a-up">${field('EF การได้มาของเชื้อเพลิง / ไฟฟ้า (Scope 3-3)', '<select id="cfo-a-ef3"></select>')}<p class="sum-meta" id="cfo-a-hint3"></p></div>
@@ -929,7 +934,20 @@ function cfoSetActivities(body, m, rerender) {
     $('cfo-a-type').onchange = () => { fillScope(); fillCalc(); fillEf(); };
     $('cfo-a-scope').onchange = fillEf;
     $('cfo-a-calc').onchange = fillEf;
-    $('cfo-a-ef').onchange = fillEf3;
+    // EF id ↔ Emission factor: typing an id picks that EF in the list (if it fits the Scope / หมวด / สูตร chosen), picking an EF shows its id
+    const showCode = () => {
+      const [kind, id] = $('cfo-a-ef').value.split(':');
+      $('cfo-a-efcode').value = kind === 'ref' ? m.refs.find((x) => String(x.id) === id)?.code || '' : '';
+    };
+    $('cfo-a-efcode').oninput = () => {
+      const code = $('cfo-a-efcode').value.trim().toUpperCase();
+      const hit = code && m.refs.find((x) => String(x.code || '').toUpperCase() === code);
+      if (!hit) { $('cfo-a-hint').textContent = code ? `ไม่พบ EF id ${code}` : ''; return; }
+      if ($('cfo-a-ef').querySelector(`option[value="ref:${hit.id}"]`)) { $('cfo-a-ef').value = `ref:${hit.id}`; fillEf3(); $('cfo-a-hint').textContent = `${hit.code} · ${hit.name} (${cfoRefNum(hit.total)} kgCO₂e/${hit.unit})`; }
+      else $('cfo-a-hint').textContent = `${hit.code} ไม่ตรงกับ Scope / หมวด / สูตรที่เลือก ให้เปลี่ยน Scope หรือหมวดก่อน`;
+    };
+    $('cfo-a-ef').onchange = () => { showCode(); fillEf3(); };
+    showCode();
   };
   $('cfo-add').onclick = () => form(null);
   $('cfo-edit').onclick = () => picked && form(picked);
@@ -1028,10 +1046,10 @@ function cfoSetRef(body, m, rerender, sheet) {
   const draw = () => {
     const term = cfoFilter.q.trim().toLowerCase();
     const list = rows.filter((r) => (!cfoFilter.status || r.status === cfoFilter.status)
-      && (!term || `${r.name} ${r.formula || ''} ${r.grp || ''} ${r.reference || ''}`.toLowerCase().includes(term)));
+      && (!term || `${r.code || ''} ${r.name} ${r.formula || ''} ${r.grp || ''} ${r.reference || ''}`.toLowerCase().includes(term)));
     let band;
     const html = list.map((r) => {
-      const top = r.grp !== band ? `<tr class="cfo-band"><td colspan="${spec.cols.length}">${esc(r.grp || 'ไม่ระบุกลุ่ม')}</td></tr>` : '';
+      const top = !spec.groupCol && r.grp !== band ? `<tr class="cfo-band"><td colspan="${spec.cols.length}">${esc(r.grp || 'ไม่ระบุกลุ่ม')}</td></tr>` : '';
       band = r.grp;
       const heading = !r.unit && r.total == null && r.co2 == null;
       const child = /^-\s/.test(r.name);
@@ -1041,6 +1059,7 @@ function cfoSetRef(body, m, rerender, sheet) {
           const name = `${child ? r.name.replace(/^-\s*/, '') : r.name}${r.ratio != null ? ` (สัดส่วน ${cfoEfNum(r.ratio)})` : ''}`;
           return `<td class="c-name${heading ? ' cfo-head' : ''}${child ? ' cfo-child' : ''}" title="${esc(name)}">${esc(name)}</td>`;
         }
+        if (key === 'code') return `<td class="c-unit"><b>${esc(r.code || '')}</b></td>`;
         return `<td class="${cfoCol(key)}" title="${esc(r[key] || '')}">${esc(r[key] || '')}</td>`;
       };
       return `${top}<tr data-pick="${r.id}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}>${spec.cols.map(cell).join('')}</tr>`;
@@ -1066,16 +1085,17 @@ function cfoSetRef(body, m, rerender, sheet) {
   $('cfo-f-search').onclick = search;
   onEnter('cfo-f-q', search);
   // Export / Import (ผู้ใช้กำหนด 2026-11-02): one file per table, the first row = column names (CFO_REF_FILE) · id = the row to update
+  const fileCols = spec.file || CFO_REF_FILE;
   $('cfo-export').onclick = () => cfoDownload(`EF_${sheet}_${new Date().toISOString().slice(0, 10)}.csv`,
-    [CFO_REF_FILE.map(([k]) => k), CFO_REF_FILE.map(([, label]) => label), ...rows.map((r) => CFO_REF_FILE.map(([k]) => r[k] ?? ''))]);
+    [...(spec.file ? [] : [fileCols.map(([k]) => k)]), fileCols.map(([, label]) => label), ...rows.map((r) => fileCols.map(([k]) => r[k] ?? ''))]);
   if (!m.admin) return;
   $('cfo-import').onclick = () => cfoRefImport(sheet, spec, rerender);
   const fields = spec.cols.map(([key, label, unit, num]) => ({ key, label: unit ? `${label} ${unit}` : label, type: num ? 'number' : undefined }));
   const fixed = sheet === 'ipcc' ? { unit: 'TJ' } : {};
   $('cfo-add').onclick = () => {
     const lastGroup = rows[rows.length - 1]?.grp || '';
-    openPopup(`เพิ่ม: ${spec.title}`, gridField('cfo-grid', [{ key: 'grp', label: 'กลุ่ม', value: lastGroup, width: '140px' }, ...fields.map((f) => ({ ...f, width: f.type ? '100px' : undefined }))], 5,
-      'คัดลอกหลายแถวจาก Excel แล้ววาง (Ctrl+V) · Total ว่าง = คิดจาก GWP · แถวว่างไม่บันทึก'), async () => {
+    openPopup(`เพิ่ม: ${spec.title}`, gridField('cfo-grid', [...(spec.groupCol ? [] : [{ key: 'grp', label: 'กลุ่ม', value: lastGroup, width: '140px' }]), ...fields.map((f) => ({ ...f, width: f.type || ['code', 'item_no', 'unit'].includes(f.key) ? '100px' : undefined, ...(f.key === 'grp' ? { value: lastGroup } : {}) }))], 5,
+      `คัดลอกหลายแถวจาก Excel แล้ววาง (Ctrl+V)${spec.groupCol ? ' · id ว่าง = ระบบตั้งให้' : ' · Total ว่าง = คิดจาก GWP'} · แถวว่างไม่บันทึก`), async () => {
       const n = await gridSave(grid, (v) => a5Api(CFO, 'cfo/ref', { method: 'POST', body: { ...fixed, ...v, sheet } }));
       toast(`เพิ่ม ${n} รายการ`);
       closePopup();
@@ -1088,7 +1108,7 @@ function cfoSetRef(body, m, rerender, sheet) {
     const r = picked;
     const area = (key) => key === 'reference' || key === 'remark';
     openPopup('แก้ไขรายการ', `
-      ${field('กลุ่ม', `<input id="cfo-r-grp" maxlength="120" list="cfo-groups" value="${esc(r.grp || '')}"><datalist id="cfo-groups">${groups.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>`)}
+      ${spec.groupCol ? '' : field('กลุ่ม', `<input id="cfo-r-grp" maxlength="120" list="cfo-groups" value="${esc(r.grp || '')}"><datalist id="cfo-groups">${groups.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>`)}
       ${fields.filter((f) => !f.type).map((f) => field(f.label, area(f.key) ? `<textarea id="cfo-r-${f.key}" rows="2" maxlength="1000">${esc(r[f.key] || '')}</textarea>` : `<input id="cfo-r-${f.key}" maxlength="300" value="${esc(r[f.key] || '')}">`)).join('')}
       <div class="cfo-gas">${fields.filter((f) => f.type).map((f) => field(f.label, `<input id="cfo-r-${f.key}" type="number" step="any" value="${esc(r[f.key] ?? '')}">`)).join('')}
         ${field('สัดส่วนชีวมวล', `<input id="cfo-r-ratio" type="number" step="any" value="${esc(r.ratio ?? '')}">`)}${field('ลำดับ', `<input id="cfo-r-sort" type="number" value="${esc(r.sort_no)}">`)}</div>
@@ -1321,7 +1341,7 @@ function cfoRefImport(sheet, spec, rerender) {
   let rows = null;
   openPopup(`Import: ${spec.title}`, `
     ${field('ไฟล์ Excel (.xlsx) หรือ CSV', '<input id="cfo-imp-file" type="file" accept=".xlsx,.xls,.csv">')}
-    <p class="sum-meta">ใช้ไฟล์จากปุ่ม Export เป็นแบบฟอร์ม · แถวแรก = ชื่อคอลัมน์ · แถวที่มี id = แก้รายการเดิม · id ว่าง = เพิ่มใหม่ · Total ว่าง + มีค่าแยกก๊าซ = คิดจาก GWP · ระบบตรวจทุกแถวก่อน ถ้ามีแถวผิดจะไม่บันทึกเลย</p>
+    <p class="sum-meta">ใช้ไฟล์จากปุ่ม Export เป็นแบบฟอร์ม (EF CFP เรียงคอลัมน์ตาม อบก. คัดลอกตารางจากเว็บ อบก. มาวางแล้วเติม id ได้) · แถวแรก = ชื่อคอลัมน์ · id ที่มีอยู่ = แก้รายการเดิม · id ว่างหรือใหม่ = เพิ่ม (id ว่าง ระบบตั้งให้) · กลุ่มว่าง = ใช้กลุ่มของแถวบน · Total ว่าง + มีค่าแยกก๊าซ = คิดจาก GWP · ระบบตรวจทุกแถวก่อน ถ้ามีแถวผิดจะไม่บันทึกเลย</p>
     <div id="cfo-imp-result" class="sum-meta"></div>`, async () => {
     if (!rows) throw new Error('เลือกไฟล์ก่อน');
     const r = await a5Api(CFO, 'cfo/ref/import', { method: 'POST', body: { sheet, rows, save: true } });
@@ -1337,11 +1357,13 @@ function cfoRefImport(sheet, spec, rerender) {
       const cells = (await cfoReadSheetFile(file)).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
       const name = (h) => String(h ?? '').trim().toLowerCase();
       const head = (cells[0] || []).map(name);
-      const at = Object.fromEntries(CFO_REF_FILE.map(([k, label]) => [k, head.findIndex((h) => h === k || h === name(label))]));
-      if (at.name < 0) throw new Error('ไม่พบคอลัมน์ name (ชื่อ / รายการ) ในแถวแรก ใช้ไฟล์จากปุ่ม Export เป็นแบบ');
-      const isLabelRow = (r) => name(r[at.name]) === name('ชื่อ / รายการ');
+      const cols = spec.file || CFO_REF_FILE;
+      const at = Object.fromEntries(cols.map(([k, label]) => [k, head.findIndex((h) => h === k || h === name(label) || (k === 'total' && h.startsWith('ค่าแฟคเตอร์')))]));
+      if (at.name < 0) throw new Error('ไม่พบคอลัมน์ชื่อในแถวแรก ใช้ไฟล์จากปุ่ม Export เป็นแบบ');
+      const nameLabel = name((cols.find(([k]) => k === 'name') || [])[1]);
+      const isLabelRow = (r) => name(r[at.name]) === nameLabel;
       rows = cells.slice(1).map((r, i) => ({ r, line: i + 2 })).filter(({ r }) => !isLabelRow(r) && String(r[at.name] ?? '').trim())
-        .map(({ r, line }) => ({ line, ...Object.fromEntries(CFO_REF_FILE.filter(([k]) => at[k] >= 0).map(([k]) => [k, String(r[at[k]] ?? '').trim()])) }));
+        .map(({ r, line }) => ({ line, ...Object.fromEntries(cols.filter(([k]) => at[k] >= 0).map(([k]) => [k, String(r[at[k]] ?? '').trim()])) }));
       if (!rows.length) throw new Error('ไม่พบแถวข้อมูล');
       const check = await a5Api(CFO, 'cfo/ref/import', { method: 'POST', body: { sheet, rows, save: false } });
       $('cfo-imp-result').innerHTML = `<b>${rows.length} แถว · เพิ่มใหม่ ${check.add} · แก้รายการเดิม ${check.update}</b> · กด นำเข้า เพื่อบันทึก`;
