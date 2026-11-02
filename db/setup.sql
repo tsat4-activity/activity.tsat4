@@ -488,6 +488,11 @@ create table if not exists public.tx_cfo_material (
   uploaded_at timestamptz not null default now()
 );
 create index if not exists tx_cfo_material_month on public.tx_cfo_material (month);
+-- ประเภทวัสดุ (ผู้ใช้กำหนด 2026-11-02): usage = ของใช้สิ้นเปลือง (Store usage) · raw = วัตถุดิบ (เหล็ก ...) · other = อื่นๆ
+alter table public.mt_cfo_material add column if not exists kind text not null default 'usage';
+alter table public.mt_cfo_material drop constraint if exists mt_cfo_material_kind;
+alter table public.mt_cfo_material add constraint mt_cfo_material_kind check (kind in ('usage', 'raw', 'other'));
+alter table public.tx_cfo_material add column if not exists kind text not null default 'usage';
 
 -- กิจกรรมที่ต้องเก็บข้อมูลทุกเดือน (รถผู้บริหาร, Forklift, ไฟฟ้า ...) ของหน่วยงานไหน ใช้ EF ตัวไหน
 create table if not exists public.mt_cfo_activity (
@@ -609,7 +614,7 @@ join public.mt_cfo_activity a on a.id = e.activity_id
 join public.mt_cfo_ef f on f.id = e.ef3_id
 join public.mt_cfo_scope s on s.code = f.scope_code
 union all
-select -m.id, m.month, 'CONFIRMED'::text, m.department, 'วัสดุ (SAP)'::text, m.name, s.scope, s.code, s.name,
+select -m.id, m.month, 'CONFIRMED'::text, m.department, case m.kind when 'raw' then 'วัตถุดิบ (SAP)' when 'other' then 'อื่นๆ (SAP)' else 'Usage (SAP)' end, m.name, s.scope, s.code, s.name,
   m.source, m.ef_unit, round(m.qty * m.factor, 6), m.kgco2e,
   round(m.tco2e, 6),
   0::numeric, 0::numeric, 0::numeric, 0::numeric,

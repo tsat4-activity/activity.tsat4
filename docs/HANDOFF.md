@@ -27,6 +27,7 @@
 - 2026-11-01 · Claude [5S] · ฟอร์มกิจกรรม CFO เลือกตามลำดับ Scope 1/2/3/รายงานแยก → หมวด → สูตร → EF (กรองตามกัน) · บ่อเกรอะตั้ง EF septic:<หมวด> ให้ · cfo.sql มี 23 หมวด TGO แล้ว (activity01 ไม่มีหมวด) · ต้องรัน db/act/cfo.sql
 - 2026-11-01 · Claude [5S] · CFO กระบะ B7 คิด 3 ส่วนจากปริมาณเดียว: Scope 1 + Biogenic (co2_bio จากแถวคู่) + 3-3 การได้มาของเชื้อเพลิง (ef3_id ใน mt_cfo_activity / tx_cfo_entry, v_cfo_entry part=upstream) · หมวด 1-1/1-2/1-4 กรอง EF · ต้องรัน db/act/cfo.sql
 - 2026-11-01 · Claude [5S] · CFO Setting > วัสดุ (SAP): mt_cfo_material (1,347 รายการจาก master_sto.xlsx → inbox/import_cfo_material.sql) + EF + ตัวแปลง · วาง Usage รายเดือน → tx_cfo_material → Scope 3 (v_cfo_entry part=material, Fr-04.1) · cost center → หน่วยงานจาก mt_main_costcenter · ต้องรัน db/act/cfo.sql + inbox/import_cfo_material.sql
+- 2026-11-02 · Claude [5S] · CFO ตั้งต้นจาก mt_cfo.xlsx (scripts/import_cfo_setup.py → inbox/import_cfo_setup.sql: ทีม 23 · บริษัท · กิจกรรม 34 พร้อม EF, รถส่วนตัว = 3-6) · วัสดุมีประเภท Usage / วัตถุดิบ / อื่นๆ (kind) · ต้องรัน cfo.sql + seed + import_cfo_setup.sql + import_cfo_material.sql
 
 - 2026-11-01 · Claude [5S] · ทีม 5ส ตัดคณะกรรมการ 5ส ออก เหลือ 4 ทีม (ต้องเลือกทีม) · ทีมตรวจประเมินไม่มีสมาชิก (ผู้รับผิดชอบพื้นที่ / ผู้ตรวจประเมิน) · สิทธิ์ Setting = ผู้ประสานงานของทีมใดก็ได้ใน 5S · แถวเดิมที่ไม่มีทีมแสดงเป็น ไม่ระบุทีม จนกว่าจะแก้
 

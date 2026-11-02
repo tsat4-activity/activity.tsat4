@@ -1082,7 +1082,9 @@ function cfoSetRef(body, m, rerender, sheet) {
 // pasted from SAP. Only materials with an EF are counted (Scope 3); the rest are listed so more can be matched.
 // Server: cfo/materials, cfo/material-usage · the paper helper turns gsm × sheet size × sheets into kg per SAP unit.
 const CFO_PAPER = { A4: 0.06237, A3: 0.12474, A5: 0.031185, F4: 0.0710 }; // m² per sheet
-const cfoMatFilter = { ef: '', q: '' };
+const cfoMatFilter = { ef: '', kind: '', q: '' };
+// ประเภทวัสดุ (server MAT_KINDS): Usage = ของใช้สิ้นเปลือง (Store) · วัตถุดิบ · อื่นๆ
+const CFO_MAT_KINDS = { usage: 'Usage', raw: 'วัตถุดิบ', other: 'อื่นๆ' };
 async function cfoSetMaterial(body, m, rerender) {
   const d = await a5Api(CFO, 'cfo/materials');
   const refs = new Map(m.refs.map((r) => [r.id, r]));
@@ -1091,17 +1093,17 @@ async function cfoSetMaterial(body, m, rerender) {
   let picked = null;
   const draw = () => {
     const term = cfoMatFilter.q.trim().toLowerCase();
-    const list = d.rows.filter((r) => (!cfoMatFilter.ef || (cfoMatFilter.ef === 'yes') === Boolean(r.ef_ref_id && r.factor))
+    const list = d.rows.filter((r) => (!cfoMatFilter.ef || (cfoMatFilter.ef === 'yes') === Boolean(r.ef_ref_id && r.factor)) && (!cfoMatFilter.kind || (r.kind || 'usage') === cfoMatFilter.kind)
       && (!term || `${r.material} ${r.name} ${efOf(r)?.name || ''}`.toLowerCase().includes(term)));
     const shown = list.slice(0, 500);
-    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab"><thead><tr><th class="c-unit">Material</th><th class="c-name">รายละเอียด</th><th class="c-unit">หน่วย SAP</th>
+    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab"><thead><tr><th class="c-unit">Material</th><th class="c-unit">ประเภท</th><th class="c-name">รายละเอียด</th><th class="c-unit">หน่วย SAP</th>
       <th class="c-name">Emission factor</th><th class="num c-num">ตัวแปลง</th><th class="c-unit">หน่วย EF</th><th class="num c-num">kgCO₂e / หน่วย SAP</th><th class="c-unit">หมวด</th><th class="c-unit">สถานะ</th></tr></thead>
       <tbody>${shown.map((r) => {
         const e = efOf(r);
-        return `<tr data-pick="${esc(r.material)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-unit">${esc(r.material)}</td><td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.sap_unit || '')}</td>
+        return `<tr data-pick="${esc(r.material)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-unit">${esc(r.material)}</td><td class="c-unit">${esc(CFO_MAT_KINDS[r.kind || 'usage'])}</td><td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.sap_unit || '')}</td>
           <td class="c-name">${e ? esc(e.name.replace(/^-\s*/, '')) : '<span class="sum-meta">ยังไม่มี EF</span>'}</td><td class="num c-num">${r.factor == null ? '' : cfoRefNum(r.factor)}</td><td class="c-unit">${esc(e?.unit || '')}</td>
           <td class="num c-num">${e && r.factor ? cfoRefNum(Number(r.factor) * Number(e.total)) : ''}</td><td class="c-unit">${esc(r.scope_code)}</td><td class="c-unit">${esc(r.status)}</td></tr>`;
-      }).join('') || '<tr><td class="empty" colspan="9">ไม่มีรายการ</td></tr>'}</tbody></table>`;
+      }).join('') || '<tr><td class="empty" colspan="10">ไม่มีรายการ</td></tr>'}</tbody></table>`;
     $('cfo-mat-count').textContent = `${list.length.toLocaleString()} รายการ${list.length > shown.length ? ` (แสดง ${shown.length} แรก พิมพ์ค้นหาเพื่อดูเพิ่ม)` : ''} · มี EF ${d.rows.filter((r) => r.ef_ref_id && r.factor).length.toLocaleString()} จาก ${d.rows.length.toLocaleString()}`;
     picked = null;
     ['cfo-edit', 'cfo-del'].forEach((b) => { if ($(b)) $(b).disabled = true; });
@@ -1110,6 +1112,7 @@ async function cfoSetMaterial(body, m, rerender) {
   const months = d.months.slice().reverse();
   body.innerHTML = `
     <div class="toolbar a5-filters">
+      ${field('ประเภท', `<select id="cfo-f-matkind">${options(['', ...Object.keys(CFO_MAT_KINDS)], cfoMatFilter.kind, (v) => (v ? CFO_MAT_KINDS[v] : 'ทั้งหมด'))}</select>`)}
       ${field('EF', `<select id="cfo-f-matef">${options(['', 'yes', 'no'], cfoMatFilter.ef, (v) => ({ '': 'ทั้งหมด', yes: 'มี EF (คิดค่า)', no: 'ยังไม่มี EF' })[v])}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'รหัส ชื่อวัสดุ หรือ EF' })}
       ${d.admin ? `<div class="action-bar">${button('cfo-usage', 'วาง Usage', 'primary')}${button('cfo-add', 'เพิ่ม', 'secondary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
@@ -1123,6 +1126,7 @@ async function cfoSetMaterial(body, m, rerender) {
   draw();
   a5Lift(body);
   $('cfo-f-matef').onchange = () => { cfoMatFilter.ef = $('cfo-f-matef').value; draw(); };
+  $('cfo-f-matkind').onchange = () => { cfoMatFilter.kind = $('cfo-f-matkind').value; draw(); };
   const search = () => { cfoMatFilter.q = $('cfo-f-q').value; draw(); };
   $('cfo-f-search').onclick = search;
   onEnter('cfo-f-q', search);
@@ -1138,7 +1142,8 @@ async function cfoSetMaterial(body, m, rerender) {
   // add / match many: paste from Excel · EF = the name as written in EF CFP / EF พลังงาน
   $('cfo-add').onclick = () => {
     openPopup('เพิ่ม / จับคู่วัสดุ', gridField('cfo-grid', [
-      { key: 'material', label: 'Material', width: '110px' }, { key: 'name', label: 'รายละเอียด' }, { key: 'sap_unit', label: 'หน่วย SAP', width: '90px' },
+      { key: 'material', label: 'Material', width: '110px' }, { key: 'kind', label: 'ประเภท', type: 'select', options: Object.entries(CFO_MAT_KINDS), value: 'usage', width: '110px' },
+      { key: 'name', label: 'รายละเอียด' }, { key: 'sap_unit', label: 'หน่วย SAP', width: '90px' },
       { key: 'ef_name', label: 'EF (ชื่อตามตาราง EF CFP)' }, { key: 'factor', label: 'ตัวแปลง', type: 'number', width: '100px' },
       { key: 'scope_code', label: 'หมวด', type: 'select', options: scopeOpts, value: '3-1', width: '150px' }
     ], 5, 'วางหลายแถวจาก Excel ได้ · รหัสที่มีอยู่แล้ว = แก้ EF / ตัวแปลง · ตัวแปลง = 1 หน่วย SAP เท่ากับกี่หน่วยของ EF · แถวว่างไม่บันทึก'), async () => {
@@ -1156,6 +1161,7 @@ async function cfoSetMaterial(body, m, rerender) {
     const r = picked;
     const groups = cfoEfGroups((x) => ['cfp', 'energy', 'chemical'].includes(x.sheet));
     openPopup(`วัสดุ ${esc(r.material)}`, `
+      ${field('ประเภท', `<select id="cfo-m-kind">${options(Object.keys(CFO_MAT_KINDS), r.kind || 'usage', (v) => CFO_MAT_KINDS[v])}</select>`)}
       ${field('รายละเอียด', `<input id="cfo-m-name" maxlength="300" value="${esc(r.name)}">`)}
       ${field('หน่วย SAP', `<input id="cfo-m-unit" maxlength="20" value="${esc(r.sap_unit || '')}">`)}
       ${field('Emission factor', `<select id="cfo-m-ef"><option value="">- ไม่คิด (ยังไม่มี EF) -</option>${groups}</select>`)}
@@ -1166,7 +1172,7 @@ async function cfoSetMaterial(body, m, rerender) {
         ${button('cfo-p-calc', 'ใส่ค่าตัวแปลง')}</details>
       ${field('หมวด', `<select id="cfo-m-scope">${scopeOpts.map(([v, l]) => `<option value="${v}"${v === r.scope_code ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`)}
       ${field('สถานะ', `<select id="cfo-m-status">${options(['Active', 'Inactive'], r.status)}</select>`)}`, async () => {
-      await a5Api(CFO, `cfo/materials/${encodeURIComponent(r.material)}`, { method: 'PATCH', body: { name: $('cfo-m-name').value, sap_unit: $('cfo-m-unit').value,
+      await a5Api(CFO, `cfo/materials/${encodeURIComponent(r.material)}`, { method: 'PATCH', body: { kind: $('cfo-m-kind').value, name: $('cfo-m-name').value, sap_unit: $('cfo-m-unit').value,
         ef_ref_id: $('cfo-m-ef').value.replace('ref:', ''), factor: $('cfo-m-factor').value, scope_code: $('cfo-m-scope').value, status: $('cfo-m-status').value } });
       toast('บันทึกแล้ว');
       closePopup();

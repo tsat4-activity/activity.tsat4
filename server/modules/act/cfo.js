@@ -381,6 +381,8 @@ export function mountCfo(app) {
   // A material is counted once it has an EF (reference table row) and a factor (1 SAP unit = factor EF units).
   const matCode = (v) => String(v ?? '').trim().replace(/^0+(?=\d)/, '').slice(0, 40) || null;
   const MAT_SHEETS = ['cfp', 'energy', 'chemical'];
+  // usage = ของใช้สิ้นเปลือง (Store) · raw = วัตถุดิบ · other = อื่นๆ (ผู้ใช้กำหนด 2026-11-02)
+  const MAT_KINDS = { usage: 'Usage', raw: 'วัตถุดิบ', other: 'อื่นๆ' };
   route('get', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
     const [rows, uses] = await Promise.all([
       fetchAll(() => tx.from(t.material).select('*').order('material')),
@@ -403,6 +405,11 @@ export function mountCfo(app) {
     if (given('name')) row.name = text(b.name, 300);
     if (given('sap_unit')) row.sap_unit = text(b.sap_unit, 20);
     if (given('status')) row.status = b.status === 'Inactive' ? 'Inactive' : 'Active';
+    if (given('kind')) {
+      row.kind = String(b.kind).trim();
+      if (!MAT_KINDS[row.kind]) row.kind = Object.keys(MAT_KINDS).find((k) => MAT_KINDS[k] === row.kind) || null;
+      if (!row.kind) return { error: 'ประเภทต้องเป็น Usage / วัตถุดิบ / อื่นๆ' };
+    }
     if (given('ef_ref_id') || given('ef_name')) {
       if (b.ef_name !== undefined && String(b.ef_name || '').trim()) {
         const want = String(b.ef_name).trim().toLowerCase();
@@ -499,7 +506,8 @@ export function mountCfo(app) {
       if (l.unit && m.sap_unit && unitKey(l.unit) !== unitKey(m.sap_unit)) { unitWrong.push({ ...l, name: m.name, sap_unit: m.sap_unit }); continue; }
       const tco2e = Math.round(((l.qty * Number(m.factor) * Number(e.total)) / 1000) * 1e6) / 1e6;
       counted.push({ month, department: l.department, material: l.material, name: m.name, qty: Math.round(l.qty * 1e6) / 1e6, unit: l.unit || m.sap_unit, factor: Number(m.factor),
-        ef_ref_id: e.id, source: e.name.replace(/^-\s*/, ''), ef_unit: e.unit, kgco2e: Number(e.total), scope_code: m.scope_code, tco2e, uploaded_by: req.user.employeeId });
+        ef_ref_id: e.id, source: e.name.replace(/^-\s*/, ''), ef_unit: e.unit, kgco2e: Number(e.total), scope_code: m.scope_code, tco2e, uploaded_by: req.user.employeeId,
+        ...(m.kind ? { kind: m.kind } : {}) });
     }
     const byQty = (list) => list.sort((x, y) => y.qty - x.qty).slice(0, 300);
     const total = Math.round(counted.reduce((sum, c) => sum + c.tco2e, 0) * 1000) / 1000;
@@ -697,7 +705,7 @@ export function mountCfo(app) {
       fetchAll(() => tx.from(t.gwp).select('*')),
       fetchAll(() => tx.from(t.cfoScope).select('code,scope,name')),
       // before db/act/cfo.sql adds tx_cfo_material the report still works without it
-      fetchAll(() => tx.from(t.materialUse).select('department,material,qty,factor,source,ef_unit,kgco2e,scope_code,tco2e').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`)).catch(() => [])
+      fetchAll(() => tx.from(t.materialUse).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`)).catch(() => [])
     ]);
     const act = new Map(activities.map((a) => [a.id, a]));
     const ef = new Map(efs.map((e) => [e.id, e]));
@@ -746,7 +754,7 @@ export function mountCfo(app) {
       return [row, { ...row, group: 'separate', activity: `${a.name} (Biogenic CO₂)`, ef: { ...zero(row.ef), co2: n(f.co2_bio), hfc_gwp: null, pfc_gwp: null },
         total_ef: n(f.co2_bio), ton: { ...zero(ton), co2: bio }, tco2e: { ...zero(row.tco2e), co2: bio }, total: bio }];
     }).concat(Object.values(matUse.filter((u) => !department || u.department === department).reduce((acc, u) => {
-      const key = `${u.scope_code}|${u.department}|${u.source}|${u.ef_unit}|${u.kgco2e}`;
+      const key = `${u.scope_code}|${u.kind}|${u.department}|${u.source}|${u.ef_unit}|${u.kgco2e}`;
       const g = (acc[key] = acc[key] || { ...u, qty: 0, tco2e: 0, items: new Set() });
       g.qty += Number(u.qty) * Number(u.factor);
       g.tco2e += Number(u.tco2e);
@@ -755,7 +763,7 @@ export function mountCfo(app) {
     }, {})).map((g) => {
       const s = scope.get(g.scope_code) || {};
       const none = { co2: 0, ch4_fossil: 0, ch4: 0, n2o: 0, sf6: 0, nf3: 0 };
-      return { group: `s${s.scope}`, scope: s.scope, scope_code: g.scope_code, scope_name: s.name, department: g.department || '', activity: 'วัสดุ (SAP)', detail: `${g.items.size} รายการ`,
+      return { group: `s${s.scope}`, scope: s.scope, scope_code: g.scope_code, scope_name: s.name, department: g.department || '', activity: `${MAT_KINDS[g.kind] || 'Usage'} (SAP)`, detail: `${g.items.size} รายการ`,
         source: g.source, unit: g.ef_unit, qty: r6(g.qty), ef: { ...none, hfc: 0, hfc_gwp: null, pfc: 0, pfc_gwp: null, other: 0, other_gwp: 0 }, total_ef: Number(g.kgco2e),
         source_type: null, substitute: null, reference: null, ton: { ...none }, tco2e: { ...none, hfc: 0, pfc: 0, other: 0 }, total: r6(g.tco2e) };
     })).sort((x, y) => x.scope_code.localeCompare(y.scope_code, 'en', { numeric: true }) || x.department.localeCompare(y.department) || x.activity.localeCompare(y.activity));
