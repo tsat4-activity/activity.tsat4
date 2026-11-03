@@ -2,7 +2,7 @@
 
 ## กำลังทำอยู่
 
-(ไม่มี)
+- [5S] Antigravity · เพิ่มหน้า Dashboard ประเมินการมีส่วนร่วมในการตรวจประเมินของผู้ตรวจประเมินรายบุคคล (แท็บ Auditor ใน 5S Dashboard พร้อม API คำนวณแผนการตรวจ การเข้าตรวจจริง และ % การมีส่วนร่วมรายบุคคล)
 
 ## SQL ที่รอผู้ใช้รัน
 
@@ -34,6 +34,7 @@
 
 - 2026-11-02 · Antigravity [5S] · แก้ไขบั๊ก `Cannot read properties of undefined (reading 'admin')` ในหน้า 5S Summary โดยเพิ่ม fallback โหลดข้อมูล `me` และตัวแปร `isAdmin = Boolean(me?.access?.admin)` ใน `a5DrawSummary` (`public/js/act-5s.js`)
 
+- 2026-11-03 · Claude [5S] · CFO ข้อมูลย้อนหลัง tx_detail.xlsx → scripts/import_cfo_tx.py → inbox/import_cfo_tx.sql (จับกิจกรรมจาก ac_id หรือ หน่วยงาน + ชื่อ + รายละเอียด · ใช้ EF ปัจจุบัน + ef3_id) · autoFillEf3 เติม 3-3 ไฟฟ้า (grid mix SCOPE 3 ปีเดียวกัน) + เติม ef3_id ให้รายการที่ยังไม่มี
 - 2026-11-03 · Claude [5S] · core.js chartPlot: แท่งซ้อนใช้ flex เป็นสัดส่วนของยอดรวม (เดิมยอด < 1 แท่งลอยเหนือแกน) · แกน / ค่าบนแท่ง / ค่าบนเส้นแสดงทศนิยมเมื่อค่าน้อย (0.3 · 0.332 แทน 0 · 1)
 - 2026-11-03 · Claude [5S] · CFO เติม 3-3 ให้กิจกรรมน้ำมันเองเมื่อ admin เปิด Setting / Dashboard (autoFillEf3) · ถ้ายังไม่มี EF CFP น้ำมันของ อบก. ในฐานข้อมูล server สร้างแถวเดียวกับ import_cfp_tgo.sql ให้ (CFP-0037/0038/0041) · ความหนาแน่นสำรอง 0.87 / 0.7347 / 0.54
 - 2026-11-03 · Claude [5S] · CFO Dashboard > Scope แสดงแถวที่คิดอัตโนมัติด้วย (cfo/progress `derived`): 3-3 ของกิจกรรมที่มี ef3_id + 3-1 Usage (SAP) ต่อหมวดหลัก · หน้า Transaction ไม่เปลี่ยน

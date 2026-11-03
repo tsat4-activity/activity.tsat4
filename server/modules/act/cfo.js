@@ -840,9 +840,21 @@ export function mountCfo(app) {
     for (const a of acts) {
       const e = efById.get(a.ef_id);
       if (a.ef3_id || !e || a.calc === 'septic' || e.hfc || e.other) continue;
-      if (!(['1-1', '1-2'].includes(e.scope_code) || (e.scope_code?.startsWith('3-') && e.scope_code !== '3-3'))) continue;
+      if (!(['1-1', '1-2'].includes(e.scope_code) || e.scope_code?.startsWith('2-') || (e.scope_code?.startsWith('3-') && e.scope_code !== '3-3'))) continue;
       const ref = refById.get(e.ref_id);
-      if (ref && (ref.sheet !== 'energy' || ref.grp === 'Electricity')) continue;
+      // electricity: the grid mix "SCOPE 3" row of the same years (2022-2024: 0.475 → 0.0812), as the activity form picks
+      if (e.scope_code?.startsWith('2-') || ref?.grp === 'Electricity') {
+        const years = /ปี (\d{4}-\d{4})/.exec(ref?.name || e.name || '')?.[1];
+        const pair = years && refs.find((r) => r.sheet === 'energy' && r.grp === 'Electricity' && r.name.includes(years) && /SCOPE 3/i.test(r.name) && r.total != null);
+        if (!pair) { skipped.push(`${a.department} · ${a.name}: ไม่พบ EF ไฟฟ้า SCOPE 3 ของปีเดียวกัน`); continue; }
+        const made = await efFromRef(t, pair.id, '3-3');
+        if (made.error) { skipped.push(`${a.department} · ${a.name}: ${made.error}`); continue; }
+        must(await tx.from(t.activity).update({ ef3_id: made.id }).eq('id', a.id));
+        a.ef3_id = made.id;
+        done.push(a.id);
+        continue;
+      }
+      if (ref && ref.sheet !== 'energy') continue;
       const fuel = fuelOf(ref?.name || e.name);
       if (!fuel) continue;
       const [name, detail] = FUEL_UP[fuel];
@@ -854,9 +866,13 @@ export function mountCfo(app) {
       const made = await efFromRef(t, up.id, '3-3', false, same ? null : { factor: Number(density), unit: e.unit });
       if (made.error) { skipped.push(`${a.department} · ${a.name}: ${made.error}`); continue; }
       must(await tx.from(t.activity).update({ ef3_id: made.id }).eq('id', a.id));
-      must(await tx.from(t.entry).update({ ef3_id: made.id }).eq('activity_id', a.id).is('ef3_id', null));
+      a.ef3_id = made.id;
       done.push(a.id);
     }
+    // entries recorded or imported (inbox/import_cfo_tx.sql) without the 3-3 EF of their activity get it: one update per EF
+    const byEf3 = new Map();
+    for (const a of acts.filter((x) => x.ef3_id)) byEf3.set(a.ef3_id, [...(byEf3.get(a.ef3_id) || []), a.id]);
+    for (const [ef3, ids] of byEf3) must(await tx.from(t.entry).update({ ef3_id: ef3 }).in('activity_id', ids).is('ef3_id', null));
     if (done.length) await logRev(t, req, 'กิจกรรม', 'เติม 3-3', `เติม EF การได้มาของเชื้อเพลิง (3-3) ให้ ${done.length} กิจกรรม`);
     return { filled: done.length, skipped };
   };
