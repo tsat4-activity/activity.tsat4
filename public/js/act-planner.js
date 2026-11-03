@@ -375,7 +375,19 @@ async function aplRender(target, activity, opts = {}) {
 
   $('apl-add-phase').onclick = () => aplOpenForm(activity, tasks, null, null, rerender, units);
   // With a main item selected, "สร้าง" adds a sub item under it (the + button per row was removed for space).
-  $('apl-new').onclick = () => { const sel = byId(aplSelected); aplOpenForm(activity, tasks, null, sel ? (sel.parent_id ?? sel.id) : null, rerender, units); };
+  $('apl-new').onclick = () => {
+    const sel = byId(aplSelected);
+    if (sel) {
+      const parentPhase = sel.parent_id ? byId(sel.parent_id) : sel;
+      const uCode = unitOfPhase(parentPhase);
+      const proj = units.find((u) => u.code === uCode);
+      if (proj && proj.team_type === 'individual') {
+        toast('โครงการรูปแบบเดี่ยว ไม่สามารถเพิ่มข้อรองได้ (เพิ่มข้อรองได้เฉพาะโครงการรูปแบบทีม)', 'error');
+        return;
+      }
+    }
+    aplOpenForm(activity, tasks, null, sel ? (sel.parent_id ?? sel.id) : null, rerender, units);
+  };
   $('apl-edit').onclick = () => { const task = byId(aplSelected); if (task) aplOpenForm(activity, tasks, task, null, rerender, units); };
   $('apl-del').onclick = () => {
     const task = byId(aplSelected);
@@ -437,7 +449,13 @@ function aplDrag(e, node, g, activity, tasks, kidsOf, rerender) {
 
 // units: the activity's projects (SMF) · a main item picks one, a sub item follows its main item.
 function aplOpenForm(activity, tasks, task, parentId, rerender, units = []) {
-  const phases = tasks.filter((t) => t.parent_id == null && (!task || t.id !== task.id)).sort((a, b) => a.sort_no - b.sort_no);
+  const unitOfPhase = (p) => p.unit || units.find((u) => u.code?.toLowerCase() === p.title?.trim().toLowerCase() || u.name?.trim().toLowerCase() === p.title?.trim().toLowerCase())?.code || '';
+  const canHaveKids = (p) => {
+    const uCode = unitOfPhase(p);
+    const proj = units.find((u) => u.code === uCode);
+    return !proj || proj.team_type !== 'individual';
+  };
+  const phases = tasks.filter((t) => t.parent_id == null && (!task || t.id !== task.id) && canHaveKids(t)).sort((a, b) => a.sort_no - b.sort_no);
   const pid = task ? task.parent_id : parentId;
   const derived = Boolean(task?.derived);
   const base = aplView === 'month' ? new Date(aplYear, aplMonth, 1) : new Date(aplYear, aplYear === new Date().getFullYear() ? new Date().getMonth() : 0, 1);
@@ -939,7 +957,7 @@ async function aplDrawSmfOverview(body, activity) {
     const withActual = list.filter((m) => m.actual != null).sort((a, b) => b.month - a.month);
     const kpiName = u.target_name ? `${u.target_name} (${u.unit || ''})` : `เป้าหมาย (${u.unit || ''})`;
     if (!withActual.length) {
-      return `<div class="ov-sec"><div class="ov-sec-title">เป้าหมายและผลงาน (KPI)</div><p class="sum-meta">ตัวชี้วัด: ${esc(kpiName)} · ยังไม่มีผลงานบันทึก</p></div>`;
+      return `<div class="ov-sec"><div class="ov-sec-title">เป้าหมายและผลงาน (KPI)</div><div class="ov-kpi-empty"><span>ตัวชี้วัด: ${esc(kpiName)}</span><span class="sum-meta">ยังไม่มีผลงานบันทึก</span></div></div>`;
     }
     const latest = withActual[0];
     const mName = ACT_MONTHS[latest.month - 1] || `เดือน ${latest.month}`;
@@ -963,31 +981,58 @@ async function aplDrawSmfOverview(body, activity) {
     const targetCount = u.target_count || 10;
     const completed = plan?.completedCount || 0;
     const countPct = Math.min(100, Math.round((completed / targetCount) * 100));
+    const pctVal = isCount ? countPct : (plan ? plan.percent : 0);
     const chips = plan ? OV_PLAN.filter(([code]) => plan.counts[code]).map(([code, label]) => `<span class="ov-chip is-${code}">${label} ${plan.counts[code]}</span>`).join('') : '';
     const late = plan?.late?.length ? `<ul class="ov-late">${plan.late.map((t) => `<li><span>${esc(actNoLead(t.title))}</span><b>${actShort(t.end)} · ${t.progress}%</b></li>`).join('')}</ul>` : '';
 
-    const progressSec = isCount
-      ? `<div class="ov-sec"><div class="ov-sec-title">ความคืบหน้าตามเป้าหมาย (สำเร็จ ${completed} / ${targetCount} ${esc(u.unit || 'โครงการ')})</div>${plan ? `<div class="ov-progress"><div class="ov-bar"><span style="width:${countPct}%"></span></div><b>${countPct}%</b></div><div class="ov-chips">${chips}</div>` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}</div>`
-      : `<div class="ov-sec"><div class="ov-sec-title">ความคืบหน้าแผนงาน (ตามระยะเวลา)</div>${plan ? `<div class="ov-progress"><div class="ov-bar"><span style="width:${plan.percent}%"></span></div><b>${plan.percent}%</b></div><div class="ov-chips">${chips}</div>` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}</div>`;
+    const progressSec = `<div class="ov-sec">
+      <div class="ov-sec-head">
+        <span class="ov-sec-title">${isCount ? 'ความคืบหน้าตามเป้าหมาย' : 'ความคืบหน้าแผนงาน'}</span>
+        <b class="ov-pct-big">${pctVal}%</b>
+      </div>
+      ${plan ? `
+        <div class="ov-progress"><div class="ov-bar"><span style="width:${pctVal}%"></span></div></div>
+        ${isCount ? `<div class="ov-count-sub">สำเร็จแล้ว <b>${completed}</b> จากเป้าหมาย <b>${targetCount}</b> ${esc(u.unit || 'โครงการ')}</div>` : ''}
+        <div class="ov-chips">${chips}</div>
+      ` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}
+    </div>`;
+
+    const summarySec = `<div class="ov-sec">
+      <div class="ov-sec-title">สรุปข้อมูล</div>
+      <div class="ov-stat-grid">
+        <div class="ov-stat-box">
+          <span class="ov-stat-num">${ovNum(plan?.items)}</span>
+          <span class="ov-stat-lbl">หัวข้อหลัก</span>
+        </div>
+        <div class="ov-stat-box ${isCount ? (completed >= targetCount ? 'is-done' : 'is-active') : (plan?.percent >= 100 ? 'is-done' : '')}">
+          <span class="ov-stat-num">${isCount ? `${completed}/${targetCount}` : `${plan ? plan.percent : 0}%`}</span>
+          <span class="ov-stat-lbl">${isCount ? 'โครงการสำเร็จ' : 'บรรลุตามแผน'}</span>
+        </div>
+        <div class="ov-stat-box ${plan?.overdue ? 'is-danger' : ''}">
+          <span class="ov-stat-num">${ovNum(plan?.overdue)}</span>
+          <span class="ov-stat-lbl">เลยกำหนด</span>
+        </div>
+        <div class="ov-stat-box">
+          <span class="ov-stat-num">${ovNum(p.team?.units?.[u.code])}</span>
+          <span class="ov-stat-lbl">${isIndiv ? 'ผู้รับผิดชอบ' : 'ทีมงาน'}</span>
+        </div>
+      </div>
+      ${late}
+    </div>`;
 
     return `<article class="card ov-card" style="--ov:${CHART.series[i % CHART.series.length]}">
       <div class="ov-head">
-        <strong>${esc(u.name)}</strong>
-        <span class="badge ${isIndiv ? '' : 'badge-primary'}">${isIndiv ? 'เดี่ยว' : 'ทีม'}</span>
-        <span class="badge ${isCount ? 'badge-success' : ''}">${isCount ? `วัดตามจำนวน (${targetCount} ${esc(u.unit || 'โครงการ')})` : 'วัดตามแผน'}</span>
+        <div class="ov-title-group">
+          <strong>${esc(u.name)}</strong>
+          <div class="ov-pills">
+            <span class="ov-pill ${isIndiv ? 'is-indiv' : 'is-team'}">${isIndiv ? 'เดี่ยว' : 'ทีม'}</span>
+            <span class="ov-pill ${isCount ? 'is-count' : 'is-plan'}">${isCount ? `เป้าหมาย ${targetCount} ${esc(u.unit || 'โครงการ')}` : 'วัดตามแผน'}</span>
+          </div>
+        </div>
       </div>
       ${progressSec}
       ${kpiSection(u)}
-      <div class="ov-sec">
-        <div class="ov-sec-title">สรุป</div>
-        ${row('รูปแบบ', isIndiv ? 'เดี่ยว (Individual)' : 'ทำเป็นทีม (Team)')}
-        ${row('การวัดเป้าหมาย', isCount ? `ตามจำนวน (${targetCount} ${esc(u.unit || 'โครงการ')})` : 'ตามแผนงาน (ระยะเวลา)')}
-        ${isCount ? row('สำเร็จแล้ว', `<b>${completed} / ${targetCount} ${esc(u.unit || 'โครงการ')}</b>`) : ''}
-        ${row('หัวข้อหลัก', ovNum(plan?.items))}
-        ${row('เลยกำหนด', `<span class="${plan?.overdue ? 'ov-bad' : ''}">${ovNum(plan?.overdue)}</span>`)}
-        ${row(isIndiv ? 'ผู้รับผิดชอบ' : 'ทีมโครงการ', `${ovNum(p.team?.units?.[u.code])} คน`)}
-        ${late}
-      </div>
+      ${summarySec}
     </article>`;
   };
   body.innerHTML = `<div class="ch-kpis">${kpis}</div>

@@ -337,10 +337,23 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .a5-team-title .material-symbols-rounded{font-size:18px}
 .a5-unit-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));align-items:start}
 /* SMF Dashboard > ภาพรวม (ผู้ใช้กำหนด 2026-11-01): one card per main project */
-.ov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:8px;align-items:start}
-.ov-card{border-top:4px solid var(--ov);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
-.ov-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}.ov-head strong{font-size:16px;color:var(--ov)}.ov-head .btn{margin-left:auto}
-.ov-sec{border-top:1px solid var(--mo-line);padding-top:8px}.ov-sec-title{font-weight:600;font-size:12px;margin-bottom:6px}
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px;align-items:start}
+.ov-card{border-top:4px solid var(--ov);padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0;background:var(--mo-surface);box-shadow:var(--mo-shadow);border-radius:var(--mo-radius)}
+.ov-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.ov-title-group{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ov-title-group strong{font-size:16px;color:var(--ov);line-height:1.3}
+.ov-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
+.ov-pill{font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--mo-surface-2);color:var(--mo-text-muted);border:1px solid var(--mo-line);display:inline-flex;align-items:center}
+.ov-pill.is-team{background:color-mix(in srgb,var(--mo-primary) 12%,var(--mo-surface));color:var(--mo-primary);border-color:color-mix(in srgb,var(--mo-primary) 30%,transparent)}
+.ov-pill.is-indiv{background:var(--mo-warning-soft);color:#b45309;border-color:color-mix(in srgb,#b45309 25%,transparent)}
+.ov-pill.is-count{background:var(--mo-success-soft);color:var(--mo-success);border-color:color-mix(in srgb,var(--mo-success) 30%,transparent)}
+.ov-pill.is-plan{background:var(--mo-surface-2);color:var(--mo-text-muted)}
+.ov-sec{border-top:1px solid var(--mo-line);padding-top:10px}
+.ov-sec-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px}
+.ov-sec-title{font-weight:600;font-size:12px;color:var(--mo-text)}
+.ov-pct-big{font-size:18px;font-weight:700;color:var(--ov)}
+.ov-count-sub{font-size:12px;color:var(--mo-text-muted);margin:4px 0 2px}
+.ov-count-sub b{color:var(--mo-text);font-weight:600}
 .ov-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0}.ov-row span{color:var(--mo-text-muted)}.ov-row b{font-weight:400;text-align:right}
 .ov-progress{display:flex;align-items:center;gap:8px}.ov-progress b{font-size:18px}
 .ov-bar{flex:1;height:10px;border-radius:5px;background:var(--mo-line);overflow:hidden}.ov-bar span{display:block;height:100%;background:var(--ov)}
@@ -349,6 +362,15 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .ov-chip.is-early,.ov-chip.is-done{border-color:var(--mo-success);color:var(--mo-success)}.ov-chip.is-ahead{border-color:#2563eb;color:#2563eb}
 .ov-chip.is-behind{border-color:#d97706;color:#d97706}.ov-chip.is-overdue,.ov-chip.is-late{border-color:var(--mo-danger);color:var(--mo-danger)}
 .ov-bad{color:var(--mo-danger);font-weight:600}
+.ov-good{color:var(--mo-success);font-weight:600}
+.ov-kpi-empty{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:6px 10px;border-radius:6px;background:var(--mo-surface-2);border:1px dashed var(--mo-line);color:var(--mo-text-muted)}
+.ov-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}
+.ov-stat-box{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;border-radius:6px;background:var(--mo-surface-2);border:1px solid var(--mo-line);text-align:center}
+.ov-stat-num{font-size:15px;font-weight:700;color:var(--mo-text);line-height:1.2}
+.ov-stat-lbl{font-size:10px;color:var(--mo-text-muted);margin-top:3px;white-space:nowrap}
+.ov-stat-box.is-active .ov-stat-num{color:var(--mo-primary)}
+.ov-stat-box.is-done .ov-stat-num{color:var(--mo-success)}
+.ov-stat-box.is-danger .ov-stat-num{color:var(--mo-danger)}
 .ov-proj{padding:4px 0}.ov-proj + .ov-proj{border-top:1px dashed var(--mo-line)}.ov-proj-name{font-size:12px;font-weight:600;margin-bottom:2px}.ov-proj .ov-progress b{font-size:13px}
 /* Planner: project header rows (SMF) */
 .apl-group{background:color-mix(in srgb,var(--mo-primary) 8%,transparent)}.apl-group .apl-left b{font-weight:600}.ov-pill{margin-top:4px}
