@@ -41,9 +41,15 @@ function planSummary(rows, today) {
 // The year's plan, and per project (SMF: main item unit; sub items follow their main item).
 async function planOf(activity, year, today) {
   if (!PLANNER_ON.includes(activity)) return null;
-  const rows = withSpans(await fetchAll(() => tx.from(tablesOf(activity).task).select('*').eq('year', year).order('sort_no').order('id')));
-  const unitOfMain = new Map(rows.filter((r) => r.parent_id == null).map((r) => [Number(r.id), r.unit || '']));
-  const unitOf = (r) => (r.parent_id == null ? r.unit || '' : unitOfMain.get(Number(r.parent_id)) || '');
+  const [tasksRes, projects] = await Promise.all([
+    fetchAll(() => tx.from(tablesOf(activity).task).select('*').eq('year', year).order('sort_no').order('id')),
+    projectsOf(activity, year)
+  ]);
+  const rows = withSpans(tasksRes);
+  const projMap = new Map((projects || []).flatMap((p) => [[p.code.toLowerCase(), p.code], [p.name.trim().toLowerCase(), p.code]]));
+  const resolveUnit = (r) => r.unit || (r.title ? projMap.get(r.title.trim().toLowerCase()) : null) || '';
+  const unitOfMain = new Map(rows.filter((r) => r.parent_id == null).map((r) => [Number(r.id), resolveUnit(r)]));
+  const unitOf = (r) => (r.parent_id == null ? resolveUnit(r) : unitOfMain.get(Number(r.parent_id)) || '');
   const byUnit = {};
   for (const code of new Set(rows.map(unitOf))) if (code) byUnit[code] = planSummary(rows.filter((r) => unitOf(r) === code), today);
   return { ...planSummary(rows, today), byUnit };

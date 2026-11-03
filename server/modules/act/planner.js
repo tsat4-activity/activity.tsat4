@@ -138,6 +138,18 @@ export function mountPlanner(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const [rows, units, access] = await Promise.all([rowsOf(t.task, year), projectsOf(activity, year), accessOf(req, activity, year)]);
     const names = await namesOf(rows.map((r) => r.owner_id));
+    if (units?.length) {
+      const projMap = new Map(units.flatMap((u) => [[u.code.toLowerCase(), u.code], [u.name.trim().toLowerCase(), u.code]]));
+      for (const r of rows) {
+        if (r.parent_id == null && !r.unit && r.title) {
+          const code = projMap.get(r.title.trim().toLowerCase());
+          if (code) {
+            r.unit = code;
+            tx.from(t.task).update({ unit: code }).eq('id', r.id).then(() => {}).catch(() => {});
+          }
+        }
+      }
+    }
     res.json({
       year,
       units,

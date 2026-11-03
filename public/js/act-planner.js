@@ -224,8 +224,6 @@ async function aplRender(target, activity, opts = {}) {
   const getSiblings = (t) => {
     if (!t) return [];
     if (t.parent_id != null) return kidsOf(t.parent_id);
-    if (units.length && t.unit) return phases.filter((p) => p.unit === t.unit);
-    if (units.length) return phases.filter((p) => !p.unit);
     return phases;
   };
 
@@ -251,18 +249,9 @@ async function aplRender(target, activity, opts = {}) {
       });
     }
   });
-  if (units.length) {
-    const codes = [...units.map((u) => u.code), ''].filter((c) => !aplUnit || c === aplUnit);
-    codes.forEach((code) => {
-      const list = phases.filter((p) => (p.unit || '') === code && (code || !units.some((u) => u.code === p.unit)));
-      if (!list.length && !code) return;
-      const dated = list.filter((p) => p.start_date);
-      const days = (p) => (actDate(p.end_date) - actDate(p.start_date)) / 86400000 + 1;
-      const pct = dated.length ? Math.round(dated.reduce((s, p) => s + days(p) * p.progress, 0) / dated.reduce((s, p) => s + days(p), 0)) : 0;
-      rows += `<div class="apl-row apl-group"><div class="apl-left"><div></div><div><b>${esc(unitName(code))}</b></div><div class="sum-meta">${list.length} หัวข้อ</div><div class="apl-pct">${pct}</div></div><div class="apl-track">${lines}</div></div>`;
-      drawPhases(list);
-    });
-  } else drawPhases(phases);
+  const unitOfPhase = (p) => p.unit || units.find((u) => u.code.toLowerCase() === p.title?.trim().toLowerCase() || u.name.trim().toLowerCase() === p.title?.trim().toLowerCase())?.code || '';
+  const filteredPhases = aplUnit ? phases.filter((p) => unitOfPhase(p) === aplUnit) : phases;
+  drawPhases(filteredPhases);
   if (canEdit) rows += `<div class="apl-row apl-addrow"><div class="apl-left"><div></div><div><button class="apl-link" type="button" id="apl-add-phase">+ เพิ่มข้อหลัก</button></div><div></div><div></div></div><div class="apl-track">${lines}</div></div>`;
   const byId = (id) => tasks.find((t) => t.id === Number(id));
   const selTask = aplSelected ? byId(aplSelected) : null;
@@ -458,11 +447,12 @@ function aplOpenForm(activity, tasks, task, parentId, rerender, units = []) {
   let ownerId = task?.owner_id || '';
   const color = task?.color || 'p5';
   const kidCount = task ? tasks.filter((t) => t.parent_id === task.id).length : 0;
+  const curUnit = task ? (task.unit || units.find((u) => u.code.toLowerCase() === task.title?.trim().toLowerCase() || u.name.trim().toLowerCase() === task.title?.trim().toLowerCase())?.code || '') : aplUnit;
   const fields = [
     // Said first: a main item with sub items takes its dates and % from them, so those fields are locked here.
     derived ? `<p class="apl-locked">ข้อหลักนี้มีข้อรอง ${kidCount} ข้อ: วันเริ่ม วันจบ และ % คิดจากข้อรองให้อัตโนมัติ · แก้วันหรือ % ที่ข้อรอง (ดับเบิลคลิกแถวข้อรอง) หรือลากแท่งข้อหลักเพื่อเลื่อนทั้งชุด · ที่นี่แก้ได้: ชื่อ ผู้รับผิดชอบ สี รายละเอียด</p>` : '',
     field('ระดับ', `<select id="apl-parent"${derived ? ' disabled' : ''}><option value="">ข้อหลัก</option>${phases.map((p) => `<option value="${p.id}"${p.id === pid ? ' selected' : ''}>ข้อรองของ: ${esc(p.title)}</option>`).join('')}</select>`),
-    units.length ? `<div id="apl-unit-wrap">${field('โครงการ', `<select id="apl-unit-f">${options(['', ...units.map((u) => u.code)], task ? task.unit || '' : aplUnit, (v) => (v ? units.find((u) => u.code === v)?.name || v : 'ไม่ระบุโครงการ'))}</select>`)}</div>` : '',
+    units.length ? `<div id="apl-unit-wrap">${field('โครงการ', `<select id="apl-unit-f">${options(['', ...units.map((u) => u.code)], curUnit, (v) => (v ? units.find((u) => u.code === v)?.name || v : 'ไม่ระบุโครงการ'))}</select>`)}</div>` : '',
     field('ชื่อรายการ', `<input id="apl-title" maxlength="200" value="${esc(task?.title || '')}">`),
     a5EmpField('ผู้รับผิดชอบ', ownerId ? `${ownerId} · ${task.owner_name}` : ''),
     field('วันเริ่ม', `<input id="apl-start" type="date" ${range} value="${esc(start)}"${derived ? ' disabled' : ''}>`),
