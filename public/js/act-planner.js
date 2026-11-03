@@ -168,7 +168,7 @@ function aplDatesLabel(pos, g, text) {
   return '';
 }
 
-function aplRow(task, code, color, g, lines, canEdit, phase) {
+function aplRow(task, code, color, g, lines, canEdit, phase, canUp = false, canDown = false) {
   const pos = aplPlace(task, g);
   const plan = task.plan || { code: 'none', text: '' };
   const span = task.start_date ? `${actShort(task.start_date)} – ${actShort(task.end_date)}${plan.text ? ` · ${plan.text}` : ''}` : '';
@@ -185,8 +185,12 @@ function aplRow(task, code, color, g, lines, canEdit, phase) {
   const title = phase
     ? `<div class="apl-title"><button class="apl-tog" type="button" data-tog="${task.id}" aria-expanded="${!aplCollapsed.has(task.id)}" aria-label="ย่อ/ขยาย">${phase.kids ? (aplCollapsed.has(task.id) ? '▸' : '▾') : ''}</button><span>${esc(actNoLead(task.title))}</span></div>`
     : `<div class="apl-title is-sub"><span>${esc(actNoLead(task.title))}</span></div>`;
+  const movesHtml = canEdit ? `<span class="apl-row-moves">
+    <button class="apl-move-btn is-up" type="button" data-move="up" data-id="${task.id}" ${canUp ? '' : 'disabled'} aria-label="เลื่อนขึ้น" title="เลื่อนขึ้น">▲</button>
+    <button class="apl-move-btn is-down" type="button" data-move="down" data-id="${task.id}" ${canDown ? '' : 'disabled'} aria-label="เลื่อนลง" title="เลื่อนลง">▼</button>
+  </span>` : '';
   return `<div class="apl-row${phase ? ' is-phase' : ''}${aplSelected === task.id ? ' is-selected' : ''}" data-task="${task.id}">
-    <div class="apl-left"><div class="apl-code">${code}</div>${title}<div title="${esc(task.owner_name)}">${esc(aplOwner(task.owner_name))}</div><div class="apl-pct is-${plan.code}" title="${esc(plan.text)}">${task.progress}</div></div>
+    <div class="apl-left"><div class="apl-code"><span>${code}</span>${movesHtml}</div>${title}<div title="${esc(task.owner_name)}">${esc(aplOwner(task.owner_name))}</div><div class="apl-pct is-${plan.code}" title="${esc(plan.text)}">${task.progress}</div></div>
     <div class="apl-track">${lines}${bar}</div></div>`;
 }
 
@@ -216,6 +220,15 @@ async function aplRender(target, activity, opts = {}) {
   const units = data.units || [];
   if (aplUnit && !units.some((u) => u.code === aplUnit)) aplUnit = '';
   const unitName = (code) => units.find((u) => u.code === code)?.name || 'ไม่ระบุโครงการ';
+
+  const getSiblings = (t) => {
+    if (!t) return [];
+    if (t.parent_id != null) return kidsOf(t.parent_id);
+    if (units.length && t.unit) return phases.filter((p) => p.unit === t.unit);
+    if (units.length) return phases.filter((p) => !p.unit);
+    return phases;
+  };
+
   let rows = '';
   const drawPhases = (list) => list.forEach((p) => {
     const pi = phases.indexOf(p);
@@ -223,8 +236,20 @@ async function aplRender(target, activity, opts = {}) {
     const shownKids = q ? kids.filter(match) : kids;
     if (!match(p) && !shownKids.length) return;
     const color = APL_COLORS[p.color] || Object.values(APL_COLORS)[pi % Object.keys(APL_COLORS).length];
-    rows += aplRow(p, `${pi + 1}`, color, g, lines, canEdit, { kids: kids.length });
-    if (!aplCollapsed.has(p.id)) shownKids.forEach((k) => { rows += aplRow(k, `${pi + 1}.${kids.indexOf(k) + 1}`, color, g, lines, canEdit, null); });
+    const pSibs = getSiblings(p);
+    const pIdx = pSibs.findIndex((x) => x.id === p.id);
+    const pCanUp = pIdx > 0;
+    const pCanDown = pIdx !== -1 && pIdx < pSibs.length - 1;
+    rows += aplRow(p, `${pi + 1}`, color, g, lines, canEdit, { kids: kids.length }, pCanUp, pCanDown);
+    if (!aplCollapsed.has(p.id)) {
+      shownKids.forEach((k) => {
+        const kSibs = getSiblings(k);
+        const kIdx = kSibs.findIndex((x) => x.id === k.id);
+        const kCanUp = kIdx > 0;
+        const kCanDown = kIdx !== -1 && kIdx < kSibs.length - 1;
+        rows += aplRow(k, `${pi + 1}.${kids.indexOf(k) + 1}`, color, g, lines, canEdit, null, kCanUp, kCanDown);
+      });
+    }
   });
   if (units.length) {
     const codes = [...units.map((u) => u.code), ''].filter((c) => !aplUnit || c === aplUnit);
@@ -239,6 +264,12 @@ async function aplRender(target, activity, opts = {}) {
     });
   } else drawPhases(phases);
   if (canEdit) rows += `<div class="apl-row apl-addrow"><div class="apl-left"><div></div><div><button class="apl-link" type="button" id="apl-add-phase">+ เพิ่มข้อหลัก</button></div><div></div><div></div></div><div class="apl-track">${lines}</div></div>`;
+  const byId = (id) => tasks.find((t) => t.id === Number(id));
+  const selTask = aplSelected ? byId(aplSelected) : null;
+  const selSibs = selTask ? getSiblings(selTask) : [];
+  const selIdx = selTask ? selSibs.findIndex((t) => t.id === selTask.id) : -1;
+  const canSelUp = selIdx > 0;
+  const canSelDown = selIdx !== -1 && selIdx < selSibs.length - 1;
   const years = [aplYear - 1, aplYear, aplYear + 1].filter((y) => y >= 2000 && y <= 2100);
   const seg = `<div class="seg" role="group" aria-label="มุมมอง">${[['year', 'รายปี'], ['month', 'รายเดือน']].map(([mode, name]) => `<button class="seg-btn${mode === aplView ? ' is-active' : ''}" type="button" data-aplview="${mode}" aria-pressed="${mode === aplView}">${name}</button>`).join('')}</div>`;
   const search = (units.length ? field('โครงการ', `<select id="apl-unit">${options(['', ...units.map((u) => u.code)], aplUnit, (v) => (v ? unitName(v) : 'ทั้งหมด'))}</select>`) : '')
@@ -249,7 +280,7 @@ async function aplRender(target, activity, opts = {}) {
     ${seg}
     ${aplView === 'month' ? `<div class="plan-nav">${button('apl-prev', '‹', 'secondary', 'aria-label="เดือนก่อน"')}${button('apl-next', '›', 'secondary', 'aria-label="เดือนถัดไป"')}</div><strong class="plan-label">${aplMonthName(aplMonth, true)}</strong>` : ''}
     ${search}
-    ${canEdit ? `${button('apl-new', 'สร้าง', 'primary')}${button('apl-edit', 'แก้ไข', 'secondary', aplSelected ? '' : 'disabled')}${button('apl-del', 'ลบ', 'danger', aplSelected ? '' : 'disabled')}` : ''}`;
+    ${canEdit ? `${button('apl-new', 'สร้าง', 'primary')}${button('apl-edit', 'แก้ไข', 'secondary', aplSelected ? '' : 'disabled')}${button('apl-del', 'ลบ', 'danger', aplSelected ? '' : 'disabled')}${button('apl-up', '↑ ขึ้น', 'secondary', canSelUp ? '' : 'disabled', 'title="เลื่อนขึ้น"')}${button('apl-down', '↓ ลง', 'secondary', canSelDown ? '' : 'disabled', 'title="เลื่อนลง"')}` : ''}`;
   const keepScroll = target.querySelector('.apl-scroll');
   const scroll = keepScroll ? [keepScroll.scrollLeft, keepScroll.scrollTop] : null;
   const content = `<div class="apl-scroll"><div class="apl-grid" style="--apl-tl:${g.cols * g.min}px">
@@ -274,7 +305,6 @@ async function aplRender(target, activity, opts = {}) {
   }
 
   const rerender = () => aplRender(target, activity, opts).catch(onErr);
-  const byId = (id) => tasks.find((t) => t.id === Number(id));
   document.querySelectorAll('[data-aplview]').forEach((node) => { node.onclick = () => { aplView = node.dataset.aplview; rerender(); }; });
   if ($('apl-year')) $('apl-year').onchange = () => { aplYear = Number($('apl-year').value); aplMonth %= 12; aplSelected = null; rerender(); };
   if ($('apl-unit')) $('apl-unit').onchange = () => { aplUnit = $('apl-unit').value; rerender(); };
@@ -290,16 +320,69 @@ async function aplRender(target, activity, opts = {}) {
   target.querySelectorAll('[data-tog]').forEach((node) => {
     node.onclick = (e) => { e.stopPropagation(); const id = Number(node.dataset.tog); if (aplCollapsed.has(id)) aplCollapsed.delete(id); else aplCollapsed.add(id); rerender(); };
   });
+
+  const syncActionButtons = () => {
+    if ($('apl-edit')) $('apl-edit').disabled = !aplSelected;
+    if ($('apl-del')) $('apl-del').disabled = !aplSelected;
+    const cur = aplSelected ? byId(aplSelected) : null;
+    const curSibs = cur ? getSiblings(cur) : [];
+    const curIdx = cur ? curSibs.findIndex((t) => t.id === cur.id) : -1;
+    if ($('apl-up')) $('apl-up').disabled = curIdx <= 0;
+    if ($('apl-down')) $('apl-down').disabled = curIdx === -1 || curIdx >= curSibs.length - 1;
+  };
+
   target.querySelectorAll('[data-task]').forEach((row) => {
     row.onclick = (e) => {
-      if (e.target.closest('[data-add],[data-tog]')) return;
+      if (e.target.closest('[data-add],[data-tog],[data-move]')) return;
       aplSelected = Number(row.dataset.task);
       target.querySelectorAll('[data-task]').forEach((r) => r.classList.toggle('is-selected', r === row));
-      if ($('apl-edit')) { $('apl-edit').disabled = false; $('apl-del').disabled = false; }
+      syncActionButtons();
     };
-    if (canEdit) row.ondblclick = (e) => { if (!e.target.closest('[data-add],[data-tog]')) aplOpenForm(activity, tasks, byId(row.dataset.task), null, rerender, units); };
+    if (canEdit) row.ondblclick = (e) => { if (!e.target.closest('[data-add],[data-tog],[data-move]')) aplOpenForm(activity, tasks, byId(row.dataset.task), null, rerender, units); };
   });
   if (!canEdit) return;
+
+  async function aplMoveTask(taskId, dir) {
+    if (!taskId) return;
+    try {
+      await api(`/api/act/${encodeURIComponent(activity)}/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: { move: dir }
+      });
+      aplSelected = taskId;
+      rerender();
+    } catch (err) {
+      onErr(err);
+    }
+  }
+
+  if ($('apl-up')) $('apl-up').onclick = () => aplMoveTask(aplSelected, 'up');
+  if ($('apl-down')) $('apl-down').onclick = () => aplMoveTask(aplSelected, 'down');
+  target.querySelectorAll('[data-move]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.id);
+      const dir = btn.dataset.move;
+      aplMoveTask(id, dir);
+    };
+  });
+
+  if (target._aplKeyHandler) window.removeEventListener('keydown', target._aplKeyHandler);
+  target._aplKeyHandler = (e) => {
+    if (!canEdit || !aplSelected) return;
+    if (e.target.matches('input, textarea, select')) return;
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      const dir = e.key === 'ArrowUp' ? 'up' : 'down';
+      const cur = byId(aplSelected);
+      const curSibs = cur ? getSiblings(cur) : [];
+      const curIdx = cur ? curSibs.findIndex((t) => t.id === cur.id) : -1;
+      if (dir === 'up' && curIdx > 0) aplMoveTask(aplSelected, 'up');
+      else if (dir === 'down' && curIdx !== -1 && curIdx < curSibs.length - 1) aplMoveTask(aplSelected, 'down');
+    }
+  };
+  window.addEventListener('keydown', target._aplKeyHandler);
+
   $('apl-add-phase').onclick = () => aplOpenForm(activity, tasks, null, null, rerender, units);
   // With a main item selected, "สร้าง" adds a sub item under it (the + button per row was removed for space).
   $('apl-new').onclick = () => { const sel = byId(aplSelected); aplOpenForm(activity, tasks, null, sel ? (sel.parent_id ?? sel.id) : null, rerender, units); };

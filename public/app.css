@@ -483,7 +483,7 @@ body[data-zone] .plan-col.is-today{border-color:var(--zone)}
 .apl-grid{min-width:calc(384px + var(--apl-tl))}
 .apl-row{display:grid;grid-template-columns:384px minmax(var(--apl-tl),1fr);border-bottom:1px solid var(--mo-border)}
 .apl-row:last-child{border-bottom:0}
-.apl-left{position:sticky;left:0;z-index:5;display:grid;grid-template-columns:36px 196px 100px 52px;align-items:center;background:var(--mo-surface);border-right:1px solid var(--mo-border)}
+.apl-left{position:sticky;left:0;z-index:5;display:grid;grid-template-columns:46px 186px 100px 52px;align-items:center;background:var(--mo-surface);border-right:1px solid var(--mo-border)}
 .apl-left > div{padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .apl-head{position:sticky;top:0;z-index:6} /* above the sticky left cells (z 5) of the rows */
 .apl-head .apl-left,.apl-head .apl-track{background:var(--th-bg);color:var(--th-ink);font-size:11px}
@@ -505,7 +505,12 @@ body[data-zone] .plan-col.is-today{border-color:var(--zone)}
 .apl-left{font-size:12px}.apl-row.is-phase .apl-left{font-weight:400}
 .apl-row[data-task]{cursor:default}
 .apl-row.is-selected .apl-left,.apl-row.is-selected .apl-track{background:var(--mo-row)}
-.apl-code{color:var(--mo-text-muted);font-variant-numeric:tabular-nums}
+.apl-code{display:flex;align-items:center;justify-content:space-between;gap:2px;color:var(--mo-text-muted);font-variant-numeric:tabular-nums}
+.apl-row-moves{display:none;align-items:center;gap:1px;margin-left:auto}
+.apl-row:hover .apl-row-moves,.apl-row.is-selected .apl-row-moves{display:inline-flex}
+.apl-move-btn{border:0;background:none;cursor:pointer;padding:0 1px;font-size:8px;line-height:1;color:var(--mo-text-muted);border-radius:2px}
+.apl-move-btn:hover:not(:disabled){color:var(--mo-primary);background:color-mix(in srgb,var(--mo-primary) 15%,transparent)}
+.apl-move-btn:disabled{opacity:0.2;cursor:default}
 .apl-title{display:flex;align-items:center;gap:4px}
 .apl-title > span{overflow:hidden;text-overflow:ellipsis}
 .apl-title.is-sub{padding-left:22px !important;font-weight:400}
@@ -536,7 +541,7 @@ body[data-zone] .plan-col.is-today{border-color:var(--zone)}
 .apl-swatch span{display:block;width:24px;height:24px;border-radius:50%;background:var(--bar);border:2px solid transparent;cursor:pointer}
 .apl-swatch input:checked + span{border-color:var(--mo-text)}
 .apl-swatch input:focus-visible + span{outline:2px solid var(--mo-primary);outline-offset:1px}
-@media (max-width:640px){.apl-grid{min-width:calc(260px + var(--apl-tl))}.apl-row{grid-template-columns:260px minmax(var(--apl-tl),1fr)}.apl-left{grid-template-columns:36px 172px 52px}.apl-left > div:nth-child(3){display:none}}
+@media (max-width:640px){.apl-grid{min-width:calc(260px + var(--apl-tl))}.apl-row{grid-template-columns:260px minmax(var(--apl-tl),1fr)}.apl-left{grid-template-columns:46px 162px 52px}.apl-left > div:nth-child(3){display:none}}
 
 /* CFO (act-cfo.js) */
 .mo-data-table td.num,.mo-data-table th.num{text-align:right;font-variant-numeric:tabular-nums}

@@ -184,6 +184,41 @@ export function mountPlanner(app) {
     const current = await oneOf(t.task, Number(req.params.id));
     if (!current) return fail(res, 404, 'ไม่พบรายการ');
     if (!(await requireAdmin(req, res, activity, current.year))) return;
+
+    // Move up or down among siblings in the same level (and same unit if applicable)
+    if (req.body?.move === 'up' || req.body?.move === 'down') {
+      const direction = req.body.move;
+      const allRows = await fetchAll(() => {
+        let q = tx.from(t.task).select('id,sort_no,parent_id,unit').eq('year', current.year);
+        if (current.parent_id == null) {
+          q = q.is('parent_id', null);
+        } else {
+          q = q.eq('parent_id', current.parent_id);
+        }
+        return q.order('sort_no').order('id');
+      });
+      const siblings = (current.parent_id == null && current.unit)
+        ? allRows.filter((r) => r.unit === current.unit)
+        : (current.parent_id == null && allRows.some((r) => r.unit))
+        ? allRows.filter((r) => !r.unit)
+        : allRows;
+      const idx = siblings.findIndex((r) => r.id === current.id);
+      if (idx === -1) return fail(res, 404, 'ไม่พบรายการในระดับเดียวกัน');
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (targetIdx >= 0 && targetIdx < siblings.length) {
+        const other = siblings[targetIdx];
+        siblings[idx] = other;
+        siblings[targetIdx] = current;
+        const updated_at = new Date().toISOString();
+        await Promise.all(
+          siblings.map((r, i) =>
+            tx.from(t.task).update({ sort_no: i + 1, updated_at }).eq('id', r.id)
+          )
+        );
+      }
+      return res.json({ ok: true });
+    }
+
     const [kids, units] = await Promise.all([kidCount(t.task, current.id), unitsOf(activity, current.year, true)]);
     const hasKids = kids > 0;
     const { row, error: invalid } = input(req.body || {}, current.year, hasKids, current.unit && !units.includes(current.unit) ? [...units, current.unit] : units);
