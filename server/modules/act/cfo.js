@@ -151,6 +151,7 @@ export function mountCfo(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const now = new Date();
     const due = year < now.getFullYear() ? 12 : year > now.getFullYear() ? 0 : now.getMonth() + 1;
+    await autoFillEf3(t, req, (await accessOf(req, activity, thisYear())).admin);
     const [access, settings, activities, efs, scopes, gwp, allEntries, details, materials, matUse, mats] = await Promise.all([
       accessOf(req, activity, year),
       settingsOf(t),
@@ -321,6 +322,7 @@ export function mountCfo(app) {
 
   // ---------- Setting: master data (admin of this year edits) ----------
   route('get', '/api/act/:activity/cfo/master', async (req, res, activity, t) => {
+    await autoFillEf3(t, req, (await accessOf(req, activity, thisYear())).admin);
     const [scopes, gwp, ef, refs, activities, used, settings, access, mats] = await Promise.all([
       fetchAll(() => tx.from(t.cfoScope).select('*').order('scope').order('code')),
       fetchAll(() => tx.from(t.gwp).select('*').order('code')),
@@ -808,8 +810,24 @@ export function mountCfo(app) {
   const FUEL_UP = { Diesel: [/^น้ำมันดีเซล/], Gasoline: [/^แก๊สโซลีน$/], LPG: [/^ก๊าซหุงต้ม$/, /กลั่น/] };
   const fuelOf = (name) => (/diesel|ดีเซล|\bB\d+\b/i.test(name) ? 'Diesel' : /gasohol|gasoline|เบนซิน|โซฮอล|\bE\d+\b/i.test(name) ? 'Gasoline' : /LPG|ก๊าซหุงต้ม/i.test(name) ? 'LPG' : null);
   const litre = (u) => /^(l|liter|litre|ลิตร)$/i.test(String(u || '').trim());
-  route('post', '/api/act/:activity/cfo/activities/fill-ef3', async (req, res, activity, t) => {
-    if (!(await requireAdminNow(req, res, activity))) return;
+  // TGO EF CFP rows the 3-3 line needs (inbox/import_cfp_tgo.sql, same text so that import finds them and adds no copy)
+  // and Fuel Properties density (kg/l): used when the database does not have them yet
+  const TGO_FUEL = {
+    Diesel: { item_no: '41', name: 'น้ำมันดีเซล / น้ำมันโซล่าร์', formula: 'น้ำมันดีเซลที่ได้จากกระบวนการกลั่นน้ำมันดิบ; LCIA method IPCC 2013 GWP 100a V1.03', total: 0.3503, density: 0.87 },
+    Gasoline: { item_no: '38', name: 'แก๊สโซลีน', formula: 'แก๊สโซลีน (น้ำมันเบนซิน) ที่ได้จากกระบวนการกลั่นน้ำมันดิบ; LCIA method IPCC 2013 GWP 100a V1.03', total: 0.4006, density: 0.7347 },
+    LPG: { item_no: '37', name: 'ก๊าซหุงต้ม', formula: 'ก๊าซหุงต้มที่ได้จากกระบวนการกลั่นน้ำมันดิบ; LCIA method IPCC 2013 GWP 100a V1.03', total: 0.4304, density: 0.54 }
+  };
+  const tgoFuelRow = async (t, fuel) => {
+    const f = TGO_FUEL[fuel];
+    const code = `CFP-${f.item_no.padStart(4, '0')}`;
+    const taken = must(await tx.from(t.efRef).select('id').eq('code', code).limit(1)).length > 0;
+    const made = must(await tx.from(t.efRef).insert({ sheet: 'cfp', grp: 'กลุ่มพลังงานและเชื้อเพลิง (Energy and Fuels)', item_no: f.item_no, name: f.name, formula: f.formula, unit: 'kg', total: f.total,
+      reference: 'Thai National LCI Database, TIIS-MTEC-NSTDA (with TGO electricity 2022-2024)', remark: 'Update_April2026', sort_no: Number(f.item_no), status: 'Active', code: taken ? null : code })
+      .select('id,sheet,grp,name,formula,unit,total'));
+    return made[0];
+  };
+  // Every fuel activity without 3-3 gets it (button เติม 3-3, and on its own when an admin opens Setting or Dashboard)
+  const fillEf3 = async (t, req) => {
     const [acts, efs, refs] = await Promise.all([
       fetchAll(() => tx.from(t.activity).select('*').order('id')),
       fetchAll(() => tx.from(t.ef).select('*')),
@@ -828,8 +846,9 @@ export function mountCfo(app) {
       const fuel = fuelOf(ref?.name || e.name);
       if (!fuel) continue;
       const [name, detail] = FUEL_UP[fuel];
-      const up = refs.find((r) => r.sheet === 'cfp' && name.test(r.name) && (!detail || detail.test(r.formula || '')) && r.total != null);
-      const density = refs.find((r) => r.sheet === 'fuel' && r.grp === 'Density' && r.name === fuel)?.total;
+      let up = refs.find((r) => r.sheet === 'cfp' && name.test(r.name) && (!detail || detail.test(r.formula || '')) && r.total != null);
+      if (!up) refs.push((up = await tgoFuelRow(t, fuel)));
+      const density = refs.find((r) => r.sheet === 'fuel' && r.grp === 'Density' && r.name === fuel)?.total ?? TGO_FUEL[fuel].density;
       const same = up && String(up.unit).toLowerCase() === String(e.unit).toLowerCase();
       if (!up || (!same && !(litre(e.unit) && String(up.unit).toLowerCase() === 'kg' && density))) { skipped.push(`${a.department} · ${a.name} ${a.detail || ''}`.trim()); continue; }
       const made = await efFromRef(t, up.id, '3-3', false, same ? null : { factor: Number(density), unit: e.unit });
@@ -839,7 +858,13 @@ export function mountCfo(app) {
       done.push(a.id);
     }
     if (done.length) await logRev(t, req, 'กิจกรรม', 'เติม 3-3', `เติม EF การได้มาของเชื้อเพลิง (3-3) ให้ ${done.length} กิจกรรม`);
-    res.json({ ok: true, filled: done.length, skipped });
+    return { filled: done.length, skipped };
+  };
+  // quietly, for an admin: a failure (e.g. before db/act/cfo.sql) must not stop the page
+  const autoFillEf3 = (t, req, admin) => (admin ? fillEf3(t, req).catch(() => null) : null);
+  route('post', '/api/act/:activity/cfo/activities/fill-ef3', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    res.json({ ok: true, ...(await fillEf3(t, req)) });
   });
   route('delete', '/api/act/:activity/cfo/activities/:id', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
