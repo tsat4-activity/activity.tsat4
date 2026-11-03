@@ -340,8 +340,19 @@ export function mountAudit(app) {
     }
     const rounds = [...roundMap.values()].sort((a, b) => a.month - b.month);
 
-    // Identify all auditors
-    const auditorMembers = teamRows.filter((m) => m.role === 'auditor' || (m.unit === 'audit' && m.role !== 'owner' && m.team));
+    // Identify all auditors (deduplicating each employee, preferring primary auditor role with team)
+    const seenAuditors = new Set();
+    const auditorMembers = [];
+    const candidates = [...teamRows]
+      .filter((m) => m.role === 'auditor' || (m.unit === 'audit' && m.role !== 'owner' && m.team))
+      .sort((a, b) => (a.role === 'auditor' ? -1 : 1));
+    for (const m of candidates) {
+      const empId = String(m.employee_id);
+      if (!seenAuditors.has(empId)) {
+        seenAuditors.add(empId);
+        auditorMembers.push(m);
+      }
+    }
     const knownEmpIds = new Set(auditorMembers.map((m) => String(m.employee_id)));
     const extraEmpIds = new Set();
     for (const a of audits) {
@@ -360,20 +371,28 @@ export function mountAudit(app) {
       const team = m.team || '';
       const myPlans = plans.filter((p) => p.team === team);
       const myAudits = audits.filter((a) => parseAuditors(a.auditors).includes(empId));
-      const planned = myPlans.length;
-      const actual = myAudits.length;
-      const percent = planned > 0 ? Math.round((actual / planned) * 100) : (actual > 0 ? 100 : 0);
-      const scores = myAudits.map((a) => Number(a.percent_score)).filter((n) => !Number.isNaN(n));
-      const avgScore = scores.length ? roundTo(scores.reduce((sum, n) => sum + n, 0) / scores.length, 2) : null;
 
       const roundStats = rounds.map((r) => {
         const rPlans = myPlans.filter((p) => (r.round ? p.round === r.round : p.month === r.month));
         const rAudits = myAudits.filter((a) => monthOf(a.audited_at) === r.month);
-        const rP = rPlans.length;
+        let rP = rPlans.length;
+        if (rP === 0) {
+          const prevPlans = myPlans.filter((p) => (r.round ? p.round !== r.round : p.month !== r.month));
+          if (prevPlans.length > 0) {
+            const rCount = rounds.filter((x) => x.round !== r.round).length || 1;
+            rP = Math.round(prevPlans.length / rCount);
+          }
+        }
         const rA = rAudits.length;
         const rPct = rP > 0 ? Math.round((rA / rP) * 100) : (rA > 0 ? 100 : 0);
         return { round: r.round, month: r.month, planned: rP, actual: rA, percent: rPct };
       });
+
+      const planned = roundStats.reduce((sum, r) => sum + r.planned, 0);
+      const actual = myAudits.length;
+      const percent = planned > 0 ? Math.round((actual / planned) * 100) : (actual > 0 ? 100 : 0);
+      const scores = myAudits.map((a) => Number(a.percent_score)).filter((n) => !Number.isNaN(n));
+      const avgScore = scores.length ? roundTo(scores.reduce((sum, n) => sum + n, 0) / scores.length, 2) : null;
 
       auditors.push({
         employeeId: empId,

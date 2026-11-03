@@ -78,6 +78,52 @@ AREA_TEAMS = {
     'B15': ('B', ['2102899']),
 }
 
+# Round 3 (September 2026) assignments strictly from PDF & attendance image:
+# (team, week, day, time_str, [auditors_who_attended])
+ROUND_3_PDF = {
+    # Team A:
+    'B09': ('A', 1, 4, '13:00', ['2103100']),
+    'B10': ('A', 1, 4, '13:30', ['2103100']),
+    'B14': ('A', 1, 4, '14:00', ['2103100']),
+    'B07': ('A', 1, 4, '14:30', ['2103100']),
+    'B08': ('A', 1, 4, '15:00', ['2103100']),
+    # Team B:
+    'A05': ('B', 1, 4, '13:00', ['2102899']),
+    'A06': ('B', 1, 4, '13:30', ['2102899', '2101744']),
+    'B13': ('B', 1, 4, '14:00', ['2102899']),
+    'B15': ('B', 1, 4, '14:30', ['2102899']),
+    'A11': ('B', 1, 4, '15:00', ['2102899', '2103570']),
+    'A07': ('B', 2, 7, '13:00', ['2102899']),
+    # Team C:
+    'B01': ('C', 1, 4, '13:00', ['2101861']),
+    'B04': ('C', 1, 4, '13:30', ['2101861']),
+    'B05': ('C', 1, 4, '14:00', ['2101861']),
+    'B03': ('C', 1, 4, '14:30', ['2101861']),
+    'A13': ('C', 1, 4, '15:00', ['2101861', '2103570']),
+    # Team D: (2103396 absent)
+    'A02': ('D', 1, 4, '13:00', ['2101990']),
+    'A08': ('D', 1, 4, '13:30', ['2101990']),
+    'A03': ('D', 1, 4, '14:00', ['2101990']),
+    'A04': ('D', 1, 4, '14:30', ['2101990']),
+    'A17': ('D', 1, 4, '15:00', ['2101990', '2103570']),
+    # Team F: (2103391 absent)
+    'A09': ('F', 1, 4, '13:00', ['2103669']),
+    'A14': ('F', 1, 4, '13:30', ['2103669']),
+    'A18': ('F', 1, 4, '14:00', ['2103669']),
+    'A19': ('F', 1, 4, '14:30', ['2103669']),
+    'A12': ('F', 1, 4, '15:00', ['2103669', '2103570']),
+    # Team G:
+    'B11': ('G', 1, 4, '13:30', ['2101744', '2103865']),
+    'B06': ('G', 1, 4, '14:00', ['2101744', '2103865']),
+    'B12': ('G', 1, 4, '14:30', ['2101744', '2103865']),
+    'B02': ('G', 2, 7, '13:30', ['2101744', '2103865']),
+    # Team H:
+    'A01': ('H', 1, 4, '13:00', ['2102901', '2103906']),
+    'A15': ('H', 1, 4, '13:30', ['2102901', '2103906']),
+    'A16': ('H', 1, 4, '14:00', ['2102901', '2103906']),
+    'A10': ('H', 1, 4, '14:30', ['2102901', '2103906']),
+}
+
 # Assign each area to a week (1..4) for Committee audits
 WEEKS_BY_CODE = {code: (i % 4) + 1 for i, (code, *_) in enumerate(AREAS)}
 
@@ -139,8 +185,11 @@ def generate_all():
     # 1. Committee Plans for months 3, 6, 9
     for m, (round_no, base_pct) in COMM_ROUNDS.items():
         for code, area_type, name, owner in AREAS:
-            team, aud_list = AREA_TEAMS[code]
-            week = WEEKS_BY_CODE[code]
+            if m == 9:
+                team, week, day, time_str, aud_list = ROUND_3_PDF[code]
+            else:
+                team, aud_list = AREA_TEAMS[code]
+                week = WEEKS_BY_CODE[code]
             plans.append((2026, code, m, week, round_no, team))
 
     # 2. Self Audits: months 1 to 11
@@ -174,16 +223,23 @@ def generate_all():
 
     # 3. Committee Audits: months 3, 6, 9
     # Taught: spread 82% - 90%
+    # Round 1 & 2: full attendance for all auditors ("ส่วนครั้งที่ 1 2 เต็มทุกคน")
+    # Round 3: follows PDF schedule & attendance image
     for m, (round_no, base_pct) in COMM_ROUNDS.items():
         for code_idx, (code, area_type, name, owner) in enumerate(AREAS):
-            team, aud_list = AREA_TEAMS[code]
-            week = WEEKS_BY_CODE[code]
-            # Day within week: Week 1: 2-6, Week 2: 9-13, Week 3: 16-20, Week 4: 23-27
-            day = (week - 1) * 7 + 2 + (code_idx % 5)
-            hour = 9 + (code_idx % 7)
-            minute = 10 + (code_idx * 11) % 45
-            date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:00+07"
-            audit_no = f"C-{code}-{day:02d}{m:02d}26-01"
+            if m == 9:
+                team, week, day, time_str, aud_list = ROUND_3_PDF[code]
+                date_str = f"2026-09-{day:02d} {time_str}:00+07"
+                audit_no = f"C-{code}-{day:02d}0926-01"
+            else:
+                team, aud_list = AREA_TEAMS[code]
+                week = WEEKS_BY_CODE[code]
+                # Day within week: Week 1: 2-6, Week 2: 9-13, Week 3: 16-20, Week 4: 23-27
+                day = (week - 1) * 7 + 2 + (code_idx % 5)
+                hour = 9 + (code_idx % 7)
+                minute = 10 + (code_idx * 11) % 45
+                date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:00+07"
+                audit_no = f"C-{code}-{day:02d}{m:02d}26-01"
 
             area_offset = (((code_idx * 13 + m * 11) % 9) - 4) * 0.65  # -2.6 to +2.6%
             target_pct = min(90.4, max(82.4, base_pct + area_offset))
