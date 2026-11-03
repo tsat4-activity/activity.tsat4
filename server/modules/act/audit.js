@@ -209,14 +209,27 @@ export function mountAudit(app) {
   route('get', '/api/act/:activity/me', async (req, res, activity) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
-    const [access, team, audits] = await Promise.all([
+    const now = new Date().getFullYear();
+    const t = tablesOf(activity);
+    const [access, team, audits, tasks, projects] = await Promise.all([
       accessOf(req, activity, year),
-      tx.from(tablesOf(activity).team).select('year'),
-      tx.from(tablesOf(activity).audit).select('year')
+      tx.from(t.team).select('year'),
+      t.audit ? tx.from(t.audit).select('year') : Promise.resolve({ data: [] }),
+      t.task ? tx.from(t.task).select('year') : Promise.resolve({ data: [] }),
+      t.project ? tx.from(t.project).select('year') : Promise.resolve({ data: [] })
     ]);
     // Activities without audit tables (CFO, 100P) have no tx_<act>_audit; uncreated activities have no mt_<act>_team yet.
     throwIf(team.error?.code === 'PGRST205' ? null : team.error, audits.error?.code === 'PGRST205' ? null : audits.error);
-    const years = [...new Set([new Date().getFullYear(), year, ...(team.data || []).map((r) => r.year), ...(audits.data || []).map((r) => r.year)].map(Number))].sort();
+    const dbYears = [
+      ...(team.data || []).map((r) => r.year),
+      ...(audits.data || []).map((r) => r.year),
+      ...(tasks.data || []).map((r) => r.year),
+      ...(projects.data || []).map((r) => r.year)
+    ];
+    // Window of recent years: past 2 years (now-2, now-1), current year (now), next year (now+1),
+    // plus the currently requested year and any years with historical data in the database.
+    const windowYears = [now - 2, now - 1, now, now + 1];
+    const years = [...new Set([...windowYears, year, ...dbYears].map(Number))].filter((y) => y >= 2000 && y <= 2100).sort();
     res.json({ year, years, access });
   });
 

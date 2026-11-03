@@ -51,7 +51,8 @@ function a5Seg(attr, tabs, active) {
 }
 
 function a5YearSelect(years) {
-  const list = [...new Set([...years, a5Year])].sort();
+  const now = new Date().getFullYear();
+  const list = [...new Set([...(years || []), now - 2, now - 1, now, now + 1, a5Year])].filter((y) => y >= 2000 && y <= 2100).sort();
   return field('ปี', `<select id="a5-year">${options(list, a5Year)}</select>`);
 }
 

@@ -270,7 +270,8 @@ async function aplRender(target, activity, opts = {}) {
   const selIdx = selTask ? selSibs.findIndex((t) => t.id === selTask.id) : -1;
   const canSelUp = selIdx > 0;
   const canSelDown = selIdx !== -1 && selIdx < selSibs.length - 1;
-  const years = [aplYear - 1, aplYear, aplYear + 1].filter((y) => y >= 2000 && y <= 2100);
+  const now = new Date().getFullYear();
+  const years = [...new Set([now - 2, now - 1, now, now + 1, aplYear])].filter((y) => y >= 2000 && y <= 2100).sort();
   const seg = `<div class="seg" role="group" aria-label="มุมมอง">${[['year', 'รายปี'], ['month', 'รายเดือน']].map(([mode, name]) => `<button class="seg-btn${mode === aplView ? ' is-active' : ''}" type="button" data-aplview="${mode}" aria-pressed="${mode === aplView}">${name}</button>`).join('')}</div>`;
   const search = (units.length ? field('โครงการ', `<select id="apl-unit">${options(['', ...units.map((u) => u.code)], aplUnit, (v) => (v ? unitName(v) : 'ทั้งหมด'))}</select>`) : '')
     + field('ค้นหา', `<input id="apl-q" placeholder="ชื่อรายการหรือผู้รับผิดชอบ" value="${esc(aplQuery)}">`);
@@ -964,7 +965,7 @@ async function aplDrawSmfOverview(body, activity) {
 // หน้าหลัก: ภาพรวมกิจกรรมในโรงงาน 5S · CFO · SMF with its own year (ผู้ใช้กำหนด 2026-11-01).
 async function aplHome(target) {
   const now = new Date().getFullYear();
-  const years = [...new Set([now - 1, now, now + 1, a5Year])].sort();
+  const years = [...new Set([now - 2, now - 1, now, now + 1, a5Year])].filter((y) => y >= 2000 && y <= 2100).sort();
   target.innerHTML = `<div class="view-body"><section class="card">
     ${pageBar('<strong class="plan-label">ภาพรวมกิจกรรมในโรงงาน</strong>', `<div class="a5-year">${field('ปี', `<select id="ov-year">${options(years, a5Year)}</select>`)}</div>`, 'ov')}
     <div id="ov-body"><div class="empty">กำลังโหลด...</div></div>

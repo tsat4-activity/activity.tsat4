@@ -165,7 +165,9 @@ async function atxAuditDetail(activity, id) {
 
 // New audit, or edit one (editId): type and area are fixed when editing.
 async function atxForm(body, activity, me, editId = 0) {
-  const state = { type: '', areaId: '', date: actIso(new Date()), team: '', participated: new Set(), receivers: [], scores: {}, text: {}, photo: {}, editId, auditNo: '', ownItems: new Set() };
+  const isCurYear = a5Year === new Date().getFullYear();
+  const defaultDate = isCurYear ? actIso(new Date()) : `${a5Year}-01-15`;
+  const state = { type: '', areaId: '', date: defaultDate, team: '', participated: new Set(), receivers: [], scores: {}, text: {}, photo: {}, editId, auditNo: '', ownItems: new Set() };
   let [form, d] = await Promise.all([
     a5Api(activity, `audit-form?year=${a5Year}`),
     editId ? a5Api(activity, `audits/${editId}`) : null
@@ -220,7 +222,7 @@ async function atxForm(body, activity, me, editId = 0) {
       <div class="toolbar atx-head">
         ${state.editId ? `<span class="badge badge-primary">${esc(ATX_TYPES[state.type])}</span>` : a5Seg('data-atype', Object.fromEntries(form.types.map((t) => [t, ATX_TYPES[t]])), state.type)}
         ${field('พื้นที่', `<select id="atx-area"${state.editId ? ' disabled' : ''}><option value="">เลือกพื้นที่</option>${areasFor().map((a) => `<option value="${a.id}"${String(a.id) === String(state.areaId) ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)}</option>`).join('')}</select>`, 'grow')}
-        ${field('วันที่ตรวจ', `<input id="atx-date" type="date" max="${actIso(new Date())}" value="${state.date}">`)}
+        ${field('วันที่ตรวจ', `<input id="atx-date" type="date" min="${a5Year}-01-01" max="${isCurYear ? actIso(new Date()) : `${a5Year}-12-31`}" value="${state.date}">`)}
         ${state.type === 'COMMITTEE' ? field('ทีม', `<select id="atx-team">${options(form.teams.map((t) => t.team), state.team, (t) => `ทีม ${t}`)}</select>`) : ''}
       </div>
       ${state.type === 'COMMITTEE' ? `<div class="atx-people"><span class="sum-meta">ผู้ตรวจ:</span>${teamMembers().map((m) => `<label class="atx-check"><input type="checkbox" data-part="${esc(m.employeeId)}"${state.participated.has(m.employeeId) ? ' checked' : ''}> ${esc(m.employeeId)} ${esc(m.name)}</label>`).join('') || '<span class="sum-meta">ทีมนี้ยังไม่มีรายชื่อ</span>'}</div>` : ''}
