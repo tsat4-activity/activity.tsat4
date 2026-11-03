@@ -137,13 +137,22 @@ async function a5DrawSummary(body, activity, me) {
   const head = sets.map((set) => `<th colspan="2" class="a5-type-head" style="--team:${set.color}">${esc(set.label)}</th>`).join('');
   const row = (i) => `<tr><td>${ACT_MONTHS[i]}</td>${sets.map((set) => `<td>${set.months[i].percent}%</td><td>${set.months[i].audits}</td>`).join('')}</tr>`;
   const kpiPass = a5Summary.type === 'SELF' ? passSelf : passCommittee;
-  const targetLabel = `เป้าหมาย: Self ${passSelf}% · Committee ${passCommittee}%`;
+  const targetOptions = [
+    { value: 'current', label: `Self ${passSelf}% · Committee ${passCommittee}%` },
+    ...(canEditTarget ? [
+      ...[[80, 80], [85, 80], [85, 85], [90, 85], [90, 90]]
+        .filter(([s, c]) => s !== passSelf || c !== passCommittee)
+        .map(([s, c]) => ({ value: `${s}:${c}`, label: `Self ${s}% · Committee ${c}%` })),
+      { value: 'custom', label: '⚙️ ปรับเป้าหมายเอง...' }
+    ] : [])
+  ];
+  const targetField = field('เป้าหมาย', `<select id="a5-target-sel"${canEditTarget ? '' : ' disabled'}>${targetOptions.map((o) => `<option value="${o.value}">${esc(o.label)}</option>`).join('')}</select>`);
   body.innerHTML = `
     <div class="toolbar a5-filters">
       ${field('ประเภท', `<select id="a5-type">${options(['', 'SELF', 'COMMITTEE'], a5Summary.type, (v) => ({ '': 'ทั้งหมด', SELF: 'Self Audit', COMMITTEE: 'Committee' }[v]))}</select>`)}
       ${field('ประเภทพื้นที่', `<select id="a5-atype">${options(['', ...A5_AREA_TYPES], a5Summary.areaType, (v) => v || 'ทั้งหมด')}</select>`)}
       ${field('พื้นที่', `<select id="a5-area"><option value="">ทั้งหมด</option>${areas.map((a) => `<option value="${a.id}"${String(a.id) === String(a5Summary.area) ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)}</option>`).join('')}</select>`, 'grow')}
-      ${canEditTarget ? `<div class="action-bar">${button('a5-target-btn', targetLabel, 'secondary')}</div>` : ''}
+      ${targetField}
     </div>
     <div class="ch-kpis">${(data.groups.length ? data.groups : [1, 2, 3, 4, 5].map((n) => ({ group: n, percent: 0 }))).map((g, i) => chartKpi({ label: `${esc(a5GroupName(activity, g.group))} · เฉลี่ยทั้งปี`, value: g.percent, unit: '%', pie: g.percent, color: CHART.series[i % CHART.series.length], note: g.percent >= kpiPass ? 'ผ่านเกณฑ์' : g.percent ? `ต่ำกว่าเกณฑ์ ${kpiPass}%` : '' })).join('')}</div>
     ${data.owner ? `<p class="sum-meta">เจ้าของพื้นที่: ${esc(data.owner.name || data.owner.employeeId)}</p>` : ''}
@@ -181,7 +190,23 @@ async function a5DrawSummary(body, activity, me) {
       targetInput?.select();
     }, 50);
   };
-  if ($('a5-target-btn')) $('a5-target-btn').onclick = () => editTarget('self');
+  if ($('a5-target-sel') && canEditTarget) {
+    $('a5-target-sel').onchange = async () => {
+      const val = $('a5-target-sel').value;
+      if (val === 'current') return;
+      if (val === 'custom') {
+        $('a5-target-sel').value = 'current';
+        editTarget('self');
+        return;
+      }
+      const [s, c] = val.split(':').map(Number);
+      if (s && c) {
+        await a5Api(activity, 'target', { method: 'PUT', body: { year: a5Year, self: s, committee: c } });
+        toast(`บันทึกเป้าหมายปี ${a5Year}: Self ${s}% · Committee ${c}% แล้ว`);
+        redraw();
+      }
+    };
+  }
   const plots = body.querySelectorAll('.ch-plot');
   plots.forEach((plot, idx) => {
     const isComm = idx === 1;
@@ -266,11 +291,10 @@ async function a5DrawAuditors(body, activity) {
       { label: 'ลำดับ', key: 'seq' },
       { label: 'รหัสพนักงาน', key: 'employeeId' },
       { label: 'ชื่อ - นามสกุล', key: 'name' },
-      { label: 'แผนก', key: 'department' },
       { label: 'ทีม', key: 'team' },
       { label: 'แผนรวม', key: 'planned', num: true },
       { label: 'ตรวจจริง', key: 'actual', num: true },
-      { label: '% การมีส่วนร่วม', key: 'percent', num: true },
+      { label: '% การมีส่วนร่วม', key: 'percent' },
       ...rounds.map((r) => ({
         label: r.round ? `รอบ ${r.round} (${ACT_MONTHS_SHORT[r.month - 1]})` : ACT_MONTHS_SHORT[r.month - 1],
         key: `r_${r.month}`,
@@ -289,8 +313,8 @@ async function a5DrawAuditors(body, activity) {
     };
 
     const progBar = (pct) => {
-      const clr = pct >= 100 ? 'var(--mo-success)' : pct >= passTarget ? 'var(--mo-info)' : pct > 0 ? 'var(--mo-danger)' : 'var(--mo-text-muted)';
-      return `<div class="a5-prog"><div class="a5-prog-bar"><div class="a5-prog-fill" style="width:${Math.min(100, pct)}%;--p-clr:${clr}"></div></div><b>${pct}%</b></div>`;
+      const clr = pct >= 100 ? 'var(--mo-success)' : pct >= passTarget ? 'var(--ch-1)' : pct > 0 ? 'var(--mo-danger)' : 'var(--mo-text-muted)';
+      return `<div class="cfo-prog"><span><i style="width:${Math.min(100, pct)}%;background:color-mix(in srgb,${clr} 40%,transparent);box-shadow:inset 0 0 0 1px ${clr}"></i></span>${pct}%</div>`;
     };
 
     const rowsHtml = sorted.map((a, idx) => {
@@ -308,11 +332,10 @@ async function a5DrawAuditors(body, activity) {
         <td>${idx + 1}</td>
         <td><strong>${esc(a.employeeId)}</strong></td>
         <td>${esc(a.name)}</td>
-        <td>${esc(a.department || '-')}</td>
         <td>${teamBadge}</td>
         <td class="num">${a.planned}</td>
         <td class="num"><strong>${a.actual}</strong></td>
-        <td class="num">${progBar(a.percent)}</td>
+        <td>${progBar(a.percent)}</td>
         ${roundTds}
         <td class="num"><strong>${a.avgScore != null ? `${a.avgScore}%` : '-'}</strong></td>
         <td>${statusBadge(a)}</td>
