@@ -36,6 +36,9 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.d-none{display:
 .header-page strong{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .header-page span{font-size:10.5px;color:var(--mo-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .header-right{margin-left:auto;display:flex;align-items:center;gap:4px;flex:0 0 auto;padding-right:4px}
+.header-meta{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mo-text-muted);margin-right:8px;padding:3px 10px;border-radius:14px;background:var(--mo-surface-2);border:1px solid var(--mo-line);white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}
+.header-meta:empty{display:none}
+.header-meta strong,.header-meta b{color:var(--mo-text);font-weight:600}
 .theme-toggle,.icon-btn{width:28px;height:28px;border:0;border-radius:50%;background:transparent;color:var(--mo-text-muted);display:grid;place-items:center}
 .theme-toggle:hover,.icon-btn:hover{background:var(--mo-surface-2);color:var(--mo-primary)}
 .user-menu{position:relative}

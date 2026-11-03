@@ -26,6 +26,13 @@ function logout() {
 }
 $('logout').onclick = logout;
 $('password-logout').onclick = logout;
+if ($('change-pw-btn')) {
+  $('change-pw-btn').onclick = (e) => {
+    e.stopPropagation();
+    $('user-menu').classList.remove('open');
+    openChangePassword();
+  };
+}
 document.querySelector('[data-nav-panel="activity"]').insertAdjacentHTML('beforeend', unitNav(ACTIVITIES));
 document.querySelectorAll('.nav-btn[data-view]').forEach((node) => { node.onclick = () => openView(node.dataset.view); });
 document.querySelectorAll('[data-nav-toggle]').forEach((node) => {

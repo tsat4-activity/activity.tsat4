@@ -24,6 +24,8 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-03 · Antigravity [5S] · ย้ายข้อมูลเจ้าของพื้นที่และข้อความสถานะขึ้นแถบ Header ด้านบน (`#header-meta` ก่อนปุ่ม theme/user) พร้อมฟังก์ชัน `setHeaderMeta()` ขยายผลให้ทุกหน้า (5S Summary, Ranking, Auditor, Schedule, Team, Transaction) ใช้งานร่วมกันได้และล้างค่าอัตโนมัติเมื่อเปลี่ยนหน้า, และเพิ่มปุ่ม "เปลี่ยนรหัสผ่าน" ในเมนูผู้ใช้ (User Pop) ก่อนปุ่มออกจากระบบ พร้อมฟอร์ม popup ตรวจสอบรหัสเดิมและรหัสใหม่ (`public/index.html`, `public/app.css`, `public/js/core.js`, `public/js/boot.js`, `public/js/act-5s.js`, `public/js/act-tx.js`, `server/core/auth.js`)
+
 - 2026-11-03 · Antigravity [5S] · ปรับปรุง UI 5S Dashboard: เปลี่ยนปุ่มเป้าหมายในแถบเครื่องมือของหน้า Summary เป็น dropdown field (`field('เป้าหมาย', <select>)`) เลือกค่าสำเร็จรูปหรือปรับเองได้กลมกลืนกับช่องเลือกอื่น, ตัดคอลัมน์ "แผนก" ออกจากตาราง Auditor participation, และปรับแถบความคืบหน้า % การมีส่วนร่วมให้ใช้คลาสและสัดส่วนแบบเดียวกับ CFO (`.cfo-prog` 64×10px พร้อมแทร็กขอบมน) (`public/js/act-5s.js`, `public/app.css`)
 
 - 2026-11-03 · Antigravity [5S] · เพิ่มแท็บ Auditor ใน 5S Dashboard สำหรับประเมินการมีส่วนร่วมในการตรวจประเมินของผู้ตรวจประเมินรายบุคคล: API `GET /api/act/:activity/dashboard/auditors` คำนวณจำนวนครั้งตามแผน (ตามทีมตรวจ A–I ใน `mt_5s_audit_plan`), การเข้าตรวจจริง (จาก `tx_5s_audit.auditors`), % การมีส่วนร่วม, แยกตามรอบการตรวจ, คะแนนเฉลี่ยที่ให้ และสถานะประเมิน (ครบตามแผน, ผ่านเกณฑ์, ต่ำกว่าเกณฑ์, ยังไม่เข้าตรวจ) พร้อมการ์ด KPI ภาพรวม ตัวกรองทีม/สถานะ/ค้นหา ตารางจัดเรียงได้ และ popup แสดงประวัติรายการพื้นที่ที่เข้าตรวจรายบุคคล (`public/js/act-5s.js`, `public/app.css`, `server/modules/act/audit.js`, `scripts/routes.snapshot.txt`)

@@ -459,6 +459,65 @@ function toast(message, kind = 'success') {
   setTimeout(() => node.remove(), 3200);
 }
 
+function setHeaderMeta(content = '') {
+  const node = $('header-meta');
+  if (!node) return;
+  node.innerHTML = content ? String(content) : '';
+}
+
+function openChangePassword() {
+  const fields = `
+    <div class="field">
+      <label class="required">รหัสผ่านปัจจุบัน</label>
+      <div class="pw-wrap">
+        <input id="pw-cur" type="password" autocomplete="current-password" required>
+        <button class="icon-btn pw-toggle" type="button" data-pw-toggle title="แสดง/ซ่อนรหัส" aria-label="แสดง/ซ่อน"><span class="material-symbols-rounded">visibility</span></button>
+      </div>
+    </div>
+    <div class="field">
+      <label class="required">รหัสผ่านใหม่</label>
+      <div class="pw-wrap">
+        <input id="pw-new" type="password" autocomplete="new-password" minlength="8" required>
+        <button class="icon-btn pw-toggle" type="button" data-pw-toggle title="แสดง/ซ่อนรหัส" aria-label="แสดง/ซ่อน"><span class="material-symbols-rounded">visibility</span></button>
+      </div>
+      <small class="sum-meta">ต้องยาวอย่างน้อย 8 ตัวอักษร</small>
+    </div>
+    <div class="field">
+      <label class="required">ยืนยันรหัสผ่านใหม่</label>
+      <div class="pw-wrap">
+        <input id="pw-cfm" type="password" autocomplete="new-password" minlength="8" required>
+        <button class="icon-btn pw-toggle" type="button" data-pw-toggle title="แสดง/ซ่อนรหัส" aria-label="แสดง/ซ่อน"><span class="material-symbols-rounded">visibility</span></button>
+      </div>
+    </div>
+    <p class="form-error" id="pw-pop-err" style="display:none"></p>
+  `;
+  openPopup('เปลี่ยนรหัสผ่าน', fields, async () => {
+    const cur = $('pw-cur').value.trim();
+    const next = $('pw-new').value.trim();
+    const cfm = $('pw-cfm').value.trim();
+    const errBox = $('pw-pop-err');
+    const showErr = (msg) => {
+      if (errBox) {
+        errBox.textContent = msg;
+        errBox.style.display = 'block';
+      }
+      throw new Error(msg);
+    };
+    if (!cur) showErr('กรุณากรอกรหัสผ่านปัจจุบัน');
+    if (!next) showErr('กรุณากรอกรหัสผ่านใหม่');
+    if (next.length < 8) showErr('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัว');
+    if (next !== cfm) showErr('รหัสผ่านใหม่และการยืนยันไม่ตรงกัน');
+    if (cur === next) showErr('รหัสผ่านใหม่ต้องไม่ซ้ำรหัสเดิม');
+    try {
+      await api('/api/password', { method: 'POST', body: { current: cur, password: next } });
+      toast('เปลี่ยนรหัสผ่านสำเร็จแล้ว');
+      closePopup();
+    } catch (err) {
+      showErr(err.message || 'เปลี่ยนรหัสผ่านไม่ได้');
+    }
+  });
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     credentials: 'same-origin',
@@ -467,7 +526,10 @@ async function api(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401) { showLogin(); throw new Error(data.error || 'กรุณาเข้าสู่ระบบ'); }
+  if (res.status === 401) {
+    if (path !== '/api/password') showLogin();
+    throw new Error(data.error || 'กรุณาเข้าสู่ระบบ');
+  }
   if (res.status === 403 && String(data.error || '').includes('90')) { showPassword(); throw new Error(data.error); }
   if (!res.ok) throw new Error(data.error || 'ไม่สำเร็จ');
   return data;
@@ -516,6 +578,7 @@ function zoneOf(name) {
 }
 
 function openView(name) {
+  setHeaderMeta('');
   if (name === 'system' && !me.creator) name = 'main';
   view = name;
   // Dashboard pages use the compact sizes (body[data-dash] in app.css).

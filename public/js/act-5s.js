@@ -147,6 +147,7 @@ async function a5DrawSummary(body, activity, me) {
     ] : [])
   ];
   const targetField = field('เป้าหมาย', `<select id="a5-target-sel"${canEditTarget ? '' : ' disabled'}>${targetOptions.map((o) => `<option value="${o.value}">${esc(o.label)}</option>`).join('')}</select>`);
+  setHeaderMeta(data.owner ? `เจ้าของพื้นที่: <strong>${esc(data.owner.name || data.owner.employeeId)}</strong>` : '');
   body.innerHTML = `
     <div class="toolbar a5-filters">
       ${field('ประเภท', `<select id="a5-type">${options(['', 'SELF', 'COMMITTEE'], a5Summary.type, (v) => ({ '': 'ทั้งหมด', SELF: 'Self Audit', COMMITTEE: 'Committee' }[v]))}</select>`)}
@@ -155,7 +156,6 @@ async function a5DrawSummary(body, activity, me) {
       ${targetField}
     </div>
     <div class="ch-kpis">${(data.groups.length ? data.groups : [1, 2, 3, 4, 5].map((n) => ({ group: n, percent: 0 }))).map((g, i) => chartKpi({ label: `${esc(a5GroupName(activity, g.group))} · เฉลี่ยทั้งปี`, value: g.percent, unit: '%', pie: g.percent, color: CHART.series[i % CHART.series.length], note: g.percent >= kpiPass ? 'ผ่านเกณฑ์' : g.percent ? `ต่ำกว่าเกณฑ์ ${kpiPass}%` : '' })).join('')}</div>
-    ${data.owner ? `<p class="sum-meta">เจ้าของพื้นที่: ${esc(data.owner.name || data.owner.employeeId)}</p>` : ''}
     <div class="a5-side">
       <div class="a5-charts">${sets.map(chart).join('')}</div>
       <div class="table-wrap"><table class="mo-data-table">
@@ -233,6 +233,7 @@ async function a5DrawSummary(body, activity, me) {
 async function a5DrawRanking(body, activity) {
   const month = a5Year === new Date().getFullYear() ? Math.min(a5RankMonth, 12) : (a5RankMonth || 12);
   const data = await a5Api(activity, `dashboard/ranking?year=${a5Year}&month=${month}`);
+  setHeaderMeta(data.month ? `สะสม ม.ค.–${ACT_MONTHS_SHORT[data.month - 1]} ${a5Year}` : '');
   const groups = data.groups.length ? data.groups : [1, 2, 3, 4, 5];
   const table = (type) => {
     const t = data.types[type] || { rows: [], total: { groups: [], average: 0 } };
@@ -256,6 +257,7 @@ async function a5DrawAuditors(body, activity) {
   const passTarget = data.passTarget || 80;
   const rounds = data.rounds || [];
   const teams = data.teams || [];
+  setHeaderMeta(`ผู้ตรวจประเมิน ${data.totalAuditors} คน · เกณฑ์ผ่าน ${passTarget}%`);
 
   const renderView = () => {
     const term = a5AudFilter.q.trim().toLowerCase();
@@ -496,6 +498,7 @@ function a5Legend() {
 
 async function a5DrawSchedule(body, activity) {
   const data = await a5Api(activity, `dashboard/schedule?year=${a5Year}&areaType=${encodeURIComponent(a5AreaType)}`);
+  setHeaderMeta(`แผนตรวจรอบปี ${data.year} (${data.areaType || 'ทั้งหมด'})`);
   const today = new Date();
   body.innerHTML = `<div class="toolbar a5-filters">${a5Seg('data-a5atype', { โรงงาน: 'แผนโรงงาน', สำนักงาน: 'แผนสำนักงาน' }, a5AreaType)}</div>
     ${a5Legend()}
@@ -506,6 +509,7 @@ async function a5DrawSchedule(body, activity) {
 
 async function a5DrawTeam(body, activity) {
   const data = await a5Api(activity, `team?year=${a5Year}`);
+  setHeaderMeta(`คณะกรรมการ 5ส และทีมตรวจประเมิน (${a5Year})`);
   const active = data.members.filter((m) => m.status === 'Active');
   const unitOf = (m) => m.unit || (['owner', 'auditor'].includes(m.role) ? 'audit' : '');
   const person = (m, note) => `<div class="a5-person">${esc(m.employee_id)} · ${esc(m.name || '-')}<span>${esc(note ?? m.department ?? '')}</span></div>`;

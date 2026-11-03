@@ -119,6 +119,7 @@ async function atxAudits(body, activity, me) {
       <td>${Number(a.total_score)}</td><td>${Number(a.percent_score)}%</td>
       <td><span class="badge ${a.result === 'PASS' ? '' : 'badge-danger'}">${esc(a.result || '-')}</span></td>
       <td><span class="badge ${a.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}">${esc(a.status)}</span>${a.openIssues ? ` <span class="sum-meta">Issue ค้าง ${a.openIssues}</span>` : ''}</td></tr>`).join(''), `ยังไม่มีใบตรวจปี ${a5Year}`, headFor(atxHeads.audits, () => draw()));
+    setHeaderMeta(`ใบตรวจ ${rows.length} / ${data.audits.length} ใบ (${a5Year})`);
     $('atx-count').textContent = `แสดง ${rows.length} จาก ${data.audits.length} ใบตรวจ · เลือกแถวแล้วแก้ไขคะแนนหรือลบ · ดับเบิลคลิกดูรายละเอียด`;
     picked = null;
     $('atx-edit').disabled = true;
@@ -311,6 +312,7 @@ async function atxIssues(body, activity) {
   body.innerHTML = `
     <div class="toolbar a5-filters">${a5Seg('data-iall', { open: 'ยังไม่ปิด', all: 'ทั้งหมด' }, atxIssueAll ? 'all' : 'open')}</div>
     <div class="table-wrap sheet" id="atx-rows"></div>`;
+  setHeaderMeta(`Issue ${list.length} รายการ (${a5Year})`);
   fillTable('atx-rows', [{ label: 'เลขที่', key: 'issue_no' }, { label: 'พื้นที่', key: 'area' }, { label: 'ข้อ', key: 'item_no' }, { label: 'คะแนน', key: 'score' }, { label: 'ปัญหา', key: 'description' }, { label: 'ผู้รับผิดชอบ', key: 'responsible' }, { label: 'กำหนดแก้', key: 'due_date' }, { label: 'สถานะ', key: 'status' }, { label: 'รูป', key: 'photos' }], list.map((i) => `<tr data-pick="${i.id}">
     <td>${esc(i.issue_no)}</td><td>${esc(i.area.code || '')} ${esc(i.area.name || '')}</td><td>${i.item.item_no || ''}</td><td>${Number(i.score)}</td>
     <td>${esc(i.description)}</td><td>${esc(i.responsibleName || i.responsible_id || '-')}</td><td>${i.due_date ? atxDate(i.due_date) : '<span class="sum-meta">รอกำหนด</span>'}</td>

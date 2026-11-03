@@ -38,7 +38,7 @@ export function mountAuth(app) {
     const current = String(req.body?.current || '');
     const next = String(req.body?.password || '');
     if (next.length < 8) return fail(res, 400, 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัว');
-    if (!(await bcrypt.compare(current, req.userHash))) return fail(res, 401, 'รหัสผ่านเดิมไม่ถูกต้อง');
+    if (!(await bcrypt.compare(current, req.userHash))) return fail(res, 400, 'รหัสผ่านเดิมไม่ถูกต้อง');
     if (await bcrypt.compare(next, req.userHash)) return fail(res, 400, 'รหัสผ่านใหม่ต้องไม่ซ้ำรหัสเดิม');
     const { error } = await mx.from('mt_main_user').update({
       password_hash: await bcrypt.hash(next, 10),
