@@ -17,7 +17,7 @@ const A5_UNIT_LOOK = { '': ['#475569', 'groups'], standard: ['#0d9488', 'verifie
 const a5RolesOf = (unit) => ['chairman', 'vice', 'advisor', 'admin', ...(unit === 'audit' ? ['owner', 'auditor'] : unit ? ['member'] : [])];
 // Sub-teams per activity (server ACT_UNITS); others have one team
 const A5_UNITS_OF = { '5s': A5_UNITS };
-const A5_DASH_TABS = { summary: 'Summary', ranking: 'Ranking', schedule: 'Schedule', audit: 'Audit Plan', team: 'Team' };
+const A5_DASH_TABS = { summary: 'Summary', ranking: 'Ranking', auditor: 'Auditor', schedule: 'Schedule', audit: 'Audit Plan', team: 'Team' };
 // Setting tabs: ทีม, แผนงาน, then the activity's own tables (ผู้ใช้กำหนด 2026-10-29)
 const A5_SET_TABS = { team: 'Team', gantt: 'Plan', areas: 'Areas', checklist: 'Checklist', plan: 'Audit plan' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 let a5Year = new Date().getFullYear();
@@ -96,7 +96,7 @@ async function a5Dashboard(target, activity) {
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('a5-body');
   if (a5DashTab === 'schedule') return aplRender(body, activity, { inPage: true, readOnly: true });
-  const draw = { summary: a5DrawSummary, ranking: a5DrawRanking, audit: a5DrawSchedule, team: a5DrawTeam }[a5DashTab] || a5DrawSummary;
+  const draw = { summary: a5DrawSummary, ranking: a5DrawRanking, auditor: a5DrawAuditors, audit: a5DrawSchedule, team: a5DrawTeam }[a5DashTab] || a5DrawSummary;
   await draw(body, activity, me);
 }
 
@@ -221,6 +221,214 @@ async function a5DrawRanking(body, activity) {
     <div class="a5-two">${A5_AREA_TYPES.map(table).join('')}</div>`;
   a5Lift(body);
   $('a5-rank-month').onchange = () => { a5RankMonth = Number($('a5-rank-month').value); a5DrawRanking(body, activity).catch(onErr); };
+}
+
+const a5AudFilter = { team: '', status: '', q: '' };
+const a5AudHead = { sort: 'team', dir: 'asc' };
+
+async function a5DrawAuditors(body, activity) {
+  const data = await a5Api(activity, `dashboard/auditors?year=${a5Year}`);
+  const passTarget = data.passTarget || 80;
+  const rounds = data.rounds || [];
+  const teams = data.teams || [];
+
+  const renderView = () => {
+    const term = a5AudFilter.q.trim().toLowerCase();
+    const filtered = (data.auditors || []).filter((a) => {
+      if (a5AudFilter.team && a.team !== a5AudFilter.team) return false;
+      if (a5AudFilter.status === 'complete' && a.percent < 100) return false;
+      if (a5AudFilter.status === 'pass' && a.percent < passTarget) return false;
+      if (a5AudFilter.status === 'below' && (a.percent >= passTarget || a.percent === 0)) return false;
+      if (a5AudFilter.status === 'none' && a.percent > 0) return false;
+      if (term) {
+        const text = `${a.employeeId} ${a.name} ${a.department} ${a.team}`.toLowerCase();
+        if (!text.includes(term)) return false;
+      }
+      return true;
+    });
+
+    const dir = a5AudHead.dir === 'desc' ? -1 : 1;
+    const sorted = [...filtered].sort((a, b) => {
+      const k = a5AudHead.sort;
+      let valA = a[k] ?? '';
+      let valB = b[k] ?? '';
+      if (k === 'seq') return 0;
+      if (k.startsWith('r_')) {
+        const m = Number(k.slice(2));
+        valA = a.rounds?.find((r) => r.month === m)?.percent ?? -1;
+        valB = b.rounds?.find((r) => r.month === m)?.percent ?? -1;
+      }
+      if (typeof valA === 'number' && typeof valB === 'number') return (valA - valB) * dir;
+      return String(valA).localeCompare(String(valB), 'th') * dir;
+    });
+
+    const headers = [
+      { label: 'ลำดับ', key: 'seq' },
+      { label: 'รหัสพนักงาน', key: 'employeeId' },
+      { label: 'ชื่อ - นามสกุล', key: 'name' },
+      { label: 'แผนก', key: 'department' },
+      { label: 'ทีม', key: 'team' },
+      { label: 'แผนรวม', key: 'planned', num: true },
+      { label: 'ตรวจจริง', key: 'actual', num: true },
+      { label: '% การมีส่วนร่วม', key: 'percent', num: true },
+      ...rounds.map((r) => ({
+        label: r.round ? `รอบ ${r.round} (${ACT_MONTHS_SHORT[r.month - 1]})` : ACT_MONTHS_SHORT[r.month - 1],
+        key: `r_${r.month}`,
+        num: true
+      })),
+      { label: 'คะแนนเฉลี่ย', key: 'avgScore', num: true },
+      { label: 'สถานะประเมิน', key: 'status' },
+      { label: 'จัดการ', key: 'action' }
+    ];
+
+    const statusBadge = (a) => {
+      if (a.percent >= 100) return '<span class="badge badge-success">ครบตามแผน</span>';
+      if (a.percent >= passTarget) return '<span class="badge badge-success">ผ่านเกณฑ์</span>';
+      if (a.percent > 0) return '<span class="badge badge-danger">ต่ำกว่าเกณฑ์</span>';
+      return '<span class="badge badge-warning">ยังไม่เข้าตรวจ</span>';
+    };
+
+    const progBar = (pct) => {
+      const clr = pct >= 100 ? 'var(--mo-success)' : pct >= passTarget ? 'var(--mo-info)' : pct > 0 ? 'var(--mo-danger)' : 'var(--mo-text-muted)';
+      return `<div class="a5-prog"><div class="a5-prog-bar"><div class="a5-prog-fill" style="width:${Math.min(100, pct)}%;--p-clr:${clr}"></div></div><b>${pct}%</b></div>`;
+    };
+
+    const rowsHtml = sorted.map((a, idx) => {
+      const roundTds = rounds.map((r) => {
+        const stat = a.rounds?.find((x) => x.month === r.month);
+        if (!stat || (!stat.planned && !stat.actual)) return '<td class="num">-</td>';
+        const clr = stat.percent >= 100 ? 'var(--mo-success)' : stat.percent >= passTarget ? 'var(--mo-info)' : stat.percent > 0 ? 'var(--mo-danger)' : 'var(--mo-text-muted)';
+        return `<td class="num" title="แผน ${stat.planned} ครั้ง · ตรวจจริง ${stat.actual} ครั้ง">${stat.actual}/${stat.planned} <b style="color:${clr}">(${stat.percent}%)</b></td>`;
+      }).join('');
+
+      const teamColor = a5TeamColor(a.team);
+      const teamBadge = a.team ? `<span class="a5-team-pill" style="--team:${teamColor}">ทีม ${esc(a.team)}</span>` : '-';
+
+      return `<tr data-auditor="${esc(a.employeeId)}">
+        <td>${idx + 1}</td>
+        <td><strong>${esc(a.employeeId)}</strong></td>
+        <td>${esc(a.name)}</td>
+        <td>${esc(a.department || '-')}</td>
+        <td>${teamBadge}</td>
+        <td class="num">${a.planned}</td>
+        <td class="num"><strong>${a.actual}</strong></td>
+        <td class="num">${progBar(a.percent)}</td>
+        ${roundTds}
+        <td class="num"><strong>${a.avgScore != null ? `${a.avgScore}%` : '-'}</strong></td>
+        <td>${statusBadge(a)}</td>
+        <td><button class="btn btn-sm secondary a5-aud-view-btn" type="button" data-view-aud="${esc(a.employeeId)}">ดูประวัติ</button></td>
+      </tr>`;
+    }).join('');
+
+    fillTable(
+      'a5-aud-table-wrap',
+      headers,
+      rowsHtml,
+      `ไม่พบข้อมูลผู้ตรวจประเมินในปี ${a5Year}`,
+      {
+        sort: a5AudHead.sort,
+        dir: a5AudHead.dir,
+        onChange: (head) => {
+          a5AudHead.sort = head.sort;
+          a5AudHead.dir = head.dir;
+          renderView();
+        }
+      }
+    );
+
+    const tableWrap = $('a5-aud-table-wrap');
+    if (tableWrap) {
+      tableWrap.querySelectorAll('.a5-aud-view-btn').forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          showAuditorDetail(btn.dataset.viewAud);
+        };
+      });
+      tableWrap.querySelectorAll('tbody tr').forEach((tr) => {
+        tr.style.cursor = 'pointer';
+        tr.onclick = (e) => {
+          if (e.target.closest('button')) return;
+          const empId = tr.dataset.auditor;
+          if (empId) showAuditorDetail(empId);
+        };
+      });
+    }
+  };
+
+  const showAuditorDetail = (empId) => {
+    const aud = data.auditors.find((a) => a.employeeId === empId);
+    if (!aud) return;
+    const teamColor = a5TeamColor(aud.team);
+    const title = `ประวัติการเข้าตรวจประเมิน 5S: ${aud.employeeId} · ${aud.name}`;
+    const content = `
+      <div class="a5-aud-kpis">
+        <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">ทีมตรวจประเมิน</div><div class="a5-aud-kpi-val"><span class="a5-team-pill" style="--team:${teamColor}">ทีม ${esc(aud.team || '-')}</span></div></div>
+        <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">แผนการเข้าตรวจ</div><div class="a5-aud-kpi-val">${aud.planned} <small>ครั้ง</small></div></div>
+        <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">เข้าตรวจจริง</div><div class="a5-aud-kpi-val">${aud.actual} <small>ครั้ง</small></div></div>
+        <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">การมีส่วนร่วม</div><div class="a5-aud-kpi-val" style="color:${aud.percent >= passTarget ? 'var(--mo-success)' : 'var(--mo-danger)'}">${aud.percent}%</div></div>
+        <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">คะแนนเฉลี่ยที่ตรวจ</div><div class="a5-aud-kpi-val">${aud.avgScore != null ? `${aud.avgScore}%` : '-'}</div></div>
+      </div>
+      <div class="table-wrap" style="max-height:360px">
+        <table class="mo-data-table">
+          <thead><tr><th>ลำดับ</th><th>วันที่ตรวจ</th><th>Audit ID</th><th>รหัสพื้นที่</th><th>ชื่อพื้นที่</th><th>ประเภท</th><th>ทีม</th><th class="num">คะแนน</th><th>ผลประเมิน</th></tr></thead>
+          <tbody>
+            ${aud.audits.map((x, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${DMY.toDmy(String(x.auditedAt || '').slice(0, 10)) || '-'}</td>
+                <td><strong>${esc(x.auditNo)}</strong></td>
+                <td>${esc(x.areaCode)}</td>
+                <td>${esc(x.areaName)}</td>
+                <td>${esc(x.areaType)}</td>
+                <td><span class="a5-dot is-done" style="--team:${a5TeamColor(x.team)}"></span> ${esc(x.team)}</td>
+                <td class="num"><strong>${x.percentScore}%</strong></td>
+                <td><span class="badge ${x.result === 'PASS' ? 'badge-success' : 'badge-danger'}">${esc(x.result)}</span></td>
+              </tr>`).join('') || '<tr><td colspan="9" class="empty">ยังไม่มีประวัติการเข้าตรวจประเมินในปีนี้</td></tr>'}
+          </tbody>
+        </table>
+      </div>`;
+
+    openPopup(title, content, closePopup, 'ปิด');
+    const cancelBtn = $('popup-cancel');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  };
+
+  const kpisHtml = [
+    chartKpi({ label: 'ผู้ตรวจประเมินทั้งหมด', value: data.totalAuditors, unit: 'คน', icon: 'group', color: CHART.series[0] }),
+    chartKpi({ label: 'แผนการเข้าตรวจรวม', value: data.totalPlanned, unit: 'ครั้ง', icon: 'calendar_month', color: CHART.series[1] }),
+    chartKpi({ label: 'เข้าตรวจจริงรวม', value: data.totalActual, unit: 'ครั้ง', icon: 'fact_check', color: CHART.series[2] }),
+    chartKpi({ label: '% การมีส่วนร่วมเฉลี่ย', value: data.avgParticipation, unit: '%', pie: data.avgParticipation, color: CHART.series[3], note: data.avgParticipation >= passTarget ? 'ผ่านเกณฑ์เป้าหมาย' : 'ต่ำกว่าเป้าหมาย' }),
+    chartKpi({ label: `ผ่านเกณฑ์ (≥ ${passTarget}%)`, value: `${data.passedCount} / ${data.totalAuditors}`, unit: 'คน', icon: 'verified', color: CHART.series[4], note: `คิดเป็น ${data.passedRate}% ของทั้งหมด` })
+  ].join('');
+
+  const statusOptions = [
+    ['', 'ทั้งหมด'],
+    ['complete', 'ครบตามแผน (100%)'],
+    ['pass', `ผ่านเกณฑ์ (≥ ${passTarget}%)`],
+    ['below', `ต่ำกว่าเกณฑ์ (< ${passTarget}%)`],
+    ['none', 'ยังไม่เข้าตรวจ (0%)']
+  ];
+
+  body.innerHTML = `
+    <div class="toolbar a5-filters">
+      ${field('ทีม', `<select id="a5-aud-team">${options(['', ...teams], a5AudFilter.team, (t) => (t ? `ทีม ${t}` : 'ทั้งหมด'))}</select>`)}
+      ${field('สถานะ', `<select id="a5-aud-status">${options(statusOptions.map(([v]) => v), a5AudFilter.status, (v) => statusOptions.find(([val]) => val === v)?.[1] || v)}</select>`)}
+      ${searchSlot('ค้นหา', 'a5-aud-q', 'a5-aud-search', { placeholder: 'รหัส / ชื่อ / แผนก / ทีม...', value: a5AudFilter.q })}
+    </div>
+    <div class="ch-kpis">${kpisHtml}</div>
+    <div class="table-wrap sheet" id="a5-aud-table-wrap"></div>`;
+
+  a5Lift(body);
+
+  const teamSel = $('a5-aud-team');
+  const statusSel = $('a5-aud-status');
+  const searchInput = $('a5-aud-q');
+
+  if (teamSel) teamSel.onchange = () => { a5AudFilter.team = teamSel.value; renderView(); };
+  if (statusSel) statusSel.onchange = () => { a5AudFilter.status = statusSel.value; renderView(); };
+  if (searchInput) searchInput.oninput = () => { a5AudFilter.q = searchInput.value; renderView(); };
+
+  renderView();
 }
 
 // One circle per area x month x week (shared by the Schedule dashboard and the Setting audit plan).

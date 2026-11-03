@@ -301,6 +301,177 @@ export function mountAudit(app) {
     });
   });
 
+  route('get', '/api/act/:activity/dashboard/auditors', async (req, res, activity) => {
+    const year = yearOf(req.query.year);
+    if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
+    const t = tablesOf(activity);
+    const parseAuditors = (val) => {
+      if (Array.isArray(val)) return val.map(String).map((s) => s.trim()).filter(Boolean);
+      if (typeof val === 'string') return val.replace(/[{}"']/g, '').split(',').map((s) => s.trim()).filter(Boolean);
+      return [];
+    };
+
+    const [areas, teamRows, plans, audits, passSettings] = await Promise.all([
+      areasOf(activity),
+      fetchAll(() => tx.from(t.team).select('*').eq('year', year).eq('status', 'Active')),
+      fetchAll(() => tx.from(t.auditPlan).select('id,area_id,month,week,round,team').eq('year', year)),
+      fetchAll(() => tx.from(t.audit).select('id,audit_no,audit_type,area_id,team,auditors,audited_at,total_score,percent_score,result,status')
+        .eq('year', year).eq('status', 'COMPLETED').eq('audit_type', 'COMMITTEE').order('audited_at')),
+      tx.from(t.setting).select('key,value').in('key', [
+        `pass_committee:${year}`, 'pass_committee',
+        `pass_percent:${year}`, 'pass_percent'
+      ])
+    ]);
+
+    const passMap = new Map((passSettings.data || []).map((r) => [r.key, Number(r.value)]));
+    const passTarget = passMap.get(`pass_committee:${year}`) ?? passMap.get('pass_committee') ?? passMap.get(`pass_percent:${year}`) ?? passMap.get('pass_percent') ?? 80;
+    const areaMap = new Map(areas.map((a) => [a.id, a]));
+
+    // Distinct rounds from plans
+    const roundMap = new Map();
+    for (const p of plans) {
+      const rKey = p.round || p.month;
+      if (!roundMap.has(rKey)) {
+        roundMap.set(rKey, {
+          round: p.round || null,
+          month: p.month
+        });
+      }
+    }
+    const rounds = [...roundMap.values()].sort((a, b) => a.month - b.month);
+
+    // Identify all auditors
+    const auditorMembers = teamRows.filter((m) => m.role === 'auditor' || (m.unit === 'audit' && m.role !== 'owner' && m.team));
+    const knownEmpIds = new Set(auditorMembers.map((m) => String(m.employee_id)));
+    const extraEmpIds = new Set();
+    for (const a of audits) {
+      for (const emp of parseAuditors(a.auditors)) {
+        if (!knownEmpIds.has(emp)) extraEmpIds.add(emp);
+      }
+    }
+
+    const allEmpIds = [...new Set([...knownEmpIds, ...extraEmpIds])];
+    const empNames = await namesOf(allEmpIds);
+
+    const auditors = [];
+    for (const m of auditorMembers) {
+      const empId = String(m.employee_id);
+      const info = empNames.get(empId) || {};
+      const team = m.team || '';
+      const myPlans = plans.filter((p) => p.team === team);
+      const myAudits = audits.filter((a) => parseAuditors(a.auditors).includes(empId));
+      const planned = myPlans.length;
+      const actual = myAudits.length;
+      const percent = planned > 0 ? Math.round((actual / planned) * 100) : (actual > 0 ? 100 : 0);
+      const scores = myAudits.map((a) => Number(a.percent_score)).filter((n) => !Number.isNaN(n));
+      const avgScore = scores.length ? roundTo(scores.reduce((sum, n) => sum + n, 0) / scores.length, 2) : null;
+
+      const roundStats = rounds.map((r) => {
+        const rPlans = myPlans.filter((p) => (r.round ? p.round === r.round : p.month === r.month));
+        const rAudits = myAudits.filter((a) => monthOf(a.audited_at) === r.month);
+        const rP = rPlans.length;
+        const rA = rAudits.length;
+        const rPct = rP > 0 ? Math.round((rA / rP) * 100) : (rA > 0 ? 100 : 0);
+        return { round: r.round, month: r.month, planned: rP, actual: rA, percent: rPct };
+      });
+
+      auditors.push({
+        employeeId: empId,
+        name: info.name || m.name || empId,
+        department: info.department || m.department || '',
+        team,
+        role: m.role,
+        planned,
+        actual,
+        percent,
+        avgScore,
+        rounds: roundStats,
+        audits: myAudits.map((a) => {
+          const ar = areaMap.get(a.area_id) || {};
+          return {
+            id: a.id,
+            auditNo: a.audit_no,
+            areaCode: ar.code || '',
+            areaName: ar.name || '',
+            areaType: ar.area_type || '',
+            auditedAt: a.audited_at,
+            month: monthOf(a.audited_at),
+            week: weekOf(a.audited_at),
+            team: a.team || '',
+            percentScore: Number(a.percent_score),
+            result: a.result
+          };
+        })
+      });
+    }
+
+    for (const extraId of extraEmpIds) {
+      const info = empNames.get(extraId) || {};
+      const myAudits = audits.filter((a) => parseAuditors(a.auditors).includes(extraId));
+      const planned = 0;
+      const actual = myAudits.length;
+      const percent = 100;
+      const scores = myAudits.map((a) => Number(a.percent_score)).filter((n) => !Number.isNaN(n));
+      const avgScore = scores.length ? roundTo(scores.reduce((sum, n) => sum + n, 0) / scores.length, 2) : null;
+      const roundStats = rounds.map((r) => {
+        const rAudits = myAudits.filter((a) => monthOf(a.audited_at) === r.month);
+        return { round: r.round, month: r.month, planned: 0, actual: rAudits.length, percent: 100 };
+      });
+      auditors.push({
+        employeeId: extraId,
+        name: info.name || extraId,
+        department: info.department || '',
+        team: myAudits[0]?.team || '-',
+        role: 'guest',
+        planned,
+        actual,
+        percent,
+        avgScore,
+        rounds: roundStats,
+        audits: myAudits.map((a) => {
+          const ar = areaMap.get(a.area_id) || {};
+          return {
+            id: a.id,
+            auditNo: a.audit_no,
+            areaCode: ar.code || '',
+            areaName: ar.name || '',
+            areaType: ar.area_type || '',
+            auditedAt: a.audited_at,
+            month: monthOf(a.audited_at),
+            week: weekOf(a.audited_at),
+            team: a.team || '',
+            percentScore: Number(a.percent_score),
+            result: a.result
+          };
+        })
+      });
+    }
+
+    auditors.sort((a, b) => String(a.team).localeCompare(String(b.team)) || String(a.employeeId).localeCompare(String(b.employeeId)));
+
+    const totalAuditors = auditors.length;
+    const totalPlanned = auditors.reduce((s, a) => s + a.planned, 0);
+    const totalActual = auditors.reduce((s, a) => s + a.actual, 0);
+    const avgParticipation = totalAuditors ? Math.round(auditors.reduce((s, a) => s + a.percent, 0) / totalAuditors) : 0;
+    const passedCount = auditors.filter((a) => a.percent >= passTarget).length;
+    const passedRate = totalAuditors ? Math.round((passedCount / totalAuditors) * 100) : 0;
+    const teams = [...new Set(auditors.map((a) => a.team).filter(Boolean))].sort();
+
+    res.json({
+      year,
+      passTarget,
+      totalAuditors,
+      totalPlanned,
+      totalActual,
+      avgParticipation,
+      passedCount,
+      passedRate,
+      rounds,
+      teams,
+      auditors
+    });
+  });
+
   route('get', '/api/act/:activity/team', async (req, res, activity) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');

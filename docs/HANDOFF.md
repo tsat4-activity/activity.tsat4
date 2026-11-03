@@ -2,7 +2,7 @@
 
 ## กำลังทำอยู่
 
-- [5S] Antigravity · เพิ่มหน้า Dashboard ประเมินการมีส่วนร่วมในการตรวจประเมินของผู้ตรวจประเมินรายบุคคล (แท็บ Auditor ใน 5S Dashboard พร้อม API คำนวณแผนการตรวจ การเข้าตรวจจริง และ % การมีส่วนร่วมรายบุคคล)
+(ไม่มี)
 
 ## SQL ที่รอผู้ใช้รัน
 
@@ -23,6 +23,8 @@
 - ข้อมูลเดิมจาก TSAT4 SMF (พนักงาน, ผลตรวจ 5S, CFO) ยังไม่ได้ย้ายมา · มีไฟล์นำเข้า `inbox/import_5s.sql`, `inbox/import_cfo.sql` (ไม่อยู่ใน git) ทดสอบแล้วใน test:act
 
 ## บันทึก (อันใหม่อยู่บนสุด)
+
+- 2026-11-03 · Antigravity [5S] · เพิ่มแท็บ Auditor ใน 5S Dashboard สำหรับประเมินการมีส่วนร่วมในการตรวจประเมินของผู้ตรวจประเมินรายบุคคล: API `GET /api/act/:activity/dashboard/auditors` คำนวณจำนวนครั้งตามแผน (ตามทีมตรวจ A–I ใน `mt_5s_audit_plan`), การเข้าตรวจจริง (จาก `tx_5s_audit.auditors`), % การมีส่วนร่วม, แยกตามรอบการตรวจ, คะแนนเฉลี่ยที่ให้ และสถานะประเมิน (ครบตามแผน, ผ่านเกณฑ์, ต่ำกว่าเกณฑ์, ยังไม่เข้าตรวจ) พร้อมการ์ด KPI ภาพรวม ตัวกรองทีม/สถานะ/ค้นหา ตารางจัดเรียงได้ และ popup แสดงประวัติรายการพื้นที่ที่เข้าตรวจรายบุคคล (`public/js/act-5s.js`, `public/app.css`, `server/modules/act/audit.js`, `scripts/routes.snapshot.txt`)
 
 - 2026-11-02 · Antigravity [5S] · ตรวจสอบและลบไฟล์ที่ไม่ใช้งาน/ไฟล์ซ้ำซ้อนในระบบ: ลบ `db/act/5s_team_roles.sql` (ไฟล์ stub เก่าที่มีเพียงคำสั่ง note ย้ายบทบาท), ลบ `db/act/5s_checklist_seed.sql` (ข้อมูลหัวข้อตรวจประเมินซ้ำซ้อนกับ `inbox/import_5s_setup.sql` และระบบ auto-seed บน server), ลบไฟล์ชั่วคราวใน inbox (`inbox/check_login.sql`, `inbox/drop_activity02.sql`, `inbox/cfp_tgo.json`), และปรับปรุง `db/README.md` ให้สะท้อนไฟล์ SQL ที่ใช้งานจริงในปัจจุบัน
 
