@@ -31,42 +31,7 @@ const AREA_TEAMS = {
   B14: ['A', ['2103100']], B15: ['B', ['2102899']]
 };
 
-const ROUND_3_PDF = {
-  B09: ['A', 1, 4, '13:00', ['2103100']],
-  B10: ['A', 1, 4, '13:30', ['2103100']],
-  B14: ['A', 1, 4, '14:00', ['2103100']],
-  B07: ['A', 1, 4, '14:30', ['2103100']],
-  B08: ['A', 1, 4, '15:00', ['2103100']],
-  A05: ['B', 1, 4, '13:00', ['2102899']],
-  A06: ['B', 1, 4, '13:30', ['2102899', '2101744']],
-  B13: ['B', 1, 4, '14:00', ['2102899']],
-  B15: ['B', 1, 4, '14:30', ['2102899']],
-  A11: ['B', 1, 4, '15:00', ['2102899', '2103570']],
-  A07: ['B', 2, 7, '13:00', ['2102899']],
-  B01: ['C', 1, 4, '13:00', ['2101861']],
-  B04: ['C', 1, 4, '13:30', ['2101861']],
-  B05: ['C', 1, 4, '14:00', ['2101861']],
-  B03: ['C', 1, 4, '14:30', ['2101861']],
-  A13: ['C', 1, 4, '15:00', ['2101861', '2103570']],
-  A02: ['D', 1, 4, '13:00', ['2101990']],
-  A08: ['D', 1, 4, '13:30', ['2101990']],
-  A03: ['D', 1, 4, '14:00', ['2101990']],
-  A04: ['D', 1, 4, '14:30', ['2101990']],
-  A17: ['D', 1, 4, '15:00', ['2101990', '2103570']],
-  A09: ['F', 1, 4, '13:00', ['2103669']],
-  A14: ['F', 1, 4, '13:30', ['2103669']],
-  A18: ['F', 1, 4, '14:00', ['2103669']],
-  A19: ['F', 1, 4, '14:30', ['2103669']],
-  A12: ['F', 1, 4, '15:00', ['2103669', '2103570']],
-  B11: ['G', 1, 4, '13:30', ['2101744', '2103865']],
-  B06: ['G', 1, 4, '14:00', ['2101744', '2103865']],
-  B12: ['G', 1, 4, '14:30', ['2101744', '2103865']],
-  B02: ['G', 2, 7, '13:30', ['2101744', '2103865']],
-  A01: ['H', 1, 4, '13:00', ['2102901', '2103906']],
-  A15: ['H', 1, 4, '13:30', ['2102901', '2103906']],
-  A16: ['H', 1, 4, '14:00', ['2102901', '2103906']],
-  A10: ['H', 1, 4, '14:30', ['2102901', '2103906']]
-};
+const ABSENT_ROUND_3 = new Set(['2103396', '2101946', '2103391', '2102396', '2103864']);
 
 const SELF_MONTH_BASE = [84.6, 87.2, 90.5, 83.5, 91.8, 88.4, 85.2, 92.5, 87.6, 84.2, 89.8];
 const COMM_ROUNDS = { 3: [1, 83.6], 6: [2, 89.2], 9: [3, 86.4] };
@@ -106,18 +71,13 @@ export async function seed5sMockAudits(areas) {
   // Assign week 1..4 per area
   const weekByCode = new Map(areas.map((a, i) => [a.code, (i % 4) + 1]));
 
-  // 1. Committee Plans for months 3, 6, 9
+  // 1. Committee Plans for months 3, 6, 9 (34 areas shared across teams A-I)
   for (const [mStr, [roundNo]] of Object.entries(COMM_ROUNDS)) {
     const m = Number(mStr);
     for (const area of areas) {
-      if (m === 9) {
-        const [team, week] = ROUND_3_PDF[area.code] || ['A', 1];
-        plans.push({ year: 2026, area_id: area.id, month: m, week, round: roundNo, team });
-      } else {
-        const [team] = AREA_TEAMS[area.code] || ['A'];
-        const week = weekByCode.get(area.code) || 1;
-        plans.push({ year: 2026, area_id: area.id, month: m, week, round: roundNo, team });
-      }
+      const [team] = AREA_TEAMS[area.code] || ['A'];
+      const week = weekByCode.get(area.code) || 1;
+      plans.push({ year: 2026, area_id: area.id, month: m, week, round: roundNo, team });
     }
   }
 
@@ -160,34 +120,21 @@ export async function seed5sMockAudits(areas) {
 
   // 3. Committee Audits: months 3, 6, 9
   // Round 1 & 2: full attendance for all auditors ("ส่วนครั้งที่ 1 2 เต็มทุกคน")
-  // Round 3: follows PDF schedule & attendance image
+  // Round 3: 34 areas audited, but absent auditors excluded per attendance image
   for (const [mStr, [, basePct]] of Object.entries(COMM_ROUNDS)) {
     const m = Number(mStr);
     for (let codeIdx = 0; codeIdx < areas.length; codeIdx++) {
       const area = areas[codeIdx];
       const owner = AREA_OWNERS[area.code] || '2102899';
-      let team;
-      let audList;
-      let auditedAt;
-      let auditNo;
+      const [team, audList] = AREA_TEAMS[area.code] || ['A', ['2103100']];
+      const week = weekByCode.get(area.code) || 1;
+      const day = (week - 1) * 7 + 2 + (codeIdx % 5);
+      const hour = 9 + (codeIdx % 7);
+      const min = 10 + ((codeIdx * 11) % 45);
+      const auditedAt = `2026-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00+07:00`;
+      const auditNo = `C-${area.code}-${String(day).padStart(2, '0')}${String(m).padStart(2, '0')}26-01`;
 
-      if (m === 9) {
-        const [pdfTeam, , day, timeStr, pdfAuds] = ROUND_3_PDF[area.code] || ['A', 1, 4, '13:00', ['2103100']];
-        team = pdfTeam;
-        audList = pdfAuds;
-        auditedAt = `2026-09-${String(day).padStart(2, '0')}T${timeStr}:00+07:00`;
-        auditNo = `C-${area.code}-${String(day).padStart(2, '0')}0926-01`;
-      } else {
-        const [baseTeam, baseAuds] = AREA_TEAMS[area.code] || ['A', ['2103100']];
-        team = baseTeam;
-        audList = baseAuds;
-        const week = weekByCode.get(area.code) || 1;
-        const day = (week - 1) * 7 + 2 + (codeIdx % 5);
-        const hour = 9 + (codeIdx % 7);
-        const min = 10 + ((codeIdx * 11) % 45);
-        auditedAt = `2026-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00+07:00`;
-        auditNo = `C-${area.code}-${String(day).padStart(2, '0')}${String(m).padStart(2, '0')}26-01`;
-      }
+      const actualAuds = (m === 9) ? audList.filter((x) => !ABSENT_ROUND_3.has(x)) : audList;
 
       const areaOffset = (((codeIdx * 13 + m * 11) % 9) - 4) * 0.65;
       const targetPct = Math.min(90.4, Math.max(82.4, basePct + areaOffset));
@@ -201,7 +148,7 @@ export async function seed5sMockAudits(areas) {
         audit_type: 'COMMITTEE',
         area_id: area.id,
         team,
-        auditors: audList,
+        auditors: actualAuds,
         receivers: [owner],
         audited_at: auditedAt,
         total_score: total,

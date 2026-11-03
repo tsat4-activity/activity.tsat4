@@ -323,8 +323,10 @@ async function a5DrawAuditors(body, activity) {
       const roundTds = rounds.map((r) => {
         const stat = a.rounds?.find((x) => x.month === r.month);
         if (!stat || (!stat.planned && !stat.actual)) return '<td class="num">-</td>';
-        const clr = stat.percent >= 100 ? 'var(--mo-success)' : stat.percent >= passTarget ? 'var(--mo-info)' : stat.percent > 0 ? 'var(--mo-danger)' : 'var(--mo-text-muted)';
-        return `<td class="num" title="แผน ${stat.planned} ครั้ง · ตรวจจริง ${stat.actual} ครั้ง">${stat.actual}/${stat.planned} <b style="color:${clr}">(${stat.percent}%)</b></td>`;
+        const isPass = stat.percent >= passTarget;
+        const clr = stat.percent >= 100 ? 'var(--mo-success)' : isPass ? 'var(--mo-info)' : 'var(--mo-danger)';
+        const tag = isPass ? 'ผ่าน' : 'ไม่ผ่าน';
+        return `<td class="num" title="แผน ${stat.planned} ครั้ง · ตรวจจริง ${stat.actual} ครั้ง (${tag})">${stat.actual}/${stat.planned} <b style="color:${clr}">(${stat.percent}%)</b></td>`;
       }).join('');
 
       const teamColor = a5TeamColor(a.team);
