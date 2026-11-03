@@ -8,6 +8,7 @@ import { PLANNER_ON, mountPlanner, plannerEvents } from './planner.js';
 import { CFO_ON, mountCfo } from './cfo.js';
 import { mountOverview } from './overview.js';
 import { mountSmf } from './smf.js';
+import { mountWorkflow } from './workflow.js';
 import { PROJECT_ON } from './common.js';
 
 // Activities 5S and CFO: calendar here, Project Planner in planner.js, checklist audit Dashboard/Setting in audit.js,
@@ -59,6 +60,7 @@ export default defineModule({
 
     mountOverview(app); // SMF Dashboard > ภาพรวม of every project
     mountSmf(app); // SMF projects of the year
+    mountWorkflow(app); // Work Flow Automation: ideas, images, evaluations, dashboard stats
     mountPlanner(app);
     mountAudit(app);
     mountTransaction(app);

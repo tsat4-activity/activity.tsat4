@@ -1033,6 +1033,7 @@ async function aplDrawSmfOverview(body, activity) {
       ${progressSec}
       ${kpiSection(u)}
       ${summarySec}
+      ${u.code === 'workflow' ? `<div style="margin-top:4px">${button('', 'เปิดระบบ Work Flow Automation', 'primary small', 'data-ov-go="workflow"')}</div>` : ''}
     </article>`;
   };
   body.innerHTML = `<div class="ch-kpis">${kpis}</div>

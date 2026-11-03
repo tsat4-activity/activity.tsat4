@@ -15,6 +15,11 @@
   - **คะแนน 25 ข้อย่อย (`tx_5s_audit_score`):** ครบทุกข้อ 11,900 แถว
   - **เดือน ธ.ค.:** ยังไม่สร้างตามคำขอ
 - [5S] `inbox/import_5s_setup.sql` (หรือระบบจะ seed ให้อัตโนมัติทันทีที่เปิดหน้า 5S หลัง Render deploy): พื้นที่ตรวจประเมิน 34 พื้นที่ (`A01`–`A19` โรงงาน, `B01`–`B15` สำนักงาน), ตัวแทนพื้นที่ตามรหัสพนักงาน 34 พื้นที่ (`role = 'owner', unit = 'audit'`), ทีมตรวจประเมิน 17 รายชื่อ (`chairman` 2 + `auditor` กลุ่ม A–I 15 ใน `unit = 'audit'`), และหัวข้อตรวจประเมิน 25 ข้อ (`year = 2026`)
+- [SMF] `db/act/workflow.sql`: ตารางระบบ **Work Flow Automation** ใน Supabase Tx Data (`activity01`):
+  - `public.automation_ideas`: ตารางแนวคิดการปรับปรุง (รหัสพนักงาน, แผนก, กระบวนการเดิม, ปัญหา, โครงการใหม่, เทคโนโลยี, ประโยชน์, เวลา/กระดาษ/ขั้นตอน ก่อน-หลัง, ความยาก, งบประมาณ, สถานะ Idea/Prototype/Testing/Implemented, หมายเหตุ Admin)
+  - `public.automation_images`: ตารางรูปภาพประกอบ Before / After หลายรูป พร้อมคำอธิบายภาพ
+  - `public.automation_evaluations`: ตารางบันทึกประวัติการประเมินโครงการโดย Admin
+
 - [SMF] `db/act/smf.sql` (หรือ `db/setup.sql`) ใน Tx Data (activity01): ตาราง `mt_smf_team`, `mt_smf_setting`, `mt_smf_task`, `mt_smf_project` (พร้อม `target_name`, `unit`, `team_type`, `target_type`, `target_count`), และตาราง `tx_smf_project_month` (เป้าหมายและผลงานรายเดือน):
   - คำสั่งอัปเดตตาราง `mt_smf_project` เดิม:
     ```sql
@@ -32,6 +37,15 @@
 - ข้อมูลเดิมจาก TSAT4 SMF ได้รับการจัดระเบียบใหม่: สรุปและจัดทำคู่มือใน `docs/DATABASE.md`, ลบไฟล์ SQL ชั่วคราว/ล้าสมัยออก และคงไว้เฉพาะไฟล์ Master และ Mock ล่าสุดใน `inbox/` (`mock_5s_audits_2026.sql`, `import_5s_setup.sql` ฯลฯ)
 
 ## บันทึก (อันใหม่อยู่บนสุด)
+
+- 2026-11-04 · Antigravity [SMF / Work Flow Automation] · พัฒนาระบบเว็บแอปพลิเคชัน Work Flow Automation (Industrial Digital Transformation) สำหรับเปลี่ยนผ่านกระบวนการทำงานสู่ดิจิทัลและลดความสูญเปล่าตามแนวคิด "Less Paper. Less Time. More Efficiency.":
+  - **ฐานข้อมูล (`db/act/workflow.sql`)**: ตาราง `automation_ideas`, `automation_images`, `automation_evaluations` พร้อม Indexes และระบบ Auto-fallback เพื่อความต่อเนื่อง
+  - **Backend API (`server/modules/act/workflow.js`)**: ให้บริการ API จัดการแนวคิด (CRUD), อัปโหลดรูป Before/After หลายรูปพร้อมบีบอัดภาพ, ประเมินโครงการโดย Admin พร้อมประวัติ, สรุปสถิติภาพรวม และส่งออกข้อมูลเป็น CSV/Excel (UTF-8 BOM ภาษาไทย)
+  - **Frontend UI (`public/js/act-workflow.js`, `public/app.css`)**:
+    - หน้าแรก (Landing Page) ธีม Industrial Digital Transformation พร้อมสถิติหลักและเป้าหมาย 6 ด้าน
+    - ฟอร์ม 6 ขั้นตอน (Step Form Wizard) พร้อม Progress Bar, ตรวจสอบ Required fields, แนบภาพ Before/After พร้อมพรีวิวและลบได้, ตัวเลือกเทคโนโลยีและประโยชน์, คำนวณผลประหยัด % เวลา/กระดาษ/ขั้นตอน แบบ Real-time พร้อมป้องกันการหารด้วยศูนย์
+    - แดชบอร์ดโครงการ (Admin & Member Dashboard) พร้อมตัวกรองค้นหา/แผนก/สถานะ/โครงการของฉัน, หน้าต่างเปรียบเทียบ Before vs After คู่ขนาน และฟอร์มประเมินสถานะสำหรับ Admin
+    - เชื่อมโยงเข้าสู่เมนู SMF > Workflow ในแถบเมนูข้าง และปุ่ม "เปิดระบบ Work Flow Automation" บนการ์ดโครงการใน SMF Dashboard (`server/modules/act/index.js`, `public/index.html`, `public/js/units.js`, `public/js/act-planner.js`, `scripts/routes.snapshot.txt`, `scripts/test-workflow.js`)
 
 - 2026-11-03 · Antigravity [SMF / Dashboard & Planner] · ปรับปรุงการออกแบบการ์ดภาพรวม (Overview Cards Redesign) และส่วนสรุป (Summary) ของ SMF Dashboard ให้สวยงาม ทันสมัย สไตล์ Dashboard ผู้บริหาร: เปลี่ยนส่วนสรุปจากรายการข้อความบรรทัดยาวเป็น Metric Boxes Grid 4 ช่อง (`.ov-stat-grid`) แสดงตัวเลขสถิติอย่างกระชับ (หัวข้อหลัก, ความคืบหน้า/โครงการสำเร็จ, เลยกำหนด, จำนวนคน), ออกแบบส่วนหัวการ์ด (`.ov-head`) ด้วยชื่อโครงการเด่นชัดพร้อม Pill Badges แสดงรูปแบบ (`ทีม`/`เดี่ยว`) และการวัดเป้าหมายอย่างลงตัว, ปรับการแสดงผล KPI กรณีที่ยังไม่มีผลงานบันทึกให้เป็นกล่องกะทัดรัด, และกำหนดเงื่อนไขในหน้าแผนงาน (Plan) ให้โครงการรูปแบบทีมเท่านั้นที่สามารถแตกข้อรองหรือเพิ่มข้อย่อยได้ หากเป็นโครงการรูปแบบเดี่ยวจะป้องกันการแตกข้อรองเพื่อให้สอดคล้องกับงานเดี่ยว (`public/js/act-planner.js`, `public/app.css`)
 

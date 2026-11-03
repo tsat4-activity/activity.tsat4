@@ -11,6 +11,8 @@ DELETE /api/act/:activity/projects/:id auth
 DELETE /api/act/:activity/tasks/:id auth
 DELETE /api/act/:activity/team/:id auth
 DELETE /api/system/tables/:name auth creator
+DELETE /api/workflow/ideas/:id auth
+DELETE /api/workflow/images/:id auth
 GET /api/act/:activity/areas auth
 GET /api/act/:activity/audit-form auth
 GET /api/act/:activity/audit-plan auth
@@ -43,6 +45,10 @@ GET /api/me auth
 GET /api/system/choices auth creator
 GET /api/system/tables auth creator
 GET /api/system/tables/:name auth creator
+GET /api/workflow/export auth
+GET /api/workflow/ideas auth
+GET /api/workflow/ideas/:id auth
+GET /api/workflow/stats auth
 PATCH /api/act/:activity/areas/:id auth
 PATCH /api/act/:activity/audits/:id auth
 PATCH /api/act/:activity/cfo/activities/:id auth
@@ -56,6 +62,7 @@ PATCH /api/act/:activity/tasks/:id auth
 PATCH /api/act/:activity/tasks/dates auth
 PATCH /api/act/:activity/team/:id auth
 PATCH /api/system/tables/:name auth creator
+PATCH /api/workflow/ideas/:id auth
 POST /api/act/:activity/areas auth
 POST /api/act/:activity/audits auth
 POST /api/act/:activity/cfo/activities auth
@@ -81,6 +88,9 @@ POST /api/login
 POST /api/logout
 POST /api/password auth
 POST /api/system/tables/:name auth creator
+POST /api/workflow/ideas auth
+POST /api/workflow/ideas/:id/evaluate auth
+POST /api/workflow/ideas/:id/images auth
 PUT /api/act/:activity/areas/:id/owner auth
 PUT /api/act/:activity/audit-plan auth
 PUT /api/act/:activity/cfo/entries auth
