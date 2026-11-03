@@ -11,16 +11,17 @@ const AREA_OWNERS = {
   B12: '2101741', B13: '2103724', B14: '2102569', B15: '2103433'
 };
 
+// 34 areas divided across 9 teams (7 teams x 4 areas + 2 teams x 3 areas = 34)
 const AREA_TEAMS = {
   A01: ['H', ['2102901', '2103906']], A02: ['D', ['2101990', '2103396']],
   A03: ['D', ['2101990', '2103396']], A04: ['D', ['2101990', '2103396']],
-  A05: ['I', ['2102396', '2103864']], A06: ['B', ['2102899']],
+  A05: ['B', ['2102899']], A06: ['B', ['2102899']],
   A07: ['B', ['2102899']], A08: ['D', ['2101990', '2103396']],
   A09: ['F', ['2103391', '2103669']], A10: ['H', ['2102901', '2103906']],
-  A11: ['E', ['2101946', '2103570']], A12: ['F', ['2103391', '2103669']],
-  A13: ['E', ['2101946', '2103570']], A14: ['F', ['2103391', '2103669']],
-  A15: ['H', ['2102901', '2103906']], A16: ['H', ['2102901', '2103906']],
-  A17: ['D', ['2101990', '2103396']], A18: ['F', ['2103391', '2103669']],
+  A11: ['E', ['2101946', '2103570']], A12: ['E', ['2101946', '2103570']],
+  A13: ['E', ['2101946', '2103570']], A14: ['E', ['2101946', '2103570']],
+  A15: ['I', ['2102396', '2103864']], A16: ['I', ['2102396', '2103864']],
+  A17: ['F', ['2103391', '2103669']], A18: ['F', ['2103391', '2103669']],
   A19: ['F', ['2103391', '2103669']], B01: ['C', ['2101861']],
   B02: ['G', ['2101744', '2103865']], B03: ['C', ['2101861']],
   B04: ['C', ['2101861']], B05: ['C', ['2101861']],
@@ -28,10 +29,17 @@ const AREA_TEAMS = {
   B08: ['A', ['2103100']], B09: ['A', ['2103100']],
   B10: ['A', ['2103100']], B11: ['G', ['2101744', '2103865']],
   B12: ['G', ['2101744', '2103865']], B13: ['H', ['2102901', '2103906']],
-  B14: ['A', ['2103100']], B15: ['B', ['2102899']]
+  B14: ['I', ['2102396', '2103864']], B15: ['B', ['2102899']]
 };
 
 const ABSENT_ROUND_3 = new Set(['2103396', '2101946', '2103391', '2102396', '2103864']);
+
+// Round 3 redistribution for Team I (both absent):
+const ROUND_3_REDISTRIBUTE = {
+  A15: ['A', ['2103100']],
+  A16: ['B', ['2102899']],
+  B14: ['C', ['2101861']]
+};
 
 const SELF_MONTH_BASE = [84.6, 87.2, 90.5, 83.5, 91.8, 88.4, 85.2, 92.5, 87.6, 84.2, 89.8];
 const COMM_ROUNDS = { 3: [1, 83.6], 6: [2, 89.2], 9: [3, 86.4] };
@@ -134,7 +142,15 @@ export async function seed5sMockAudits(areas) {
       const auditedAt = `2026-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00+07:00`;
       const auditNo = `C-${area.code}-${String(day).padStart(2, '0')}${String(m).padStart(2, '0')}26-01`;
 
-      const actualAuds = (m === 9) ? audList.filter((x) => !ABSENT_ROUND_3.has(x)) : audList;
+      let auditTeam = team;
+      let actualAuds = audList;
+      if (m === 9) {
+        if (ROUND_3_REDISTRIBUTE[area.code]) {
+          [auditTeam, actualAuds] = ROUND_3_REDISTRIBUTE[area.code];
+        } else {
+          actualAuds = audList.filter((x) => !ABSENT_ROUND_3.has(x));
+        }
+      }
 
       const areaOffset = (((codeIdx * 13 + m * 11) % 9) - 4) * 0.65;
       const targetPct = Math.min(90.4, Math.max(82.4, basePct + areaOffset));
@@ -147,7 +163,7 @@ export async function seed5sMockAudits(areas) {
         year: 2026,
         audit_type: 'COMMITTEE',
         area_id: area.id,
-        team,
+        team: auditTeam,
         auditors: actualAuds,
         receivers: [owner],
         audited_at: auditedAt,

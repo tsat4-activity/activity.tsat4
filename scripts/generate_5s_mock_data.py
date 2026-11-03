@@ -41,24 +41,27 @@ AREAS = [
     ('B15', 'สำนักงาน', 'WH,DEL', '2103433'),
 ]
 
+# Assign 34 areas across 9 teams (A to I):
+# 34 areas / 9 teams = ~3.78 areas per team per round (7 teams with 4 areas, 2 teams with 3 areas)
+# Team A: 4, Team B: 4, Team C: 4, Team D: 4, Team E: 4, Team F: 4, Team G: 4, Team H: 3, Team I: 3 = 34 total
 AREA_TEAMS = {
     'A01': ('H', ['2102901', '2103906']),
     'A02': ('D', ['2101990', '2103396']),
     'A03': ('D', ['2101990', '2103396']),
     'A04': ('D', ['2101990', '2103396']),
-    'A05': ('I', ['2102396', '2103864']),
+    'A05': ('B', ['2102899']),
     'A06': ('B', ['2102899']),
     'A07': ('B', ['2102899']),
     'A08': ('D', ['2101990', '2103396']),
     'A09': ('F', ['2103391', '2103669']),
     'A10': ('H', ['2102901', '2103906']),
     'A11': ('E', ['2101946', '2103570']),
-    'A12': ('F', ['2103391', '2103669']),
+    'A12': ('E', ['2101946', '2103570']),
     'A13': ('E', ['2101946', '2103570']),
-    'A14': ('F', ['2103391', '2103669']),
-    'A15': ('H', ['2102901', '2103906']),
-    'A16': ('H', ['2102901', '2103906']),
-    'A17': ('D', ['2101990', '2103396']),
+    'A14': ('E', ['2101946', '2103570']),
+    'A15': ('I', ['2102396', '2103864']),
+    'A16': ('I', ['2102396', '2103864']),
+    'A17': ('F', ['2103391', '2103669']),
     'A18': ('F', ['2103391', '2103669']),
     'A19': ('F', ['2103391', '2103669']),
     'B01': ('C', ['2101861']),
@@ -74,8 +77,16 @@ AREA_TEAMS = {
     'B11': ('G', ['2101744', '2103865']),
     'B12': ('G', ['2101744', '2103865']),
     'B13': ('H', ['2102901', '2103906']),
-    'B14': ('A', ['2103100']),
+    'B14': ('I', ['2102396', '2103864']),
     'B15': ('B', ['2102899']),
+}
+
+# In Round 3 (Sep), Team I did not audit (both auditors absent).
+# Team I's areas (A15, A16, B14) were redistributed to other teams to audit:
+ROUND_3_REDISTRIBUTE = {
+    'A15': ('A', ['2103100']),
+    'A16': ('B', ['2102899']),
+    'B14': ('C', ['2101861']),
 }
 
 # Auditors absent in Round 3 (September) based on attendance document:
@@ -190,10 +201,15 @@ def generate_all():
             date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:00+07"
             audit_no = f"C-{code}-{day:02d}{m:02d}26-01"
 
-            # In Round 3 (m == 9), exclude absent auditors
+            # In Round 3 (m == 9), redistribute Team I areas and exclude absent auditors
             if m == 9:
-                actual_auds = [x for x in aud_list if x not in ABSENT_ROUND_3]
+                if code in ROUND_3_REDISTRIBUTE:
+                    audit_team, actual_auds = ROUND_3_REDISTRIBUTE[code]
+                else:
+                    audit_team = team
+                    actual_auds = [x for x in aud_list if x not in ABSENT_ROUND_3]
             else:
+                audit_team = team
                 actual_auds = aud_list
 
             area_offset = (((code_idx * 13 + m * 11) % 9) - 4) * 0.65  # -2.6 to +2.6%
@@ -206,7 +222,7 @@ def generate_all():
             rec_sql = f"array['{owner}']::text[]"
 
             audits.append((
-                audit_no, 2026, 'COMMITTEE', code, f"'{team}'::text",
+                audit_no, 2026, 'COMMITTEE', code, f"'{audit_team}'::text",
                 aud_sql, rec_sql, f"'{date_str}'::timestamptz",
                 total, pct, 'PASS', 'COMPLETED'
             ))
