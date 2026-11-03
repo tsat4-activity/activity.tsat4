@@ -141,10 +141,15 @@ export async function unitsOf(activity, year, activeOnly = false) {
 // [{ code, name, status }] of the year, in screen order (SMF projects); [] for other activities.
 export async function projectsOf(activity, year) {
   if (!PROJECT_ON.includes(activity)) return [];
-  const { data, error } = await tx.from(tablesOf(activity).project).select('id,code,name,sort_no,status,target_name,unit').eq('year', year).order('sort_no').order('id');
+  const { data, error } = await tx.from(tablesOf(activity).project).select('*').eq('year', year).order('sort_no').order('id');
   if (error?.code === 'PGRST205') return [];
   if (error) throw error;
-  return data || [];
+  return (data || []).map((p) => ({
+    ...p,
+    team_type: p.team_type || 'team',
+    target_type: p.target_type || (p.code === 'workflow' ? 'count' : 'plan'),
+    target_count: p.target_count != null ? Number(p.target_count) : (p.code === 'workflow' ? 10 : null)
+  }));
 }
 
 export async function accessOf(req, activity, year) {

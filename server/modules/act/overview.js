@@ -35,7 +35,19 @@ function planSummary(rows, today) {
     counts[code] = (counts[code] || 0) + 1;
   }
   const overdue = rows.filter((r) => planStatus(r, today).code === 'overdue').map((r) => ({ title: r.title, end: r.end_date, progress: r.progress }));
-  return { items: mains.length, percent, counts, overdue: overdue.length, late: overdue.sort((a, b) => a.end.localeCompare(b.end)).slice(0, 5) };
+  const kids = rows.filter((r) => r.parent_id != null);
+  const completedCount = kids.length
+    ? kids.filter((r) => Number(r.progress) >= 100).length
+    : mains.filter((r) => Number(r.progress) >= 100).length;
+  return {
+    items: mains.length,
+    percent,
+    counts,
+    overdue: overdue.length,
+    late: overdue.sort((a, b) => a.end.localeCompare(b.end)).slice(0, 5),
+    completedCount,
+    totalTasks: (kids.length || mains.length)
+  };
 }
 
 // The year's plan, and per project (SMF: main item unit; sub items follow their main item).

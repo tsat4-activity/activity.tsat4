@@ -72,13 +72,19 @@ create table if not exists public.mt_${k}_project (
 );
 alter table public.mt_${k}_project add column if not exists target_name text;
 alter table public.mt_${k}_project add column if not exists unit text;
-insert into public.mt_${k}_project (year, code, name, sort_no, target_name, unit) values
-  (2026, 'oee', 'Smart OEE', 1, 'OEE', '%'),
-  (2026, 'vision', 'Vision Camera', 2, 'Accuracy', '%'),
-  (2026, 'workflow', 'Work Flow Automation', 3, 'Time Saved', 'ชม.')
+alter table public.mt_${k}_project add column if not exists team_type text not null default 'team' check (team_type in ('team', 'individual'));
+alter table public.mt_${k}_project add column if not exists target_type text not null default 'plan' check (target_type in ('plan', 'count'));
+alter table public.mt_${k}_project add column if not exists target_count integer;
+insert into public.mt_${k}_project (year, code, name, sort_no, target_name, unit, team_type, target_type, target_count) values
+  (2026, 'oee', 'Smart OEE', 1, 'OEE', '%', 'team', 'plan', null),
+  (2026, 'vision', 'Vision Camera', 2, 'Accuracy', '%', 'team', 'plan', null),
+  (2026, 'workflow', 'Work Flow Automation', 3, 'Time Saved', 'ชม.', 'team', 'count', 10)
 on conflict (year, code) do update set
   target_name = coalesce(mt_${k}_project.target_name, excluded.target_name),
-  unit = coalesce(mt_${k}_project.unit, excluded.unit);
+  unit = coalesce(mt_${k}_project.unit, excluded.unit),
+  team_type = coalesce(mt_${k}_project.team_type, excluded.team_type),
+  target_type = coalesce(mt_${k}_project.target_type, excluded.target_type),
+  target_count = coalesce(mt_${k}_project.target_count, excluded.target_count);
 
 -- เป้าหมายและผลงานรายเดือนของแต่ละโครงการ (ผู้ใช้กำหนด 2026-11-01)
 create table if not exists public.tx_${k}_project_month (

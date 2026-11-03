@@ -25,7 +25,18 @@ export function mountSmf(app) {
     const sort = Number(body?.sortNo);
     const targetName = body?.targetName != null ? String(body.targetName).trim().slice(0, 80) || null : undefined;
     const unit = body?.unit != null ? String(body.unit).trim().slice(0, 30) || null : undefined;
-    const row = { name, code, sort_no: Number.isInteger(sort) && sort > 0 ? sort : 1, status: body?.status === 'Inactive' ? 'Inactive' : 'Active' };
+    const teamType = ['team', 'individual'].includes(body?.teamType) ? body.teamType : 'team';
+    const targetType = ['plan', 'count'].includes(body?.targetType) ? body.targetType : 'plan';
+    const targetCount = Number.isInteger(Number(body?.targetCount)) && Number(body.targetCount) > 0 ? Number(body.targetCount) : null;
+    const row = {
+      name,
+      code,
+      sort_no: Number.isInteger(sort) && sort > 0 ? sort : 1,
+      status: body?.status === 'Inactive' ? 'Inactive' : 'Active',
+      team_type: teamType,
+      target_type: targetType,
+      target_count: targetType === 'count' ? targetCount : null
+    };
     if (targetName !== undefined) row.target_name = targetName;
     if (unit !== undefined) row.unit = unit;
     return { row };
@@ -42,7 +53,11 @@ export function mountSmf(app) {
     if (!year || !(await requireAdmin(req, res, activity, year))) return;
     const { row, error } = input(req.body);
     if (error) return fail(res, 400, error);
-    const done = await tx.from(t.project).insert({ ...row, year });
+    let done = await tx.from(t.project).insert({ ...row, year });
+    if (done.error?.code === '42703') {
+      const { team_type, target_type, target_count, ...legacy } = row;
+      done = await tx.from(t.project).insert({ ...legacy, year });
+    }
     if (done.error?.code === '23505') return fail(res, 400, `ปี ${year} มีรหัส ${row.code} แล้ว`);
     must(done);
     res.status(201).json({ ok: true });
@@ -55,7 +70,11 @@ export function mountSmf(app) {
     const { row, error } = input({ code: project.code, ...req.body });
     if (error) return fail(res, 400, error);
     if (row.code !== project.code && await usedBy(t, project)) return fail(res, 400, 'โครงการนี้มีทีม / แผนงานแล้ว เปลี่ยนรหัสไม่ได้');
-    const done = await tx.from(t.project).update(row).eq('id', project.id);
+    let done = await tx.from(t.project).update(row).eq('id', project.id);
+    if (done.error?.code === '42703') {
+      const { team_type, target_type, target_count, ...legacy } = row;
+      done = await tx.from(t.project).update(legacy).eq('id', project.id);
+    }
     if (done.error?.code === '23505') return fail(res, 400, `ปี ${project.year} มีรหัส ${row.code} แล้ว`);
     must(done);
     res.json({ ok: true });
@@ -81,7 +100,10 @@ export function mountSmf(app) {
     if (!(await requireAdmin(req, res, activity, to))) return;
     const rows = (await projectsOf(activity, from)).filter((p) => p.status === 'Active');
     if (!rows.length) return fail(res, 400, `ปี ${from} ไม่มีโครงการ Active ให้คัดลอก`);
-    const done = await tx.from(tablesOf(activity).project).upsert(rows.map(({ code, name, sort_no, status, target_name, unit }) => ({ year: to, code, name, sort_no, status, target_name, unit })), { onConflict: 'year,code', ignoreDuplicates: true });
+    let done = await tx.from(tablesOf(activity).project).upsert(rows.map(({ code, name, sort_no, status, target_name, unit, team_type, target_type, target_count }) => ({ year: to, code, name, sort_no, status, target_name, unit, team_type, target_type, target_count })), { onConflict: 'year,code', ignoreDuplicates: true });
+    if (done.error?.code === '42703') {
+      done = await tx.from(tablesOf(activity).project).upsert(rows.map(({ code, name, sort_no, status, target_name, unit }) => ({ year: to, code, name, sort_no, status, target_name, unit })), { onConflict: 'year,code', ignoreDuplicates: true });
+    }
     must(done);
     res.json({ ok: true, copied: rows.length });
   });

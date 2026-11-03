@@ -15,7 +15,14 @@
   - **คะแนน 25 ข้อย่อย (`tx_5s_audit_score`):** ครบทุกข้อ 11,900 แถว
   - **เดือน ธ.ค.:** ยังไม่สร้างตามคำขอ
 - [5S] `inbox/import_5s_setup.sql` (หรือระบบจะ seed ให้อัตโนมัติทันทีที่เปิดหน้า 5S หลัง Render deploy): พื้นที่ตรวจประเมิน 34 พื้นที่ (`A01`–`A19` โรงงาน, `B01`–`B15` สำนักงาน), ตัวแทนพื้นที่ตามรหัสพนักงาน 34 พื้นที่ (`role = 'owner', unit = 'audit'`), ทีมตรวจประเมิน 17 รายชื่อ (`chairman` 2 + `auditor` กลุ่ม A–I 15 ใน `unit = 'audit'`), และหัวข้อตรวจประเมิน 25 ข้อ (`year = 2026`)
-- [SMF] `db/act/smf.sql` (หรือ `db/setup.sql`) ใน Tx Data (activity01): ตาราง `mt_smf_team`, `mt_smf_setting`, `mt_smf_task`, `mt_smf_project` (พร้อม `target_name`, `unit`), และตาราง `tx_smf_project_month` (เป้าหมายและผลงานรายเดือน)
+- [SMF] `db/act/smf.sql` (หรือ `db/setup.sql`) ใน Tx Data (activity01): ตาราง `mt_smf_team`, `mt_smf_setting`, `mt_smf_task`, `mt_smf_project` (พร้อม `target_name`, `unit`, `team_type`, `target_type`, `target_count`), และตาราง `tx_smf_project_month` (เป้าหมายและผลงานรายเดือน):
+  - คำสั่งอัปเดตตาราง `mt_smf_project` เดิม:
+    ```sql
+    alter table public.mt_smf_project add column if not exists team_type text not null default 'team' check (team_type in ('team', 'individual'));
+    alter table public.mt_smf_project add column if not exists target_type text not null default 'plan' check (target_type in ('plan', 'count'));
+    alter table public.mt_smf_project add column if not exists target_count integer;
+    update public.mt_smf_project set target_type = 'count', target_count = 10, unit = 'โครงการ' where code = 'workflow' and (target_count is null or target_count = 0);
+    ```
 
 - `db/act/cfo.sql` ใน Supabase activity01 (5S + ตารางกลางรันแล้ว) · ฐานว่างใหม่ใช้ `db/setup.sql` ไฟล์เดียว
 
@@ -25,6 +32,8 @@
 - ข้อมูลเดิมจาก TSAT4 SMF ได้รับการจัดระเบียบใหม่: สรุปและจัดทำคู่มือใน `docs/DATABASE.md`, ลบไฟล์ SQL ชั่วคราว/ล้าสมัยออก และคงไว้เฉพาะไฟล์ Master และ Mock ล่าสุดใน `inbox/` (`mock_5s_audits_2026.sql`, `import_5s_setup.sql` ฯลฯ)
 
 ## บันทึก (อันใหม่อยู่บนสุด)
+
+- 2026-11-03 · Antigravity [SMF / Project & Dashboard] · เพิ่มฟังก์ชันกำหนดรูปแบบโครงการ (ทำเป็นทีม / ทำเดี่ยว) และรูปแบบการวัดเป้าหมาย (วัดตามแผนงานระยะเวลา / วัดตามจำนวนโครงการ) ใน SMF: รองรับการเลือกประเภทในหน้า Setting > โครงการ (`aplSetProjects`), ปรับปรุงคอลัมน์ตารางและฟอร์ม popup ให้เลือกรูปแบบทีมหรือเดี่ยว และเลือกการวัดเป้าหมายตามแผนงานหรือตามจำนวนเป้าหมายโครงการ (เช่น Work Flow Automation ตั้งเป้าหมายสำเร็จ 10 โครงการ), คำนวณความคืบหน้าของโครงการที่วัดตามจำนวนจากรายการแผนงานย่อยที่เสร็จสมบูรณ์ (`progress >= 100`) เทียบกับเป้าหมายที่ตั้งไว้ (`completedCount / targetCount`), อัปเดตการ์ดโครงการใน SMF Dashboard (`aplDrawSmfOverview`) ให้แสดง badge รูปแบบ (ทีม/เดี่ยว) และการวัดผล (วัดตามแผน/วัดตามจำนวนโครงการ), พร้อมแสดงแถบความคืบหน้าตามเป้าหมายจำนวนและสรุปผลสำเร็จอย่างชัดเจน (`scripts/act-sql.js`, `db/act/smf.sql`, `db/setup.sql`, `server/modules/act/common.js`, `server/modules/act/smf.js`, `server/modules/act/overview.js`, `public/js/act-planner.js`)
 
 - 2026-11-03 · Antigravity [SMF / Plan] · แก้ไขปัญหาชื่อโครงการซ้ำซ้อนในหน้าแผนงาน (Plan) ของ SMF: ตัดแถบกลุ่มโครงการส่วนเกิน (`.apl-group`) ที่แสดงผลซ้ำซ้อน 0 หัวข้อด้านบนออก เนื่องจากข้อหลัก (ข้อ 2 Smart OEE, ข้อ 3 Vision Camera, ข้อ 4 Work Flow Automation) เป็นตัวแทนของแต่ละโครงการอยู่แล้ว, ปรับปรุงให้ตารางแผนงานแสดงข้อหลักและข้อย่อยโดยตรงอย่างเป็นธรรมชาติ, เพิ่มระบบตรวจจับและเชื่อมโยงรหัสโครงการ (`unit`) อัตโนมัติจากชื่อข้อหลักที่ตรงกับโครงการ พร้อมบันทึกลงฐานข้อมูล `mt_smf_task`, รองรับการกรองตามโครงการในแถบเครื่องมือที่จะแสดงเฉพาะข้อหลักของโครงการนั้นๆ และคำนวณสถิติความคืบหน้ารายโครงการบน SMF Dashboard ได้อย่างสมบูรณ์ (`public/js/act-planner.js`, `server/modules/act/planner.js`, `server/modules/act/overview.js`)
 

@@ -625,33 +625,55 @@ async function aplSetProjects(body, activity, admin, rerender) {
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('apl-p-add', 'เพิ่มโครงการ', 'primary')}${button('apl-p-edit', 'แก้ไข', 'secondary', 'disabled')}${button('apl-p-del', 'ลบ', 'danger', 'disabled')}${button('apl-p-copy', `คัดลอกจากปี ${a5Year - 1}`)}</div>` : ''}
     <div class="table-wrap sheet" id="apl-p-rows"></div>
-    <p class="sum-meta">${projects.length} โครงการ ปี ${a5Year} · แต่ละโครงการมีทีม (Setting > ทีม เลือก ทีม = โครงการ) แผนงาน (ข้อหลักเลือกโครงการ) และเป้าหมาย/ผลงานรายเดือน (Transaction)</p>`;
-  fillTable('apl-p-rows', ['ลำดับ', 'รหัส', 'ชื่อโครงการ', 'เป้าหมาย (KPI)', 'หน่วย', 'สถานะ'], projects.map((p) => `<tr data-pick="${p.id}"><td>${p.sort_no}</td><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(p.target_name || '-')}</td><td>${esc(p.unit || '-')}</td><td>${esc(p.status)}</td></tr>`).join(''), `ยังไม่มีโครงการปี ${a5Year}`);
+    <p class="sum-meta">${projects.length} โครงการ ปี ${a5Year} · แต่ละโครงการกำหนดรูปแบบ (ทีม/เดี่ยว) การวัดเป้าหมาย (ตามแผน/ตามจำนวน) แผนงาน และเป้าหมาย/ผลงานรายเดือน (Transaction)</p>`;
+  fillTable('apl-p-rows', ['ลำดับ', 'รหัส', 'ชื่อโครงการ', 'รูปแบบ', 'การวัดเป้าหมาย', 'เป้าหมาย (KPI)', 'หน่วย', 'สถานะ'], projects.map((p) => {
+    const isCount = p.target_type === 'count';
+    const tgt = isCount ? `ตามจำนวน (${p.target_count || '-'} ${esc(p.unit || 'โครงการ')})` : 'ตามแผน (ระยะเวลา)';
+    const teamBadge = `<span class="badge ${p.team_type === 'individual' ? '' : 'badge-primary'}">${p.team_type === 'individual' ? 'เดี่ยว' : 'ทีม'}</span>`;
+    const tgtBadge = `<span class="badge ${isCount ? 'badge-success' : ''}">${tgt}</span>`;
+    return `<tr data-pick="${p.id}"><td>${p.sort_no}</td><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td>${teamBadge}</td><td>${tgtBadge}</td><td>${esc(p.target_name || '-')}</td><td>${esc(p.unit || '-')}</td><td>${esc(p.status)}</td></tr>`;
+  }).join(''), `ยังไม่มีโครงการปี ${a5Year}`);
   a5Lift(body);
   if (!admin) return;
   bindRowSelect($('apl-p-rows'), (id) => { picked = projects.find((p) => String(p.id) === id); $('apl-p-edit').disabled = !picked; $('apl-p-del').disabled = !picked; });
-  const form = (p) => openPopup(p ? `แก้ไขโครงการ ${esc(p.name)}` : `เพิ่มโครงการปี ${a5Year}`, [
-    field('ชื่อโครงการ', `<input id="apl-p-name" maxlength="120" value="${esc(p?.name || '')}" placeholder="เช่น Smart OEE">`),
-    field('รหัส (a–z 0–9 ใช้ผูกทีมและแผน)', `<input id="apl-p-code" maxlength="20" value="${esc(p?.code || '')}" placeholder="เช่น oee">`),
-    field('ชื่อเป้าหมาย (KPI)', `<input id="apl-p-target" maxlength="80" value="${esc(p?.target_name || '')}" placeholder="เช่น OEE, Accuracy, Time Saved">`),
-    field('หน่วย', `<input id="apl-p-unit" maxlength="30" value="${esc(p?.unit || '')}" placeholder="เช่น %, ชม., ชิ้น">`),
-    field('ลำดับ', `<input id="apl-p-sort" type="number" min="1" value="${p?.sort_no || projects.length + 1}">`),
-    field('สถานะ', `<select id="apl-p-status">${options(['Active', 'Inactive'], p?.status || 'Active')}</select>`)
-  ].join(''), async () => {
-    const payload = {
-      year: a5Year,
-      name: $('apl-p-name').value,
-      code: $('apl-p-code').value,
-      targetName: $('apl-p-target').value,
-      unit: $('apl-p-unit').value,
-      sortNo: Number($('apl-p-sort').value),
-      status: $('apl-p-status').value
+  const form = (p) => {
+    const isCount = (p?.target_type || (p?.code === 'workflow' ? 'count' : 'plan')) === 'count';
+    openPopup(p ? `แก้ไขโครงการ ${esc(p.name)}` : `เพิ่มโครงการปี ${a5Year}`, [
+      field('ชื่อโครงการ', `<input id="apl-p-name" maxlength="120" value="${esc(p?.name || '')}" placeholder="เช่น Smart OEE">`),
+      field('รหัส (a–z 0–9 ใช้ผูกทีมและแผน)', `<input id="apl-p-code" maxlength="20" value="${esc(p?.code || '')}" placeholder="เช่น oee">`),
+      field('รูปแบบโครงการ', `<select id="apl-p-team-type"><option value="team"${(p?.team_type || 'team') === 'team' ? ' selected' : ''}>ทำเป็นทีม (Team)</option><option value="individual"${p?.team_type === 'individual' ? ' selected' : ''}>ทำเดี่ยว (Individual)</option></select>`),
+      field('การวัดเป้าหมาย', `<select id="apl-p-target-type"><option value="plan"${!isCount ? ' selected' : ''}>วัดตามแผนงาน (ระยะเวลา / Milestone)</option><option value="count"${isCount ? ' selected' : ''}>วัดตามจำนวนโครงการ (Count / Quantity)</option></select>`),
+      `<div id="apl-p-count-wrap" class="${isCount ? '' : 'd-none'}">${field('เป้าหมายจำนวนโครงการ', `<input id="apl-p-target-count" type="number" min="1" value="${p?.target_count || (p?.code === 'workflow' ? 10 : '')}" placeholder="เช่น 10">`)}</div>`,
+      field('ชื่อเป้าหมาย (KPI)', `<input id="apl-p-target" maxlength="80" value="${esc(p?.target_name || '')}" placeholder="เช่น OEE, Accuracy, Time Saved, โครงการที่สำเร็จ">`),
+      field('หน่วย', `<input id="apl-p-unit" maxlength="30" value="${esc(p?.unit || (isCount ? 'โครงการ' : ''))}" placeholder="เช่น %, ชม., โครงการ">`),
+      field('ลำดับ', `<input id="apl-p-sort" type="number" min="1" value="${p?.sort_no || projects.length + 1}">`),
+      field('สถานะ', `<select id="apl-p-status">${options(['Active', 'Inactive'], p?.status || 'Active')}</select>`)
+    ].join(''), async () => {
+      const targetType = $('apl-p-target-type').value;
+      const payload = {
+        year: a5Year,
+        name: $('apl-p-name').value,
+        code: $('apl-p-code').value,
+        teamType: $('apl-p-team-type').value,
+        targetType,
+        targetCount: targetType === 'count' ? Number($('apl-p-target-count').value) || null : null,
+        targetName: $('apl-p-target').value,
+        unit: $('apl-p-unit').value,
+        sortNo: Number($('apl-p-sort').value),
+        status: $('apl-p-status').value
+      };
+      await a5Api(activity, p ? `projects/${p.id}` : 'projects', { method: p ? 'PATCH' : 'POST', body: payload });
+      toast('บันทึกแล้ว');
+      closePopup();
+      rerender();
+    });
+    $('apl-p-target-type').onchange = () => {
+      const count = $('apl-p-target-type').value === 'count';
+      $('apl-p-count-wrap').classList.toggle('d-none', !count);
+      if (count && !$('apl-p-unit').value.trim()) $('apl-p-unit').value = 'โครงการ';
+      if (count && !$('apl-p-target-count').value) $('apl-p-target-count').value = 10;
     };
-    await a5Api(activity, p ? `projects/${p.id}` : 'projects', { method: p ? 'PATCH' : 'POST', body: payload });
-    toast('บันทึกแล้ว');
-    closePopup();
-    rerender();
-  });
+  };
   $('apl-p-add').onclick = () => form(null);
   $('apl-p-edit').onclick = () => picked && form(picked);
   $('apl-p-del').onclick = () => picked && confirmPopup('ลบโครงการ', `ตรวจ ${esc(picked.name)} อีกครั้งก่อนลบ (ถ้ามีทีมหรือแผนงานแล้วจะเปลี่ยนเป็น Inactive แทน)`, async () => {
@@ -936,13 +958,36 @@ async function aplDrawSmfOverview(body, activity) {
 
   const card = (u, i) => {
     const plan = p.plan?.byUnit?.[u.code];
+    const isCount = u.target_type === 'count';
+    const isIndiv = u.team_type === 'individual';
+    const targetCount = u.target_count || 10;
+    const completed = plan?.completedCount || 0;
+    const countPct = Math.min(100, Math.round((completed / targetCount) * 100));
     const chips = plan ? OV_PLAN.filter(([code]) => plan.counts[code]).map(([code, label]) => `<span class="ov-chip is-${code}">${label} ${plan.counts[code]}</span>`).join('') : '';
     const late = plan?.late?.length ? `<ul class="ov-late">${plan.late.map((t) => `<li><span>${esc(actNoLead(t.title))}</span><b>${actShort(t.end)} · ${t.progress}%</b></li>`).join('')}</ul>` : '';
+
+    const progressSec = isCount
+      ? `<div class="ov-sec"><div class="ov-sec-title">ความคืบหน้าตามเป้าหมาย (สำเร็จ ${completed} / ${targetCount} ${esc(u.unit || 'โครงการ')})</div>${plan ? `<div class="ov-progress"><div class="ov-bar"><span style="width:${countPct}%"></span></div><b>${countPct}%</b></div><div class="ov-chips">${chips}</div>` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}</div>`
+      : `<div class="ov-sec"><div class="ov-sec-title">ความคืบหน้าแผนงาน (ตามระยะเวลา)</div>${plan ? `<div class="ov-progress"><div class="ov-bar"><span style="width:${plan.percent}%"></span></div><b>${plan.percent}%</b></div><div class="ov-chips">${chips}</div>` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}</div>`;
+
     return `<article class="card ov-card" style="--ov:${CHART.series[i % CHART.series.length]}">
-      <div class="ov-head"><strong>${esc(u.name)}</strong></div>
-      <div class="ov-sec"><div class="ov-sec-title">ความคืบหน้าแผนงาน</div>${plan ? `<div class="ov-progress"><div class="ov-bar"><span style="width:${plan.percent}%"></span></div><b>${plan.percent}%</b></div><div class="ov-chips">${chips}</div>` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}</div>
+      <div class="ov-head">
+        <strong>${esc(u.name)}</strong>
+        <span class="badge ${isIndiv ? '' : 'badge-primary'}">${isIndiv ? 'เดี่ยว' : 'ทีม'}</span>
+        <span class="badge ${isCount ? 'badge-success' : ''}">${isCount ? `วัดตามจำนวน (${targetCount} ${esc(u.unit || 'โครงการ')})` : 'วัดตามแผน'}</span>
+      </div>
+      ${progressSec}
       ${kpiSection(u)}
-      <div class="ov-sec"><div class="ov-sec-title">สรุป</div>${row('หัวข้อหลัก', ovNum(plan?.items))}${row('เลยกำหนด', `<span class="${plan?.overdue ? 'ov-bad' : ''}">${ovNum(plan?.overdue)}</span>`)}${row('ทีมโครงการ', `${ovNum(p.team?.units?.[u.code])} คน`)}${late}</div>
+      <div class="ov-sec">
+        <div class="ov-sec-title">สรุป</div>
+        ${row('รูปแบบ', isIndiv ? 'เดี่ยว (Individual)' : 'ทำเป็นทีม (Team)')}
+        ${row('การวัดเป้าหมาย', isCount ? `ตามจำนวน (${targetCount} ${esc(u.unit || 'โครงการ')})` : 'ตามแผนงาน (ระยะเวลา)')}
+        ${isCount ? row('สำเร็จแล้ว', `<b>${completed} / ${targetCount} ${esc(u.unit || 'โครงการ')}</b>`) : ''}
+        ${row('หัวข้อหลัก', ovNum(plan?.items))}
+        ${row('เลยกำหนด', `<span class="${plan?.overdue ? 'ov-bad' : ''}">${ovNum(plan?.overdue)}</span>`)}
+        ${row(isIndiv ? 'ผู้รับผิดชอบ' : 'ทีมโครงการ', `${ovNum(p.team?.units?.[u.code])} คน`)}
+        ${late}
+      </div>
     </article>`;
   };
   body.innerHTML = `<div class="ch-kpis">${kpis}</div>
