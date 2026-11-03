@@ -296,7 +296,11 @@ function chartPlot({ id, labels, bars = [], lines = [], left = '', right = '', l
   const rightLines = lines.filter((l) => l.axis === 'right');
   const yL = leftMax || chartNiceMax(Math.max(...bars.flatMap((b) => b.values.map(sum)), ...leftLines.flatMap((l) => l.values.filter((v) => v != null)), 1) * 1.1);
   const yR = rightLines.length ? chartNiceMax(Math.max(...rightLines.flatMap((l) => l.values.filter((v) => v != null)), 1) * 1.05) : 0;
-  const ticks = (max) => [4, 3, 2, 1, 0].map((k) => `<span>${chartNum((max / 4) * k, digits)}</span>`).join('');
+  // small values (e.g. 0.3 tCO2e) keep their decimals: the axis shows 0.3 · 0.6 … not 0 · 1 · 1, a value 0.332 not 0
+  // (ผู้ใช้แจ้ง 2026-11-03) · whole numbers (counts, %) stay as they are
+  const tickDigits = (max) => { let d = digits; while (d < 4 && Math.abs(Number((max / 4).toFixed(d)) - max / 4) > 1e-9) d += 1; return d; };
+  const vd = (v) => Math.max(digits, Math.abs(v) < 1 ? 3 : Math.abs(v) < 10 ? 2 : 0);
+  const ticks = (max) => [4, 3, 2, 1, 0].map((k) => `<span>${chartNum((max / 4) * k, tickDigits(max))}</span>`).join('');
   const x = (i) => ((i + 0.5) / n) * 100;
   const bar = (b, i) => {
     const v = b.values[i];
@@ -304,7 +308,9 @@ function chartPlot({ id, labels, bars = [], lines = [], left = '', right = '', l
     const total = sum(v);
     // unit: suffix of the value on top (87%) · inner: a label per column shown in the middle of the bar (e.g. 33 ใบ)
     const inner = b.inner?.[i] ? `<span class="ch-in">${esc(b.inner[i])}</span>` : '';
-    return `<div class="ch-stack" style="height:${(total / yL) * 100}%">${total ? `<span class="ch-val">${chartNum(total, digits)}${esc(b.unit || '')}</span>${inner}` : ''}${total ? parts.map((p, k) => (p ? `<div style="flex:${p};--c:${(b.colors || CHART.series)[k]}"></div>` : '')).reverse().join('') : ''}</div>`;
+    // flex as a share of the total: grow factors that add up to less than 1 fill only that part of the bar, so a month
+    // under 1 tCO2e floated above the axis (ผู้ใช้แจ้ง 2026-11-03)
+    return `<div class="ch-stack" style="height:${(total / yL) * 100}%">${total ? `<span class="ch-val">${chartNum(total, vd(total))}${esc(b.unit || '')}</span>${inner}` : ''}${total ? parts.map((p, k) => (p ? `<div style="flex:${Number(p) / total};--c:${(b.colors || CHART.series)[k]}"></div>` : '')).reverse().join('') : ''}</div>`;
   };
   const scale = (l) => (l.axis === 'right' ? yR : yL);
   // Target line = dashed with one value all year (or target: true): drawn edge to edge across the plot, one label at the right end.
@@ -325,10 +331,10 @@ function chartPlot({ id, labels, bars = [], lines = [], left = '', right = '', l
     if (l.labels === false) return '';
     const v = targetOf(l);
     if (v != null) {
-      return `<span class="ch-target" style="bottom:${(v / scale(l)) * 100}%;--c:${l.color}">Target : ${chartNum(v, digits)}${esc(l.unit || '')}</span>`;
+      return `<span class="ch-target" style="bottom:${(v / scale(l)) * 100}%;--c:${l.color}">Target : ${chartNum(v, vd(v))}${esc(l.unit || '')}</span>`;
     }
     const last = l.values.reduce((k, v, i) => (v == null ? k : i), -1);
-    return l.values.map((v, i) => (v == null || (l.labels === 'last' && i !== last) ? '' : `<span class="ch-lv${l.dash ? ' is-below' : ''}" style="left:${x(i)}%;bottom:${(v / scale(l)) * 100}%;--c:${l.color}">${chartNum(v, digits)}</span>`)).join('');
+    return l.values.map((v, i) => (v == null || (l.labels === 'last' && i !== last) ? '' : `<span class="ch-lv${l.dash ? ' is-below' : ''}" style="left:${x(i)}%;bottom:${(v / scale(l)) * 100}%;--c:${l.color}">${chartNum(v, vd(v))}</span>`)).join('');
   };
   const key = (item) => (item.head ? `<b>${esc(item.head)}</b>` : item.line ? `<span><i class="ln${item.dash ? ' is-dash' : ''}" style="--c:${item.line}"></i>${esc(item.label)}</span>` : `<span><i class="sq" style="--c:${item.box}"></i>${esc(item.label)}</span>`);
   return `<div class="ch-plot${yR ? ' has-right' : ''}">
