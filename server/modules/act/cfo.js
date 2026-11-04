@@ -151,8 +151,10 @@ export function mountCfo(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const now = new Date();
     const due = year < now.getFullYear() ? 12 : year > now.getFullYear() ? 0 : now.getMonth() + 1;
-    await autoFillEf3(t, req, (await accessOf(req, activity, thisYear())).admin);
-    const [access, settings, activities, efs, scopes, gwp, allEntries, details, materials, matUse, mats] = await Promise.all([
+    const adminNow = (await accessOf(req, activity, thisYear())).admin;
+    await autoFillEf3(t, req, adminNow);
+    await autoSyncSap(t, req, adminNow);
+    const [access, settings, activities, efs, scopes, gwp, allEntries, details] = await Promise.all([
       accessOf(req, activity, year),
       settingsOf(t),
       fetchAll(() => tx.from(t.activity).select('*').order('id')),
@@ -160,10 +162,7 @@ export function mountCfo(app) {
       fetchAll(() => tx.from(t.cfoScope).select('code,name').order('code')),
       fetchAll(() => tx.from(t.gwp).select('code,ch4').order('code')),
       fetchAll(() => tx.from(t.entryView).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')),
-      fetchAll(() => tx.from(t.entry).select('id,status,inputs,doc,remark,updated_at,updated_by').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')),
-      usageBySection(t, year),
-      fetchAll(() => tx.from(t.materialUse).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`)).catch(() => []),
-      fetchAll(() => tx.from(t.material).select('grp,kind,scope_code,status')).catch(() => [])
+      fetchAll(() => tx.from(t.entry).select('id,status,inputs,doc,remark,updated_at,updated_by').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id'))
     ]);
     const entries = allEntries.filter((e) => (e.part || 'main') === 'main');
     const efById = new Map(efs.map((e) => [e.id, e]));
@@ -182,14 +181,13 @@ export function mountCfo(app) {
       admin: access.admin,
       departments: access.departments,
       septic: Object.fromEntries(Object.entries(settings).filter(([k]) => k.startsWith('septic_'))),
-      materials,
       rows: activities.filter((a) => a.status === 'Active' || entriesByAct.has(a.id)).map((a) => {
         const list = entriesByAct.get(a.id) || [];
         const months = [...new Set(list.map((e) => Number(e.month.slice(5, 7))))];
         const ef = efById.get(a.ef_id) || {};
         return {
           id: a.id, department: a.department, name: a.name, detail: a.detail, calc: a.calc, scope_code: ef.scope_code, category: category(ef), source: ef.name,
-          canEdit: access.admin || access.departments.includes(a.department),
+          canEdit: a.calc !== 'sap' && (access.admin || access.departments.includes(a.department)), // sap = from the SAP Usage
           unit: a.calc === 'septic' ? 'kg CH₄' : ef.unit, kgco2e: a.calc === 'septic' ? gwpCh4.get(a.gwp_code) : ef.kgco2e,
           byMonth: Object.fromEntries(list.map((e) => [Number(e.month.slice(5, 7)), { qty: e.qty, tco2e: e.tco2e, ...detailOf.get(e.id) }])),
           months: months.sort((x, y) => x - y),
@@ -202,7 +200,8 @@ export function mountCfo(app) {
     });
 
     // Lines that are counted but not recorded by hand (ผู้ใช้กำหนด 2026-11-03), for Dashboard > Scope only:
-    // 3-3 การได้มาของเชื้อเพลิง / ไฟฟ้า of an activity with ef3_id (same months as the activity) · 3-1 Usage (SAP) per หมวดหลัก
+    // 3-3 การได้มาของเชื้อเพลิง / ไฟฟ้า of an activity with ef3_id (same months as the activity). The SAP Usage has its own
+    // activities (กลุ่มวัสดุ × costcenter, calc = sap) since 2026-11-04.
     function derivedRows() {
       const pct = (months) => (due ? Math.min(100, Math.round((months.filter((m) => m <= due).length / due) * 100)) : 0);
       const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -220,26 +219,7 @@ export function mountCfo(app) {
           scope_code: '3-3', category: category({ scope_code: '3-3' }), source: f.name, unit: f.unit, kgco2e: f.kgco2e, months, percent: pct(months),
           qty: r3(list.reduce((s, e) => s + Number(e.qty), 0)), tco2e: r3(list.reduce((s, e) => s + Number(e.tco2e), 0)) };
       });
-      const groups = new Map();
-      const groupOf = (grp, kind, scopeCode) => {
-        const name = grp || MAT_KINDS[kind] || 'Usage';
-        const key = `${scopeCode || '3-1'}|${name}`;
-        if (!groups.has(key)) groups.set(key, { name, scope_code: scopeCode || '3-1', months: new Set(), items: new Set(), tco2e: 0 });
-        return groups.get(key);
-      };
-      mats.filter((x) => x.grp && x.status !== 'Inactive').forEach((x) => groupOf(x.grp, x.kind, x.scope_code));
-      for (const u of matUse) {
-        const g = groupOf(u.grp, u.kind, u.scope_code);
-        g.months.add(Number(u.month.slice(5, 7)));
-        g.items.add(u.material);
-        g.tco2e += Number(u.tco2e);
-      }
-      const sap = [...groups.values()].map((g) => {
-        const months = [...g.months].sort((x, y) => x - y);
-        return { id: `sap:${g.scope_code}:${g.name}`, derived: 'sap', department: 'SAP', name: g.name, detail: `Usage (SAP) · ${g.items.size} วัสดุที่คิดได้`, scope_code: g.scope_code,
-          category: category({ scope_code: g.scope_code }), source: 'Usage (SAP)', unit: 'วัสดุ', months, percent: pct(months), qty: g.items.size, tco2e: r3(g.tco2e) };
-      });
-      return [...upstream, ...sap];
+      return upstream;
     }
   });
 
@@ -250,6 +230,7 @@ export function mountCfo(app) {
     if (!month || !activityId) return fail(res, 400, 'เลือกกิจกรรมและเดือน');
     const act = must(await tx.from(t.activity).select('*').eq('id', activityId).maybeSingle());
     if (!act) return fail(res, 404, 'ไม่พบกิจกรรม');
+    if (act.calc === 'sap') return fail(res, 400, 'กิจกรรมนี้คิดจาก Usage (SAP) ให้วาง Usage ที่ Setting > Materials (SAP)');
     const access = await accessOf(req, activity, Number(month.slice(0, 4)));
     if (!access.admin && !access.departments.includes(act.department)) return fail(res, 403, `บันทึกได้เฉพาะตัวแทนหน่วยงาน ${act.department} หรือผู้จัดทำ`);
     const current = must(await tx.from(t.entry).select('id,status').eq('activity_id', act.id).eq('month', month).maybeSingle());
@@ -322,8 +303,10 @@ export function mountCfo(app) {
 
   // ---------- Setting: master data (admin of this year edits) ----------
   route('get', '/api/act/:activity/cfo/master', async (req, res, activity, t) => {
-    await autoFillEf3(t, req, (await accessOf(req, activity, thisYear())).admin);
-    const [scopes, gwp, ef, refs, activities, used, settings, access, mats] = await Promise.all([
+    const adminNow = (await accessOf(req, activity, thisYear())).admin;
+    await autoFillEf3(t, req, adminNow);
+    await autoSyncSap(t, req, adminNow);
+    const [scopes, gwp, ef, refs, activities, used, settings, access] = await Promise.all([
       fetchAll(() => tx.from(t.cfoScope).select('*').order('scope').order('code')),
       fetchAll(() => tx.from(t.gwp).select('*').order('code')),
       fetchAll(() => tx.from(t.ef).select('*').order('scope_code').order('id')),
@@ -331,22 +314,14 @@ export function mountCfo(app) {
       fetchAll(() => tx.from(t.activity).select('*').order('department').order('id')),
       fetchAll(() => tx.from(t.entry).select('ef_id,activity_id,gwp_code').order('id')),
       settingsOf(t),
-      accessOf(req, activity, thisYear()),
-      fetchAll(() => tx.from(t.material).select('grp,scope_code,ef_ref_id,factor,status')).catch(() => [])
+      accessOf(req, activity, thisYear())
     ]);
-    // Usage (SAP) activities (ผู้ใช้กำหนด 2026-11-03): one per หมวดหลัก of the materials, counted from the SAP Usage
-    const matGroups = Object.values(mats.filter((x) => x.grp && x.status !== 'Inactive').reduce((acc, x) => {
-      const g = (acc[`${x.scope_code}|${x.grp}`] = acc[`${x.scope_code}|${x.grp}`] || { grp: x.grp, scope_code: x.scope_code, items: 0, counted: 0, refs: new Set() });
-      g.items += 1;
-      if (x.ef_ref_id && x.factor) { g.counted += 1; g.refs.add(x.ef_ref_id); }
-      return acc;
-    }, {})).map((g) => ({ ...g, refs: [...g.refs] })).sort((a, b) => a.grp.localeCompare(b.grp, 'th'));
     const usedEf = new Set(used.map((u) => u.ef_id));
     const usedGwp = new Set([...used, ...activities].map((u) => u.gwp_code));
     const usedAct = new Set(used.map((u) => u.activity_id));
     res.json({
       admin: access.admin,
-      scopes, settings, refs, matGroups,
+      scopes, settings, refs,
       gwp: gwp.map((g) => ({ ...g, used: usedGwp.has(g.code) })),
       ef: ef.map((e) => ({ ...e, used: usedEf.has(e.id) })),
       activities: activities.map((a) => ({ ...a, used: usedAct.has(a.id) }))
@@ -496,12 +471,108 @@ export function mountCfo(app) {
   const MAT_SHEETS = ['cfp', 'energy', 'chemical'];
   // usage = ของใช้สิ้นเปลือง (Store) · raw = วัตถุดิบ · other = อื่นๆ (ผู้ใช้กำหนด 2026-11-02)
   const MAT_KINDS = { usage: 'Usage', raw: 'วัตถุดิบ', other: 'อื่นๆ' };
+  // กลุ่มวัสดุ (ผู้ใช้กำหนด 2026-11-04): 1 กลุ่ม = 1 EF (EF ไม่เท่ากันแยกกลุ่ม) · วัสดุหลายรุ่นอยู่กลุ่มเดียวกัน · กิจกรรม = กลุ่ม × costcenter
+  // (calc = sap) ที่ syncSap สร้างให้และเติมปริมาณรายเดือน · columns from db/act/cfo.sql 2026-11-04
+  const sapReady = async (t) => !(await tx.from(t.matGroup).select('id').limit(1)).error;
+  const unitKey = (u) => String(u || '').trim().toUpperCase();
+  const r6 = (v) => Math.round(v * 1e6) / 1e6;
+  // why a Usage line is not counted (null = counted): material → group → EF of the group + factor + same SAP unit
+  const sapWhy = (l, m, g, e) => {
+    if (!m) return 'nomat';
+    if (!g) return 'nogroup';
+    if (!e || e.total == null || g.status === 'Inactive') return 'noef';
+    if (!(Number(m.factor) > 0) || m.status === 'Inactive') return 'nofactor';
+    if (l.unit && m.sap_unit && unitKey(l.unit) !== unitKey(m.sap_unit)) return 'unit';
+    return null;
+  };
+  const sapMaster = async (t) => {
+    const [mats, groups, refs, centers] = await Promise.all([
+      fetchAll(() => tx.from(t.material).select('*')),
+      fetchAll(() => tx.from(t.matGroup).select('*')),
+      fetchAll(() => tx.from(t.efRef).select('id,name,unit,total').in('sheet', MAT_SHEETS)),
+      fetchAll(() => mx.from('mt_main_costcenter').select('costcenter,object_name,department')).catch(() => [])
+    ]);
+    return { mat: new Map(mats.map((m) => [m.material, m])), group: new Map(groups.map((g) => [g.id, g])), ref: new Map(refs.map((r) => [r.id, r])),
+      center: new Map(centers.map((c) => [String(c.costcenter).trim().toUpperCase(), c])) };
+  };
+  // Work a month out again from the master of now and replace it: its Usage lines (given, or the ones saved) and the
+  // months of the SAP activities. A material grouped later, or a group given another EF, counts for the months already pasted.
+  const syncSap = async (t, req, months, given = null) => {
+    const master = await sapMaster(t);
+    const acts = await fetchAll(() => tx.from(t.activity).select('*').not('mat_group_id', 'is', null));
+    const actOf = new Map(acts.map((a) => [`${a.mat_group_id}|${a.costcenter}`, a]));
+    const efOf = new Map();
+    let total = 0;
+    for (const month of months) {
+      const lines = given || await fetchAll(() => tx.from(t.materialUse).select('*').eq('month', month).order('id'));
+      const out = [];
+      const sums = new Map();
+      for (const l of lines) {
+        const m = master.mat.get(l.material);
+        const g = m?.group_id ? master.group.get(m.group_id) : null;
+        const e = g?.ef_ref_id ? master.ref.get(g.ef_ref_id) : null;
+        const { id, ...row } = l;
+        Object.assign(row, { month, grp: g?.name ?? null, group_id: 0, activity_id: null, factor: 0, ef_ref_id: null, source: '', ef_unit: null, kgco2e: 0, tco2e: 0, name: m?.name || l.name });
+        if (sapWhy(l, m, g, e)) { out.push(row); continue; }
+        if (!efOf.has(g.id)) efOf.set(g.id, (await efFromRef(t, g.ef_ref_id, g.scope_code)).id || null);
+        const efId = efOf.get(g.id);
+        if (!efId) { out.push(row); continue; }
+        const cc = l.costcenter || l.department || '(ไม่ระบุ)';
+        const c = master.center.get(unitKey(cc));
+        const department = c?.department || l.department || cc;
+        const want = { name: g.name, department, detail: `${department} : ${cc}${c?.object_name ? ` ${c.object_name}` : ''}`.slice(0, 500), ef_id: efId };
+        let a = actOf.get(`${g.id}|${cc}`);
+        if (!a) {
+          a = must(await tx.from(t.activity).insert({ ...want, gwp_code: 'AR5', calc: 'sap', status: 'Active', mat_group_id: g.id, costcenter: cc }).select('*'))[0];
+          actOf.set(`${g.id}|${cc}`, a);
+          acts.push(a);
+        } else if (['name', 'department', 'detail', 'ef_id'].some((k) => a[k] !== want[k])) {
+          must(await tx.from(t.activity).update(want).eq('id', a.id));
+          Object.assign(a, want);
+        }
+        const qty = Number(l.qty) * Number(m.factor);
+        Object.assign(row, { department, group_id: g.id, activity_id: a.id, factor: Number(m.factor), ef_ref_id: e.id, source: e.name.replace(/^-\s*/, ''), ef_unit: e.unit,
+          kgco2e: Number(e.total), scope_code: g.scope_code, kind: g.kind, tco2e: r6((qty * Number(e.total)) / 1000) });
+        sums.set(a.id, (sums.get(a.id) || 0) + qty);
+        total += row.tco2e;
+        out.push(row);
+      }
+      // a month confirmed before stays confirmed
+      const ids = acts.map((a) => a.id);
+      const old = ids.length ? await fetchIn(() => tx.from(t.entry).select('id,status').eq('month', month), 'activity_id', ids) : [];
+      const status = old.some((x) => x.status === 'CONFIRMED') ? 'CONFIRMED' : 'DRAFT';
+      for (let i = 0; i < old.length; i += 200) must(await tx.from(t.entry).delete().in('id', old.slice(i, i + 200).map((x) => x.id)));
+      must(await tx.from(t.materialUse).delete().eq('month', month));
+      for (let i = 0; i < out.length; i += 500) must(await tx.from(t.materialUse).insert(out.slice(i, i + 500)));
+      const byId = new Map(acts.map((a) => [a.id, a]));
+      const entries = [...sums].map(([id, qty]) => ({ activity_id: id, month, qty: r6(qty), ef_id: byId.get(id).ef_id, gwp_code: byId.get(id).gwp_code, status, remark: 'Usage (SAP)',
+        created_by: req.user.employeeId, updated_by: req.user.employeeId }));
+      for (let i = 0; i < entries.length; i += 500) must(await tx.from(t.entry).insert(entries.slice(i, i + 500)));
+    }
+    return { tco2e: Math.round(total * 1000) / 1000 };
+  };
+  // months whose Usage has the materials given (after a material or group changed) · months never worked out by group
+  const sapMonthsOf = async (t, codes) => [...new Set((await fetchIn(() => tx.from(t.materialUse).select('month'), 'material', codes)).map((r) => r.month))].sort();
+  const resyncSap = async (t, req, codes) => {
+    const months = codes.length ? await sapMonthsOf(t, codes) : [];
+    if (months.length) await syncSap(t, req, months);
+  };
+  // the Usage pasted before groups (db/act/cfo.sql 2026-11-04) is counted through the SAP activities when an admin opens a page
+  const autoSyncSap = async (t, req, admin) => {
+    if (!admin || !(await sapReady(t))) return;
+    const left = (await tx.from(t.materialUse).select('month').is('group_id', null).limit(1000)).data || [];
+    const months = [...new Set(left.map((r) => r.month))].sort();
+    if (months.length) await syncSap(t, req, months).catch(() => null);
+  };
+
   route('get', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
-    const [rows, uses, access, sections] = await Promise.all([
+    const access = await accessOf(req, activity, thisYear());
+    await autoSyncSap(t, req, access.admin);
+    const [rows, uses, sections, groups] = await Promise.all([
       fetchAll(() => tx.from(t.material).select('*').order('material')),
       fetchAll(() => tx.from(t.materialUse).select('month,tco2e').order('month')),
-      accessOf(req, activity, thisYear()),
-      usageBySection(t, yearOf(req.query.year) || thisYear())
+      usageBySection(t, yearOf(req.query.year) || thisYear()),
+      fetchAll(() => tx.from(t.matGroup).select('*').order('name')).catch(() => [])
     ]);
     const months = Object.values(uses.reduce((acc, u) => {
       const m = (acc[u.month] = acc[u.month] || { month: u.month, rows: 0, tco2e: 0 });
@@ -509,85 +580,123 @@ export function mountCfo(app) {
       m.tco2e += Number(u.tco2e);
       return acc;
     }, {})).map((m) => ({ ...m, tco2e: Math.round(m.tco2e * 1000) / 1000 }));
-    res.json({ admin: access.admin, rows, months, sections });
+    const count = (id, ok) => rows.filter((r) => r.group_id === id && (!ok || Number(r.factor) > 0)).length;
+    res.json({ admin: access.admin, ready: groups.length > 0 || (await sapReady(t)), rows, months, sections,
+      groups: groups.map((g) => ({ ...g, items: count(g.id), counted: count(g.id, true) })) });
   });
-  // partial (grid paste): a blank cell keeps what the material already has, so pasting only EF + factor does not
-  // wipe the SAP unit that the Usage check compares against
-  const matInput = async (t, b, partial = false, preloadedRefs = null) => {
+
+  // ---------- กลุ่มวัสดุ ----------
+  // EF = id (CFP-0001) or the name in EF CFP / EF พลังงาน / GWP สารเคมี · a group used by SAP activities keeps its id
+  const refOfName = async (t, value, refs = null) => {
+    const want = String(value || '').trim().toLowerCase();
+    if (!want) return { id: null };
+    const list = refs || must(await tx.from(t.efRef).select('id,code,name,sheet,unit,total').in('sheet', MAT_SHEETS));
+    const hit = list.find((r) => String(r.code || '').toLowerCase() === want && r.unit && r.total != null)
+      || list.find((r) => r.name.replace(/^-\s*/, '').trim().toLowerCase() === want && r.unit && r.total != null);
+    return hit ? { id: hit.id } : { error: `ไม่พบ EF id หรือชื่อ "${value}" ในตาราง EF CFP / EF พลังงาน` };
+  };
+  const groupInput = async (t, b) => {
+    const row = { name: text(b.name, 120), scope_code: text(b.scope_code, 10) || '3-1', kind: MAT_KINDS[b.kind] ? b.kind : 'usage', remark: text(b.remark, 500),
+      status: b.status === 'Inactive' ? 'Inactive' : 'Active' };
+    if (!row.name) return { error: 'ระบุชื่อกลุ่ม' };
+    if (!/^3-\d{1,2}$/.test(row.scope_code)) return { error: 'หมวดของกลุ่มต้องเป็น Scope 3 (3-1 … 3-15)' };
+    if (b.ef_name !== undefined && String(b.ef_name).trim()) {
+      const found = await refOfName(t, b.ef_name);
+      if (found.error) return found;
+      row.ef_ref_id = found.id;
+    } else row.ef_ref_id = Number(String(b.ef_ref_id ?? '').replace('ref:', '')) || null;
+    return { row };
+  };
+  route('post', '/api/act/:activity/cfo/mat-groups', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    if (!(await sapReady(t))) return fail(res, 400, 'ให้รัน db/act/cfo.sql ก่อน (ตารางกลุ่มวัสดุ)');
+    const { row, error } = await groupInput(t, req.body || {});
+    if (error) return fail(res, 400, error);
+    if (must(await tx.from(t.matGroup).select('id').eq('name', row.name).limit(1)).length) return fail(res, 400, `มีกลุ่ม "${row.name}" แล้ว`);
+    must(await tx.from(t.matGroup).insert(row));
+    await logRev(t, req, 'กลุ่มวัสดุ', row.name, 'เพิ่มกลุ่ม');
+    res.status(201).json({ ok: true });
+  });
+  route('patch', '/api/act/:activity/cfo/mat-groups/:id', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    const current = must(await tx.from(t.matGroup).select('*').eq('id', Number(req.params.id)).maybeSingle());
+    if (!current) return fail(res, 404, 'ไม่พบกลุ่ม');
+    const { row, error } = await groupInput(t, { ...current, ...req.body });
+    if (error) return fail(res, 400, error);
+    if (row.name !== current.name && must(await tx.from(t.matGroup).select('id').eq('name', row.name).limit(1)).length) return fail(res, 400, `มีกลุ่ม "${row.name}" แล้ว`);
+    must(await tx.from(t.matGroup).update(row).eq('id', current.id));
+    const codes = must(await tx.from(t.material).select('material').eq('group_id', current.id)).map((m) => m.material);
+    if (codes.length) must(await tx.from(t.material).update({ grp: row.name, ef_ref_id: row.ef_ref_id, scope_code: row.scope_code, kind: row.kind }).eq('group_id', current.id));
+    if (row.status === 'Inactive') must(await tx.from(t.activity).update({ status: 'Inactive' }).eq('mat_group_id', current.id));
+    await resyncSap(t, req, codes);
+    await logRev(t, req, 'กลุ่มวัสดุ', current.name, changes(current, row, Object.keys(row)));
+    res.json({ ok: true });
+  });
+  route('delete', '/api/act/:activity/cfo/mat-groups/:id', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    const id = Number(req.params.id);
+    const [used, acts] = await Promise.all([tx.from(t.material).select('material').eq('group_id', id).limit(1), tx.from(t.activity).select('id').eq('mat_group_id', id).limit(1)]);
+    if (must(used).length || must(acts).length) return fail(res, 400, 'กลุ่มนี้มีวัสดุหรือกิจกรรมแล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
+    must(await tx.from(t.matGroup).delete().eq('id', id));
+    res.json({ ok: true });
+  });
+
+  // partial (grid paste): a blank cell keeps what the material already has · the group decides EF, Scope and ประเภท
+  const matInput = (b, groups, partial = false) => {
     const given = (k) => b[k] !== undefined && !(partial && String(b[k] ?? '').trim() === '');
     const row = { material: matCode(b.material) };
     if (!row.material) return { error: 'ระบุรหัสวัสดุ' };
     if (given('name')) row.name = text(b.name, 300);
     if (given('sap_unit')) row.sap_unit = text(b.sap_unit, 20);
-    if (given('grp')) row.grp = text(b.grp, 120); // หมวดหลัก = กิจกรรม 3-1
     if (given('status')) row.status = b.status === 'Inactive' ? 'Inactive' : 'Active';
-    if (given('kind')) {
-      row.kind = String(b.kind).trim();
-      if (!MAT_KINDS[row.kind]) row.kind = Object.keys(MAT_KINDS).find((k) => MAT_KINDS[k] === row.kind) || null;
-      if (!row.kind) return { error: 'ประเภทต้องเป็น Usage / วัตถุดิบ / อื่นๆ' };
-    }
-    if (given('ef_ref_id') || given('ef_name')) {
-      if (b.ef_name !== undefined && String(b.ef_name || '').trim()) {
-        const want = String(b.ef_name).trim().toLowerCase();
-        const refs = preloadedRefs || must(await tx.from(t.efRef).select('id,code,name,sheet,unit,total').in('sheet', MAT_SHEETS));
-        // the EF id (CFP-0001) first, then the name as written in the table
-        const hit = refs.find((r) => String(r.code || '').toLowerCase() === want && r.unit && r.total != null)
-          || refs.find((r) => r.name.replace(/^-\s*/, '').trim().toLowerCase() === want && r.unit && r.total != null);
-        if (!hit) return { error: `ไม่พบ EF id หรือชื่อ "${b.ef_name}" ในตาราง EF CFP / EF พลังงาน` };
-        row.ef_ref_id = hit.id;
-      } else row.ef_ref_id = Number(b.ef_ref_id) || null;
+    if (given('group_id') || given('group')) {
+      const want = String(b.group ?? '').trim().toLowerCase();
+      const g = b.group_id !== undefined && String(b.group_id).trim() !== '' ? groups.get(Number(b.group_id)) : [...groups.values()].find((x) => x.name.toLowerCase() === want);
+      if (!g && (want || String(b.group_id ?? '').trim())) return { error: `ไม่พบกลุ่ม "${b.group ?? b.group_id}" (เพิ่มกลุ่มก่อน)` };
+      Object.assign(row, g ? { group_id: g.id, grp: g.name, ef_ref_id: g.ef_ref_id, scope_code: g.scope_code, kind: g.kind } : { group_id: null, grp: null, ef_ref_id: null });
     }
     if (given('factor')) {
       row.factor = numOrNull(b.factor);
       if (Number.isNaN(row.factor) || (row.factor != null && row.factor <= 0)) return { error: 'ตัวแปลงต้องเป็นตัวเลขมากกว่า 0' };
     }
-    if (given('scope_code')) {
-      row.scope_code = text(b.scope_code, 10) || '3-1';
-      if (!/^3-\d{1,2}$/.test(row.scope_code)) return { error: 'หมวดของวัสดุต้องเป็น Scope 3 (3-1 … 3-15)' };
-    }
-    if (row.ef_ref_id && row.factor === undefined && !partial) row.factor = 1;
     return { row };
   };
-  // Add or update many at once (grid paste): material · name · SAP unit · EF name · factor · category
+  const groupMap = async (t) => new Map((await fetchAll(() => tx.from(t.matGroup).select('*')).catch(() => [])).map((g) => [g.id, g]));
+  // Add or update many at once (grid paste): material · group · name · SAP unit · factor
   route('post', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
+    if (!(await sapReady(t))) return fail(res, 400, 'ให้รัน db/act/cfo.sql ก่อน (ตารางกลุ่มวัสดุ)');
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [req.body || {}];
-    const needRefs = list.some((b) => b.ef_name !== undefined && String(b.ef_name || '').trim());
-    const [refs, existingList] = await Promise.all([
-      needRefs ? tx.from(t.efRef).select('id,code,name,sheet,unit,total').in('sheet', MAT_SHEETS).then(must) : null,
-      fetchIn(() => tx.from(t.material).select('material'), 'material', list.map((b) => matCode(b.material)))
-    ]);
+    const [groups, existingList] = await Promise.all([groupMap(t), fetchIn(() => tx.from(t.material).select('material'), 'material', list.map((b) => matCode(b.material)))]);
     const existing = new Set(existingList.map((r) => r.material));
-    const parsed = [];
-    for (const [i, b] of list.entries()) {
-      const { row, error } = await matInput(t, b, true, refs);
-      if (error) return fail(res, 400, list.length > 1 ? `แถว ${i + 1}: ${error}` : error);
-      parsed.push(row);
-    }
     const toInsert = [];
     const toUpdate = [];
-    for (const row of parsed) {
+    for (const [i, b] of list.entries()) {
+      const { row, error } = matInput(b, groups, true);
+      if (error) return fail(res, 400, list.length > 1 ? `แถว ${i + 1}: ${error}` : error);
       if (existing.has(row.material)) toUpdate.push(row);
       else {
         existing.add(row.material);
-        toInsert.push({ name: row.material, ...row, ...(row.ef_ref_id && row.factor === undefined ? { factor: 1 } : {}) });
+        toInsert.push({ name: row.material, ...row });
       }
     }
     await Promise.all([
       toInsert.length ? tx.from(t.material).insert(toInsert).then(must) : null,
       ...toUpdate.map((row) => tx.from(t.material).update(row).eq('material', row.material).then(must))
     ]);
-    await logRev(t, req, 'วัสดุ (SAP)', list.length === 1 ? matCode(list[0].material) : `${list.length} รายการ`, 'เพิ่ม / แก้วัสดุและ EF');
+    await resyncSap(t, req, [...toInsert, ...toUpdate].map((r) => r.material));
+    await logRev(t, req, 'วัสดุ (SAP)', list.length === 1 ? matCode(list[0].material) : `${list.length} รายการ`, 'เพิ่ม / แก้วัสดุและกลุ่ม');
     res.status(201).json({ ok: true, count: list.length });
   });
   route('patch', '/api/act/:activity/cfo/materials/:material', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
     const current = must(await tx.from(t.material).select('*').eq('material', req.params.material).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบวัสดุ');
-    const { row, error } = await matInput(t, { ...req.body, material: current.material });
+    const { row, error } = matInput({ ...req.body, material: current.material }, await groupMap(t));
     if (error) return fail(res, 400, error);
     if (!row.name) row.name = current.name;
     must(await tx.from(t.material).update(row).eq('material', current.material));
+    await resyncSap(t, req, [current.material]);
     await logRev(t, req, 'วัสดุ (SAP)', current.material, changes(current, row, Object.keys(row)));
     res.json({ ok: true });
   });
@@ -598,73 +707,74 @@ export function mountCfo(app) {
     res.json({ ok: true });
   });
 
-  // Usage of one month pasted from SAP: rows [{ material, qty, unit, department }] (department may be a cost center).
-  // save = false only checks: counted / unit not matching / no EF / not in the list. save = true replaces that month.
+  // Usage of one month from SAP (the GI export 7xxxxx: Material · Material Description · Cost Ctr · Qty · EUn · Amount LC, or the
+  // Usage sheet): rows [{ material, name, qty, unit, department = costcenter, amount }] · qty of the issue (the client turns the
+  // SAP minus into plus; a return is minus) and lines are netted per costcenter × material × unit.
+  // save = false only checks. save = true replaces the month: every line is kept (also the ones not counted yet, for the money
+  // report and to count later), a material not in the list is added (to be grouped), then syncSap makes the month.
   route('post', '/api/act/:activity/cfo/material-usage', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
+    if (!(await sapReady(t))) return fail(res, 400, 'ให้รัน db/act/cfo.sql ก่อน (ตารางกลุ่มวัสดุ)');
     const month = monthOf(req.body?.month);
     const input = Array.isArray(req.body?.rows) ? req.body.rows : [];
     if (!month) return fail(res, 400, 'เลือกเดือน');
     if (!input.length) return fail(res, 400, 'ยังไม่มีข้อมูล Usage');
-    const [mats, refs, centers] = await Promise.all([
-      fetchAll(() => tx.from(t.material).select('*')),
-      fetchAll(() => tx.from(t.efRef).select('id,name,unit,total,status').in('sheet', MAT_SHEETS)),
-      fetchAll(() => mx.from('mt_main_costcenter').select('costcenter,department'))
-    ]);
-    const mat = new Map(mats.map((m) => [m.material, m]));
-    const ref = new Map(refs.map((r) => [r.id, r]));
-    const dept = new Map(centers.map((c) => [String(c.costcenter).trim().toUpperCase(), c.department]));
-    // costcenter / amount: columns from db/act/cfo.sql 2026-11-02 · before that SQL the month still saves without them
-    const ccCols = !(await tx.from(t.materialUse).select('costcenter,amount,grp').limit(1)).error;
-    const unitKey = (u) => String(u || '').trim().toUpperCase();
-    // one line per department × material × unit
+    const master = await sapMaster(t);
     const lines = new Map();
-    let skipped = 0;
     for (const r of input) {
       const code = matCode(r.material);
       const qty = Number(String(r.qty ?? '').replace(/,/g, ''));
       if (!code || !Number.isFinite(qty)) continue;
-      if (qty <= 0) { skipped += 1; continue; }
       const raw = text(r.department, 80);
-      const department = raw ? dept.get(raw.toUpperCase()) || raw : null;
-      // money: the SAP column total (บาท) when pasted, else qty × price of the row
+      const c = raw ? master.center.get(unitKey(raw)) : null;
+      // money: the SAP column (บาท) when given, else qty × price of the row
       const amount = Number(String(r.amount ?? '').replace(/,/g, ''));
       const price = Number(String(r.price ?? '').replace(/,/g, ''));
       const key = `${raw}|${code}|${unitKey(r.unit)}`;
-      const line = lines.get(key) || { department, costcenter: raw, material: code, unit: text(r.unit, 20), qty: 0, amount: 0, priced: false };
+      const line = lines.get(key) || { month, department: c?.department || raw, costcenter: raw, material: code, name: text(r.name, 300), unit: text(r.unit, 20), qty: 0, amount: 0, priced: false };
       line.qty += qty;
       if (String(r.amount ?? '').trim() !== '' && Number.isFinite(amount)) { line.amount += amount; line.priced = true; }
       else if (Number.isFinite(price) && String(r.price ?? '').trim() !== '') { line.amount += qty * price; line.priced = true; }
       lines.set(key, line);
     }
-    const counted = [];
-    const noEf = [];
-    const unknown = [];
-    const unitWrong = [];
-    for (const l of lines.values()) {
-      const m = mat.get(l.material);
-      if (!m) { unknown.push(l); continue; }
-      const e = m.ef_ref_id ? ref.get(m.ef_ref_id) : null;
-      if (!e || e.total == null || !m.factor || m.status !== 'Active') { noEf.push({ ...l, name: m.name }); continue; }
-      if (l.unit && m.sap_unit && unitKey(l.unit) !== unitKey(m.sap_unit)) { unitWrong.push({ ...l, name: m.name, sap_unit: m.sap_unit }); continue; }
-      const tco2e = Math.round(((l.qty * Number(m.factor) * Number(e.total)) / 1000) * 1e6) / 1e6;
-      const amount = l.priced ? l.amount : m.price != null ? l.qty * Number(m.price) : null;
-      counted.push({ month, department: l.department, material: l.material, name: m.name, qty: Math.round(l.qty * 1e6) / 1e6, unit: l.unit || m.sap_unit, factor: Number(m.factor),
-        ef_ref_id: e.id, source: e.name.replace(/^-\s*/, ''), ef_unit: e.unit, kgco2e: Number(e.total), scope_code: m.scope_code, tco2e, uploaded_by: req.user.employeeId,
-        ...(m.kind ? { kind: m.kind } : {}), ...(ccCols ? { costcenter: l.costcenter, amount: amount == null ? null : Math.round(amount * 100) / 100, grp: m.grp ?? null } : {}) });
+    const kept = [...lines.values()].filter((l) => l.qty > 0);
+    const skipped = lines.size - kept.length;
+    const groups = { nomat: [], nogroup: [], noef: [], nofactor: [], unit: [] };
+    const acts = new Set();
+    let tco2e = 0;
+    let counted = 0;
+    for (const l of kept) {
+      const m = master.mat.get(l.material);
+      const g = m?.group_id ? master.group.get(m.group_id) : null;
+      const e = g?.ef_ref_id ? master.ref.get(g.ef_ref_id) : null;
+      const why = sapWhy(l, m, g, e);
+      if (why) { groups[why].push({ ...l, name: m?.name || l.name, sap_unit: m?.sap_unit, group: g?.name }); continue; }
+      counted += 1;
+      acts.add(`${g.id}|${l.costcenter}`);
+      tco2e += (l.qty * Number(m.factor) * Number(e.total)) / 1000;
     }
-    const byQty = (list) => list.sort((x, y) => y.qty - x.qty).slice(0, 300);
-    const total = Math.round(counted.reduce((sum, c) => sum + c.tco2e, 0) * 1000) / 1000;
+    tco2e = Math.round(tco2e * 1000) / 1000;
     if (req.body?.save === true) {
-      must(await tx.from(t.materialUse).delete().eq('month', month));
-      for (let i = 0; i < counted.length; i += 500) must(await tx.from(t.materialUse).insert(counted.slice(i, i + 500)));
-      await logRev(t, req, 'Usage วัสดุ (SAP)', month.slice(0, 7), `วาง Usage ${input.length} บรรทัด คิดได้ ${counted.length} รายการ ${total} tCO2e`);
+      const fresh = kept.filter((l) => !master.mat.has(l.material));
+      for (let i = 0; i < fresh.length; i += 500) {
+        must(await tx.from(t.material).upsert(fresh.slice(i, i + 500).map((l) => ({ material: l.material, name: l.name || l.material, sap_unit: l.unit, scope_code: '3-1', kind: 'usage', status: 'Active' })),
+          { onConflict: 'material', ignoreDuplicates: true }));
+      }
+      const rows = kept.map(({ priced, amount, ...l }) => {
+        const m = master.mat.get(l.material);
+        const money = priced ? amount : m?.price != null ? l.qty * Number(m.price) : null;
+        return { ...l, qty: r6(l.qty), amount: money == null ? null : Math.round(money * 100) / 100, scope_code: '3-1', kind: 'usage', factor: 0, source: '', kgco2e: 0, tco2e: 0,
+          uploaded_by: req.user.employeeId };
+      });
+      await syncSap(t, req, [month], rows);
+      await logRev(t, req, 'Usage วัสดุ (SAP)', month.slice(0, 7), `วาง Usage ${input.length} บรรทัด คิดได้ ${counted} รายการ ${tco2e} tCO2e · กิจกรรม ${acts.size}`);
     }
-    res.json({ ok: true, saved: req.body?.save === true, month, lines: lines.size, skipped, counted: counted.length, tco2e: total,
-      noEf: { count: noEf.length, top: byQty(noEf) }, unknown: { count: unknown.length, top: byQty(unknown) }, unitWrong: { count: unitWrong.length, top: byQty(unitWrong) } });
+    const top = (list) => ({ count: list.length, top: list.sort((x, y) => y.qty - x.qty).slice(0, 300) });
+    res.json({ ok: true, saved: req.body?.save === true, month, lines: lines.size, skipped, counted, tco2e, activities: acts.size,
+      unknown: top(groups.nomat), noGroup: top(groups.nogroup), noEf: top([...groups.noef, ...groups.nofactor]), unitWrong: top(groups.unit) });
   });
-  // Dashboard > Usage (SAP) (ผู้ใช้กำหนด 2026-11-02): one month (or the year) of the SAP Usage that was counted —
-  // per costcenter tCO2e + เงิน (บาท) most first, and the Top 5 materials by tCO2e
+  // Dashboard > Usage (SAP) (ผู้ใช้กำหนด 2026-11-02): one month (or the year) of the SAP Usage —
+  // per costcenter tCO2e + เงิน (บาท) most first, and the Top 5 materials by tCO2e · money counts every line pasted
   route('get', '/api/act/:activity/cfo/usage-report', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
@@ -676,21 +786,20 @@ export function mountCfo(app) {
     const centerOf = new Map(centers.map((c) => [String(c.costcenter).trim().toUpperCase(), c]));
     const months = [...new Set(rows.map((r) => r.month))].sort();
     const list = month ? rows.filter((r) => r.month === month) : rows;
-    const r6 = (v) => Math.round(v * 1e6) / 1e6;
     const r2 = (v) => Math.round(v * 100) / 100;
     const group = (keyOf, make) => Object.values(list.reduce((acc, r) => {
       const key = keyOf(r);
       const g = (acc[key] = acc[key] || { ...make(r), tco2e: 0, amount: 0, priced: 0, items: new Set() });
       g.tco2e += Number(r.tco2e);
       if (r.amount != null) { g.amount += Number(r.amount); g.priced += 1; }
-      g.items.add(r.material);
+      if (Number(r.tco2e) > 0) g.items.add(r.material);
       return acc;
     }, {})).map((g) => ({ ...g, tco2e: r6(g.tco2e), amount: g.priced ? r2(g.amount) : null, items: g.items.size, priced: undefined }));
     const ccs = group((r) => r.costcenter || r.department || '', (r) => {
       const c = centerOf.get(String(r.costcenter || '').toUpperCase());
       return { costcenter: r.costcenter || '', name: c?.object_name || '', department: r.department || c?.department || '' };
-    }).sort((a, b) => b.tco2e - a.tco2e);
-    const top = group((r) => r.material, (r) => ({ material: r.material, name: r.name, unit: r.unit, qty: 0 }));
+    }).sort((a, b) => b.tco2e - a.tco2e || (b.amount || 0) - (a.amount || 0));
+    const top = group((r) => r.material, (r) => ({ material: r.material, name: r.name, unit: r.unit, qty: 0 })).filter((x) => x.tco2e > 0);
     const qtyOf = list.reduce((acc, r) => acc.set(r.material, (acc.get(r.material) || 0) + Number(r.qty)), new Map());
     const byMonth = months.map((m) => {
       const of = rows.filter((r) => r.month === m);
@@ -698,13 +807,16 @@ export function mountCfo(app) {
     });
     res.json({ year, month, months: byMonth, costcenter: rows.some((r) => r.costcenter), costcenters: ccs,
       top: top.map((x) => ({ ...x, qty: r6(qtyOf.get(x.material) || 0) })).sort((a, b) => b.tco2e - a.tco2e).slice(0, 5),
-      total: { tco2e: r6(list.reduce((s, r) => s + Number(r.tco2e), 0)), amount: r2(list.reduce((s, r) => s + Number(r.amount || 0), 0)), lines: list.length } });
+      total: { tco2e: r6(list.reduce((s, r) => s + Number(r.tco2e), 0)), amount: r2(list.reduce((s, r) => s + Number(r.amount || 0), 0)), lines: list.filter((r) => Number(r.tco2e) > 0).length } });
   });
   route('delete', '/api/act/:activity/cfo/material-usage/:month', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
     const month = monthOf(req.params.month);
     if (!month) return fail(res, 400, 'เดือนไม่ถูกต้อง');
     must(await tx.from(t.materialUse).delete().eq('month', month));
+    // the months of the SAP activities go with it
+    const ids = (await fetchAll(() => tx.from(t.activity).select('id').eq('calc', 'sap'))).map((a) => a.id);
+    for (let i = 0; i < ids.length; i += 200) must(await tx.from(t.entry).delete().eq('month', month).in('activity_id', ids.slice(i, i + 200)));
     await logRev(t, req, 'Usage วัสดุ (SAP)', month.slice(0, 7), 'ลบ Usage ทั้งเดือน');
     res.json({ ok: true });
   });
@@ -794,10 +906,16 @@ export function mountCfo(app) {
   });
   route('patch', '/api/act/:activity/cfo/activities/:id', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
-    const { row, error } = await activityInput(t, req.body || {});
-    if (error) return fail(res, 400, error);
     const current = must(await tx.from(t.activity).select('*').eq('id', Number(req.params.id)).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบกิจกรรม');
+    if (current.calc === 'sap') {
+      const status = req.body?.status === 'Inactive' ? 'Inactive' : 'Active';
+      must(await tx.from(t.activity).update({ status }).eq('id', current.id));
+      await logRev(t, req, 'กิจกรรม', `${current.department} · ${current.name}`, `สถานะ ${status}`);
+      return res.json({ ok: true });
+    }
+    const { row, error } = await activityInput(t, req.body || {});
+    if (error) return fail(res, 400, error);
     must(await tx.from(t.activity).update(row).eq('id', current.id));
     // a 3-3 line added to an activity also counts for the months already recorded without one (ผู้ใช้กำหนด 2026-11-03)
     if (row.ef3_id && row.ef3_id !== current.ef3_id) must(await tx.from(t.entry).update({ ef3_id: row.ef3_id }).eq('activity_id', current.id).is('ef3_id', null));
@@ -983,14 +1101,13 @@ export function mountCfo(app) {
     const year = req.query.base === '1' ? baseYear : yearOf(req.query.year);
     if (!year) return fail(res, 400, req.query.base === '1' ? 'ยังไม่ได้ตั้งปีฐาน (Setting > บริษัท)' : 'ปีไม่ถูกต้อง');
     const department = text(req.query.department, 80);
-    const [entries, activities, efs, gwps, scopes, matUse] = await Promise.all([
+    await autoSyncSap(t, req, (await accessOf(req, activity, thisYear())).admin);
+    const [entries, activities, efs, gwps, scopes] = await Promise.all([
       fetchAll(() => tx.from(t.entry).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')),
       fetchAll(() => tx.from(t.activity).select('id,department,name,detail,calc').order('id')),
       fetchAll(() => tx.from(t.ef).select('*').order('id')),
       fetchAll(() => tx.from(t.gwp).select('*')),
-      fetchAll(() => tx.from(t.cfoScope).select('code,scope,name')),
-      // before db/act/cfo.sql adds tx_cfo_material the report still works without it
-      fetchAll(() => tx.from(t.materialUse).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`)).catch(() => [])
+      fetchAll(() => tx.from(t.cfoScope).select('code,scope,name'))
     ]);
     const act = new Map(activities.map((a) => [a.id, a]));
     const ef = new Map(efs.map((e) => [e.id, e]));
@@ -1038,20 +1155,7 @@ export function mountCfo(app) {
       const bio = r6((qty * n(f.co2_bio)) / 1000);
       return [row, { ...row, group: 'separate', activity: `${a.name} (Biogenic CO₂)`, ef: { ...zero(row.ef), co2: n(f.co2_bio), hfc_gwp: null, pfc_gwp: null },
         total_ef: n(f.co2_bio), ton: { ...zero(ton), co2: bio }, tco2e: { ...zero(row.tco2e), co2: bio }, total: bio }];
-    }).concat(Object.values(matUse.filter((u) => !department || u.department === department).reduce((acc, u) => {
-      const key = `${u.scope_code}|${u.grp || u.kind}|${u.department}|${u.source}|${u.ef_unit}|${u.kgco2e}`;
-      const g = (acc[key] = acc[key] || { ...u, qty: 0, tco2e: 0, items: new Set() });
-      g.qty += Number(u.qty) * Number(u.factor);
-      g.tco2e += Number(u.tco2e);
-      g.items.add(u.material);
-      return acc;
-    }, {})).map((g) => {
-      const s = scope.get(g.scope_code) || {};
-      const none = { co2: 0, ch4_fossil: 0, ch4: 0, n2o: 0, sf6: 0, nf3: 0 };
-      return { group: `s${s.scope}`, scope: s.scope, scope_code: g.scope_code, scope_name: s.name, department: g.department || '', activity: `${g.grp || MAT_KINDS[g.kind] || 'Usage'} (SAP)`, detail: `${g.items.size} รายการ`,
-        source: g.source, unit: g.ef_unit, qty: r6(g.qty), ef: { ...none, hfc: 0, hfc_gwp: null, pfc: 0, pfc_gwp: null, other: 0, other_gwp: 0 }, total_ef: Number(g.kgco2e),
-        source_type: null, substitute: null, reference: null, ton: { ...none }, tco2e: { ...none, hfc: 0, pfc: 0, other: 0 }, total: r6(g.tco2e) };
-    })).sort((x, y) => x.scope_code.localeCompare(y.scope_code, 'en', { numeric: true }) || x.department.localeCompare(y.department) || x.activity.localeCompare(y.activity));
+    }).sort((x, y) => x.scope_code.localeCompare(y.scope_code, 'en', { numeric: true }) || x.department.localeCompare(y.department) || x.activity.localeCompare(y.activity));
     res.json({ year, baseYear, department, gwp: gwps.find((g) => g.code === 'AR5') || gwps[0] || null, rows });
   });
 

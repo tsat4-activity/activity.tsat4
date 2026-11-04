@@ -3,6 +3,7 @@ DELETE /api/act/:activity/audits/:id auth
 DELETE /api/act/:activity/cfo/activities/:id auth
 DELETE /api/act/:activity/cfo/entries/:id auth
 DELETE /api/act/:activity/cfo/gwp/:code auth
+DELETE /api/act/:activity/cfo/mat-groups/:id auth
 DELETE /api/act/:activity/cfo/material-usage/:month auth
 DELETE /api/act/:activity/cfo/materials/:material auth
 DELETE /api/act/:activity/cfo/ref/:id auth
@@ -53,6 +54,7 @@ PATCH /api/act/:activity/areas/:id auth
 PATCH /api/act/:activity/audits/:id auth
 PATCH /api/act/:activity/cfo/activities/:id auth
 PATCH /api/act/:activity/cfo/gwp/:code auth
+PATCH /api/act/:activity/cfo/mat-groups/:id auth
 PATCH /api/act/:activity/cfo/materials/:material auth
 PATCH /api/act/:activity/cfo/ref/:id auth
 PATCH /api/act/:activity/checklist/:id auth
@@ -69,6 +71,7 @@ POST /api/act/:activity/cfo/activities auth
 POST /api/act/:activity/cfo/activities/fill-ef3 auth
 POST /api/act/:activity/cfo/confirm auth
 POST /api/act/:activity/cfo/gwp auth
+POST /api/act/:activity/cfo/mat-groups auth
 POST /api/act/:activity/cfo/material-usage auth
 POST /api/act/:activity/cfo/materials auth
 POST /api/act/:activity/cfo/photo auth

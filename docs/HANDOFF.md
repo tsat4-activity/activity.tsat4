@@ -30,6 +30,7 @@
     ```
 
 - `db/act/cfo.sql` ใน Supabase activity01 (5S + ตารางกลางรันแล้ว) · ฐานว่างใหม่ใช้ `db/setup.sql` ไฟล์เดียว
+- [CFO] กลุ่มวัสดุ (2026-11-04): `db/act/cfo.sql` แล้ว `inbox/import_cfo_groups.sql` (กลุ่ม + EF ของวัสดุใหม่ในไฟล์ SAP เดือน 10) แล้ววาง Usage เดือน 10 ที่ Setting > Materials (SAP)
 
 ## ข้อควรระวัง
 
@@ -38,6 +39,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-04 · Claude [5S] · CFO กลุ่มวัสดุ: mt_cfo_mat_group (1 กลุ่ม = 1 EF) · วัสดุหลายรุ่นในกลุ่ม · กิจกรรม 3-1 = กลุ่ม × costcenter (calc = sap) ที่ syncSap สร้าง + เติมเดือนให้ · วาง Usage เลือกไฟล์ SAP 7xxxxx ได้ (กลับเครื่องหมาย GI, หาเดือนเอง) · Usage เดิมคิดใหม่เองเมื่อ admin เปิดหน้า · v_cfo_entry ตัดส่วน material · scripts/import_cfo_groups.py จับ EF ให้วัสดุใหม่ 28 รุ่น · ต้องรัน db/act/cfo.sql แล้ว inbox/import_cfo_groups.sql
 - 2026-11-04 · Antigravity [SMF / Unified Projects UI & Team Submission Support] · ปรับ UI และเพิ่มการส่งแบบกลุ่มตาม Feedback 5 ข้อ:
   - **ตัดปุ่มและคอลัมน์ที่ไม่จำเป็น (กรอบแดง)**: ตัดปุ่ม `Export รายงาน (CSV)` จาก Toolbar ด้านบน และตัดคอลัมน์ `รูปภาพ (16:9)` ออกจากตารางข้อมูล
   - **เปลี่ยนหัวตาราง `#` เป็น `no`**: เปลี่ยนหัวคอลัมน์ลำดับแรกของตารางเป็น `no`
