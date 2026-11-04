@@ -524,7 +524,7 @@ function aplOpenForm(activity, tasks, task, parentId, rerender, units = []) {
 const APL_DASH_TABS = { schedule: 'Schedule', team: 'Team' };
 // SMF Dashboard opens on ภาพรวม of its own projects of the year (Smart OEE, Vision Camera, Work Flow Automation);
 // the overview of every activity (5S · CFO · SMF) is the home page (ผู้ใช้กำหนด 2026-11-01).
-const APL_DASH_TABS_OF = { smf: { overview: 'ภาพรวม', ...APL_DASH_TABS } };
+const APL_DASH_TABS_OF = { smf: { intro: 'Introduction', overview: 'ภาพรวม', ...APL_DASH_TABS } };
 const APL_SET_TABS = { team: 'Team', plan: 'Plan' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 // SMF: its projects of the year come between ทีม and แผนงาน (ผู้ใช้กำหนด 2026-11-01)
 const APL_SET_TABS_OF = { smf: { team: 'Team', project: 'Project', plan: 'Plan' } };
@@ -551,9 +551,98 @@ async function aplDashboard(target, activity) {
   });
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('a5-body');
+  if (tab === 'intro') return aplDrawIntro(body, activity);
   if (tab === 'overview') return aplDrawSmfOverview(body, activity);
   if (tab === 'team') return aplDrawTeam(body, activity, me.access.admin);
   return aplRender(body, activity, { inPage: true, readOnly: true });
+}
+
+// Dashboard > Introduction (ผู้ใช้กำหนด 2026-11-04): the SMF introduction (public/docs, TSAT4-SMF 2569-001) read like a
+// book — one page at a time, turned from the left edge · buttons, ← → keys, a click on the right / left half, or a swipe.
+// PDF.js from cdnjs renders the pages (loaded the first time); its worker is cross-origin, so it runs from a blob.
+const APL_INTRO = { smf: { file: 'docs/smf-intro-2569-001.pdf', title: 'TSAT4-SMF 2569-001' } };
+let aplPdf = null;
+const aplLoadPdf = () => aplPdf || (aplPdf = new Promise((resolve, reject) => {
+  const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  const tag = document.createElement('script');
+  tag.src = `${base}pdf.min.js`;
+  tag.onload = async () => {
+    try {
+      const worker = await (await fetch(`${base}pdf.worker.min.js`)).text();
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([worker], { type: 'text/javascript' }));
+      resolve(window.pdfjsLib);
+    } catch (err) { aplPdf = null; reject(err); }
+  };
+  tag.onerror = () => { aplPdf = null; reject(new Error('โหลดตัวอ่าน PDF ไม่ได้ ลองใหม่อีกครั้ง')); };
+  document.head.append(tag);
+}));
+let aplBookKeys = null;
+async function aplDrawIntro(body, activity) {
+  const doc = APL_INTRO[activity];
+  body.innerHTML = `<div class="apl-book">
+    <div class="apl-book-stage" id="apl-book"><div class="empty">กำลังเปิดเอกสาร...</div></div>
+    <div class="apl-book-bar">
+      <button class="icon-btn" type="button" id="apl-book-prev" aria-label="หน้าก่อน" title="หน้าก่อน"><span class="material-symbols-rounded">chevron_left</span></button>
+      <span id="apl-book-no" class="sum-meta"></span>
+      <button class="icon-btn" type="button" id="apl-book-next" aria-label="หน้าถัดไป" title="หน้าถัดไป"><span class="material-symbols-rounded">chevron_right</span></button>
+      <a class="apl-link" href="${doc.file}" target="_blank" rel="noopener">เปิด PDF</a>
+    </div></div>`;
+  const pdfjs = await aplLoadPdf();
+  const pdf = await pdfjs.getDocument(doc.file).promise;
+  const stage = $('apl-book');
+  if (!stage) return;
+  const first = await pdf.getPage(1);
+  const ratio = first.getViewport({ scale: 1 }).width / first.getViewport({ scale: 1 }).height;
+  stage.style.setProperty('--ratio', ratio);
+  stage.innerHTML = Array.from({ length: pdf.numPages }, (_, i) => `<canvas class="apl-page" data-page="${i + 1}" aria-label="หน้า ${i + 1}"></canvas>`).join('');
+  const pages = [...stage.querySelectorAll('canvas')];
+  // sharp at the width shown (× screen density), drawn once
+  const width = Math.min(2400, stage.clientWidth * (window.devicePixelRatio || 1));
+  await Promise.all(pages.map(async (canvas, i) => {
+    const page = i ? await pdf.getPage(i + 1) : first;
+    const view = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+    canvas.width = view.width;
+    canvas.height = view.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: view }).promise;
+  }));
+  let at = 0;
+  let busy = false;
+  const show = () => {
+    pages.forEach((p, i) => p.classList.toggle('is-on', i === at));
+    $('apl-book-no').textContent = `หน้า ${at + 1} / ${pages.length}`;
+    $('apl-book-prev').disabled = at === 0;
+    $('apl-book-next').disabled = at === pages.length - 1;
+  };
+  // next: this page turns away to the left over the next one · back: the page before turns in over this one
+  const turn = (step) => {
+    const to = at + step;
+    if (busy || to < 0 || to >= pages.length) return;
+    busy = true;
+    const moving = step > 0 ? pages[at] : pages[to];
+    const under = step > 0 ? pages[to] : pages[at];
+    under.classList.add('is-on');
+    moving.classList.add(step > 0 ? 'turn-out' : 'turn-in');
+    moving.addEventListener('animationend', () => {
+      moving.classList.remove('turn-out', 'turn-in');
+      at = to;
+      busy = false;
+      show();
+    }, { once: true });
+  };
+  show();
+  $('apl-book-prev').onclick = () => turn(-1);
+  $('apl-book-next').onclick = () => turn(1);
+  stage.onclick = (e) => turn(e.offsetX > stage.clientWidth / 2 ? 1 : -1);
+  let x0 = null;
+  stage.onpointerdown = (e) => { x0 = e.clientX; };
+  stage.onpointerup = (e) => { if (x0 != null && Math.abs(e.clientX - x0) > 40) { e.preventDefault(); turn(e.clientX < x0 ? 1 : -1); } x0 = null; };
+  if (aplBookKeys) document.removeEventListener('keydown', aplBookKeys);
+  aplBookKeys = (e) => {
+    if (!document.body.contains(stage)) { document.removeEventListener('keydown', aplBookKeys); aplBookKeys = null; return; }
+    if (e.key === 'ArrowRight') turn(1);
+    if (e.key === 'ArrowLeft') turn(-1);
+  };
+  document.addEventListener('keydown', aplBookKeys);
 }
 
 // หน้าหลัก = ภาพรวมกิจกรรมในโรงงาน (server: server/modules/act/overview.js): KPIs of every activity, then one card per

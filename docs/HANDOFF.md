@@ -39,6 +39,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-04 · Claude [5S] · SMF Dashboard แท็บ Introduction (แท็บแรก): PDF TSAT4-SMF 2569-001 (public/docs/smf-intro-2569-001.pdf) เปิดแบบพลิกหน้าหนังสือ · PDF.js 3.11.174 จาก cdnjs (worker ผ่าน blob) · ปุ่ม / ลูกศรซ้ายขวา / คลิกครึ่งซ้ายขวา / ปัด · เอกสารใหม่ = เปลี่ยนไฟล์แล้วแก้ APL_INTRO ใน act-planner.js
 - 2026-11-04 · Antigravity [SMF / Popup Top Position Pinning & Stable Wizard Height] · ตรึงตำแหน่งส่วนบนของหน้าต่าง Popup ให้อยู่ระดับเดียวกัน ไม่ขยับขึ้นลงตามความสูงของเนื้อหา:
   - กำหนดตำแหน่งของ `.popup` ให้จัดชิดด้านบน (`align-self: start; margin-top: max(16px, min(4vh, 28px))`) แทนการอยู่กึ่งกลางแนวตั้ง เพื่อล็อกขอบบนของ Popup ให้อยู่ในระนาบเดิมเสมอ ไม่เลื่อนขึ้นลงเวลากดเปลี่ยนขั้นตอน (Step)
   - กำหนดความสูงคงที่สำหรับหน้าต่าง Wizard (`height: min(88vh, 740px)`) และให้เนื้อหาของแต่ละขั้นตอนเลื่อนในกรอบ `.wfa-step-body` (`overflow-y: auto`) โดยที่ Stepper ด้านบนและปุ่มนำทางด้านล่างตรึงอยู่กับที่ ทำให้หน้าต่างนิ่งสนิทไร้อาการกระตุกหรือปรับขนาดขึ้นลง (`public/app.css`, `public/js/act-workflow.js`)
