@@ -393,7 +393,8 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .ov-subtasks-list{display:flex;flex-direction:column;gap:8px;padding:10px;max-height:260px;overflow-y:auto}
 .ov-subtask-item{display:flex;flex-direction:column;gap:3px}
 .ov-subtask-head{display:flex;justify-content:space-between;align-items:center;font-size:11.5px}
-.ov-subtask-name{font-weight:500;color:var(--mo-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%}
+.ov-subtask-name{font-weight:500;color:var(--mo-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:85%}
+.ov-subtask-owner{color:var(--mo-text-muted);font-weight:400;margin-left:4px}
 .ov-subtask-pct{font-weight:600;font-size:11px;color:var(--mo-text-muted)}
 .ov-subtask-pct.is-done{color:var(--mo-success)}
 .ov-subtask-bar{height:6px;border-radius:3px;background:var(--mo-line);overflow:hidden}

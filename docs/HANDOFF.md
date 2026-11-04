@@ -39,6 +39,11 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-04 · Antigravity [SMF / Subtasks Responsible Person Display] · แสดงชื่อผู้รับผิดชอบต่อท้ายชื่อโปรเจคย่อยในกรอบ Dashboard:
+  - ในส่วนรายการโปรเจคย่อย (`subtasks`) ของหน้า SMF Dashboard เชื่อมโยงและแสดงชื่อโปรเจคตามด้วยชื่อผู้รับผิดชอบ เช่น `1. Project: PLN · [ชื่อผู้รับผิดชอบ]`
+  - ระบบตรวจสอบและดึงชื่อผู้รับผิดชอบจาก `owner_id` ของ Task โดยตรง และหากไม่มีจะจับคู่หน่วยงาน/แผนก (เช่น PLN, STO, PD1, PD2, MTN ฯลฯ) กับตัวแทนหน่วยงาน/Smart Team ในตาราง `mt_smf_team` ให้โดยอัตโนมัติ (`server/modules/act/overview.js`, `public/js/act-planner.js`, `public/app.css`)
+
+
 - 2026-11-04 · Antigravity [SMF / Dashboard Overview Polish & Subtasks Progress Integration] · ปรับแต่งหน้า Dashboard (ภาพรวม) ของ SMF ตาม Feedback 4 ข้อ:
   - **ตัดส่วนเป้าหมายและผลงาน (KPI) ออก (กรอบสีเหลือง)**: นำบล็อก `เป้าหมายและผลงาน (KPI)` ออกจากการ์ดทั้ง 3 โครงการตามคำขอ
   - **เพิ่มรายละเอียดความคืบหน้าให้เท่าเทียมกันทุกกิจกรรม (ลูกศร)**: ปรับให้กิจกรรม Smart OEE และ Vision Camera แสดงข้อความสรุปรายละเอียดใต้หลอดความคืบหน้า (`สำเร็จแล้ว X จากทั้งหมด Y หัวข้อแผนงาน`) เช่นเดียวกับ Work Flow Automation

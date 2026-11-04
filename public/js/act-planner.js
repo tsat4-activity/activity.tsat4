@@ -1034,17 +1034,23 @@ async function aplDrawSmfOverview(body, activity) {
             <span class="ov-subtasks-arrow material-symbols-rounded">expand_more</span>
           </summary>
           <div class="ov-subtasks-list">
-            ${plan.subtasks.map((st, sIdx) => `
-              <div class="ov-subtask-item" title="${st.start && st.end ? `${actShort(st.start)} – ${actShort(st.end)} · ` : ''}${st.label || ''} (${st.progress}%)">
-                <div class="ov-subtask-head">
-                  <span class="ov-subtask-name">${sIdx + 1}. ${esc(actNoLead(st.title))}</span>
-                  <span class="ov-subtask-pct ${st.progress >= 100 ? 'is-done' : ''}">${st.progress}%</span>
+            ${plan.subtasks.map((st, sIdx) => {
+              const ownerPart = st.owner_name ? ` · ${esc(st.owner_name)}` : '';
+              const fullTip = `${esc(st.title)}${st.owner_name ? ` (${esc(st.owner_name)})` : ''} · ${st.label || ''} ${st.progress}%`;
+              return `
+                <div class="ov-subtask-item" title="${fullTip}">
+                  <div class="ov-subtask-head">
+                    <span class="ov-subtask-name">
+                      ${sIdx + 1}. ${esc(actNoLead(st.title))}${ownerPart ? `<span class="ov-subtask-owner">${ownerPart}</span>` : ''}
+                    </span>
+                    <span class="ov-subtask-pct ${st.progress >= 100 ? 'is-done' : ''}">${st.progress}%</span>
+                  </div>
+                  <div class="ov-subtask-bar">
+                    <span style="width:${Math.min(100, Math.max(0, st.progress))}%" class="${st.progress >= 100 ? 'is-done' : ''}"></span>
+                  </div>
                 </div>
-                <div class="ov-subtask-bar">
-                  <span style="width:${Math.min(100, Math.max(0, st.progress))}%" class="${st.progress >= 100 ? 'is-done' : ''}"></span>
-                </div>
-              </div>
-            `).join('')}
+              `;
+            }).join('')}
           </div>
         </details>
       </div>

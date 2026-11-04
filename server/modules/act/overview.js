@@ -1,7 +1,7 @@
 import { tx } from '../../core/db.js';
 import { fail, wrap } from '../../core/http.js';
 import { requireUser } from '../../core/users.js';
-import { ACTIVITIES, AUDIT_UNIT, fetchAll, projectsOf, tablesOf, yearOf } from './common.js';
+import { ACTIVITIES, AUDIT_UNIT, fetchAll, namesOf, projectsOf, tablesOf, yearOf } from './common.js';
 import { PLANNER_ON, planStatus, withSpans } from './planner.js';
 import { shownStatus } from './transaction.js';
 import { CFO_ON } from './cfo.js';
@@ -24,7 +24,7 @@ const round = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
 const avg = (list) => (list.length ? list.reduce((s, v) => s + v, 0) / list.length : 0);
 
 // Main items: overall % (weighted by days), how many are ahead / on plan / behind, and late items at any level.
-function planSummary(rows, today) {
+function planSummary(rows, today, names = new Map(), deptMap = new Map()) {
   const mains = rows.filter((r) => r.parent_id == null);
   const dated = mains.filter((r) => r.start_date && r.end_date);
   const days = dated.reduce((s, r) => s + daysOf(r.start_date, r.end_date), 0);
@@ -41,6 +41,16 @@ function planSummary(rows, today) {
     : mains.filter((r) => Number(r.progress) >= 100).length;
   const subtasks = (kids.length ? kids : mains).map((r) => {
     const st = planStatus(r, today);
+    let ownerName = r.owner_id ? (names.get(String(r.owner_id))?.name || r.owner_id) : '';
+    if (!ownerName && deptMap.size) {
+      const titleLower = String(r.title || '').toLowerCase();
+      for (const [deptKey, repName] of deptMap.entries()) {
+        if (titleLower.includes(deptKey)) {
+          ownerName = repName;
+          break;
+        }
+      }
+    }
     return {
       id: r.id,
       title: r.title,
@@ -48,7 +58,8 @@ function planSummary(rows, today) {
       code: st.code,
       label: st.label,
       start: r.start_date,
-      end: r.end_date
+      end: r.end_date,
+      owner_name: ownerName
     };
   });
   return {
@@ -66,18 +77,38 @@ function planSummary(rows, today) {
 // The year's plan, and per project (SMF: main item unit; sub items follow their main item).
 async function planOf(activity, year, today) {
   if (!PLANNER_ON.includes(activity)) return null;
-  const [tasksRes, projects] = await Promise.all([
+  const [tasksRes, projects, teamRows] = await Promise.all([
     fetchAll(() => tx.from(tablesOf(activity).task).select('*').eq('year', year).order('sort_no').order('id')),
-    projectsOf(activity, year)
+    projectsOf(activity, year),
+    fetchAll(() => tx.from(tablesOf(activity).team).select('employee_id,department,role').eq('year', year).eq('status', 'Active')).catch(() => [])
   ]);
   const rows = withSpans(tasksRes);
   const projMap = new Map((projects || []).flatMap((p) => [[p.code.toLowerCase(), p.code], [p.name.trim().toLowerCase(), p.code]]));
   const resolveUnit = (r) => r.unit || (r.title ? projMap.get(r.title.trim().toLowerCase()) : null) || '';
   const unitOfMain = new Map(rows.filter((r) => r.parent_id == null).map((r) => [Number(r.id), resolveUnit(r)]));
   const unitOf = (r) => (r.parent_id == null ? resolveUnit(r) : unitOfMain.get(Number(r.parent_id)) || '');
+
+  // Resolve responsible names (owner_id or department representative)
+  const allEmpIds = [...new Set([...rows.map((r) => r.owner_id), ...(teamRows || []).map((t) => t.employee_id)].filter(Boolean))];
+  const names = allEmpIds.length ? await namesOf(allEmpIds) : new Map();
+  const deptMap = new Map();
+  for (const t of teamRows || []) {
+    const emp = names.get(String(t.employee_id));
+    const name = emp?.name || '';
+    const dept = (t.department || emp?.department || '').trim();
+    if (dept && name) {
+      dept.split('&').forEach((part) => {
+        const k = part.trim().toLowerCase();
+        if (k && !deptMap.has(k)) deptMap.set(k, name);
+      });
+      const fullK = dept.toLowerCase();
+      if (!deptMap.has(fullK)) deptMap.set(fullK, name);
+    }
+  }
+
   const byUnit = {};
-  for (const code of new Set(rows.map(unitOf))) if (code) byUnit[code] = planSummary(rows.filter((r) => unitOf(r) === code), today);
-  return { ...planSummary(rows, today), byUnit };
+  for (const code of new Set(rows.map(unitOf))) if (code) byUnit[code] = planSummary(rows.filter((r) => unitOf(r) === code), today, names, deptMap);
+  return { ...planSummary(rows, today, names, deptMap), byUnit };
 }
 
 // Active team of the year: the committee's leads, its members / Smart Team, each sub-team, and how many people in all.
