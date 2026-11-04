@@ -604,6 +604,7 @@ async function aplDrawIntro(body, activity) {
       <button class="icon-btn" type="button" id="apl-book-prev" aria-label="หน้าก่อน" title="หน้าก่อน"><span class="material-symbols-rounded">chevron_left</span></button>
       <span id="apl-book-no" class="sum-meta"></span>
       <button class="icon-btn" type="button" id="apl-book-next" aria-label="หน้าถัดไป" title="หน้าถัดไป"><span class="material-symbols-rounded">chevron_right</span></button>
+      <button class="icon-btn" type="button" id="apl-book-full" aria-label="เต็มจอ" title="เต็มจอ (Esc = ออก)"><span class="material-symbols-rounded">fullscreen</span></button>
       ${d.pages.length ? (d.shown !== a5Year ? `<span class="sum-meta">ฉบับปี ${d.shown}</span>` : '') : doc ? `<a class="apl-link" href="${doc.file}" target="_blank" rel="noopener">เปิด PDF</a>` : ''}
     </div></div>`;
   const stage = $('apl-book');
@@ -652,6 +653,10 @@ async function aplDrawIntro(body, activity) {
     }, { once: true });
   };
   show();
+  // เต็มจอ (ผู้ใช้กำหนด 2026-11-04): the whole book, Esc or the button again leaves
+  const book = stage.closest('.apl-book');
+  $('apl-book-full').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : book.requestFullscreen?.())?.catch?.(() => null);
+  book.onfullscreenchange = () => { $('apl-book-full').firstElementChild.textContent = document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen'; };
   $('apl-book-prev').onclick = () => turn(-1);
   $('apl-book-next').onclick = () => turn(1);
   stage.onclick = (e) => turn(e.offsetX > stage.clientWidth / 2 ? 1 : -1);

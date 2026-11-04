@@ -1013,8 +1013,8 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
   .wfa-stepper::before{display:none}
 }
 /* SMF Dashboard > Introduction: the PDF read like a book (act-planner.js aplDrawIntro) */
-.apl-book{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 0;overflow:hidden}
-.apl-book-stage{position:relative;width:min(100%,calc((100vh - 270px) * var(--ratio,1.7778)));aspect-ratio:var(--ratio,1.7778);perspective:2400px;cursor:pointer;user-select:none;touch-action:pan-y}
+.apl-book{display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0 0;overflow:hidden}
+.apl-book-stage{position:relative;width:min(100%,calc((100vh - 205px) * var(--ratio,1.7778)));aspect-ratio:var(--ratio,1.7778);perspective:2400px;cursor:pointer;user-select:none;touch-action:pan-y}
 .apl-book-stage .empty{position:absolute;inset:0;display:grid;place-items:center}
 .apl-page{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;border-radius:4px;box-shadow:0 8px 28px rgba(0,0,0,.18),inset 6px 0 10px -6px rgba(0,0,0,.25);transform-origin:left center;backface-visibility:hidden;visibility:hidden}
 .apl-page.is-on{visibility:visible}
@@ -1027,3 +1027,5 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
 @media (prefers-reduced-motion:reduce){.apl-page.turn-out,.apl-page.turn-in{animation-duration:.01s}}
 .apl-intro-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}.apl-intro-thumbs figure{margin:0;text-align:center}.apl-intro-thumbs img{width:100%;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.15);background:#fff}.apl-intro-thumbs figcaption{font-size:12px;color:var(--mo-muted,#888)}
 .apl-intro-up{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;padding:4px 0 8px}.apl-intro-up .field{flex:0 1 560px;min-width:260px;margin:0}.apl-intro-up input[type=file]{width:100%}
+/* เต็มจอ: the book fills the screen */
+.apl-book:fullscreen{justify-content:center;background:#222;padding:12px}.apl-book:fullscreen .apl-book-stage{width:min(100%,calc((100vh - 70px) * var(--ratio,1.7778)))}.apl-book:fullscreen .apl-book-bar,.apl-book:fullscreen .apl-book-bar .sum-meta{color:#eee}.apl-book:fullscreen .icon-btn{color:#eee}
