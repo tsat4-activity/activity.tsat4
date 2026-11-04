@@ -9,6 +9,7 @@ import { CFO_ON, mountCfo } from './cfo.js';
 import { mountOverview } from './overview.js';
 import { mountSmf } from './smf.js';
 import { mountWorkflow } from './workflow.js';
+import { mountPeople } from './people.js';
 import { PROJECT_ON } from './common.js';
 
 // Activities 5S and CFO: calendar here, Project Planner in planner.js, checklist audit Dashboard/Setting in audit.js,
@@ -65,5 +66,6 @@ export default defineModule({
     mountAudit(app);
     mountTransaction(app);
     mountCfo(app);
+    mountPeople(app); // สิทธิ์ของฉัน + สิทธิ์ผู้ใช้ทุกกิจกรรม (creator)
   }
 });

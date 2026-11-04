@@ -26,6 +26,13 @@ function logout() {
 }
 $('logout').onclick = logout;
 $('password-logout').onclick = logout;
+if ($('my-access-btn')) {
+  $('my-access-btn').onclick = (e) => {
+    e.stopPropagation();
+    $('user-menu').classList.remove('open');
+    accessMine().catch(onErr);
+  };
+}
 if ($('change-pw-btn')) {
   $('change-pw-btn').onclick = (e) => {
     e.stopPropagation();

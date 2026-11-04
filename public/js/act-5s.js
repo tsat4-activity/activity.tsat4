@@ -648,6 +648,94 @@ async function a5SetAreas(body, activity, admin, rerender) {
 // roles: { role: label } this activity uses (5S: A5_ROLE_LABEL by sub-team · CFO: + member + department).
 // Activities with sub-teams (A5_UNITS_OF) pick ทีม first; the role list follows that team (a5RolesOf).
 // unitsIn: { '': committee label, code: project name } for activities whose sub-teams are their projects (SMF).
+// One form for add (m = null: pick the employee, or preset = { employeeId, name } from Setting > สิทธิ์ผู้ใช้) and edit (m = the
+// row: the employee stays, the rest can change) · ctx = { activity, roles, units, areasList, rerender } (a5TeamSpec)
+function a5TeamForm(ctx, m, preset = null) {
+  const { activity, roles, units, areasList, rerender } = ctx;
+  const keys = Object.keys(roles);
+  const hasTeam = keys.includes('auditor');
+  const unitKeys = units ? Object.keys(units) : [''];
+  const unitOf = (x) => x.unit || (units && ['owner', 'auditor'].includes(x.role) ? 'audit' : '');
+  const roleLabel = (role, unit) => (role === 'member' && unit && !A5_UNITS_OF[activity] ? 'สมาชิก' : roles[role] || role);
+  let chosen = m ? { employeeId: m.employee_id, name: m.name } : preset;
+  // 5S has no committee: a team is required (an old row without one may stay as it is until a team is picked)
+  const teamKeys = A5_UNITS_OF[activity] ? unitKeys.filter((k) => k || (m && !unitOf(m))) : unitKeys;
+  const unit0 = m ? unitOf(m) : teamKeys[0];
+  // 5S: a5RolesOf · project teams (SMF): the four leads + สมาชิก · the committee: every role of the activity
+  const rolesFor = (unit) => (!units ? keys : A5_UNITS_OF[activity] ? a5RolesOf(unit) : unit ? ['chairman', 'vice', 'advisor', 'admin', 'member'] : keys.filter((r) => !['owner', 'auditor'].includes(r)));
+  // ผู้ดูแล (admin, SMF smart) of a year are added by the creator only; the ผู้ดูแล add their members (server grantsAdmin)
+  const lead = (r, unit) => r === 'smart' || (r === 'admin' && !(activity === 'smf' && unit));
+  const roleOptions = (unit, current) => options(rolesFor(unit).filter((r) => keys.includes(r) && (me?.creator || r === current || !lead(r, unit))), current || '', (v) => roleLabel(v, unit));
+  const who = chosen ? field('พนักงาน', `<input value="${esc(`${chosen.employeeId} · ${chosen.name || ''}`)}" disabled>`) : a5EmpField('พนักงาน');
+  const actLabel = ACTIVITIES.find(([id]) => id === activity)?.[1] || activity;
+  openPopup(`${m ? 'แก้ไขรายชื่อ' : 'เพิ่มรายชื่อ'} ${esc(actLabel)} ปี ${a5Year}`, `${who}
+    ${units ? field('ทีม', `<select id="a5-unit">${options(teamKeys, unit0, (v) => units[v])}</select>`) : ''}
+    ${field('บทบาท', `<select id="a5-role">${roleOptions(unit0, m?.role)}</select>`)}
+    ${hasTeam ? field('กลุ่มตรวจ (เฉพาะผู้ตรวจประเมิน)', `<select id="a5-team">${options(A5_TEAMS, m?.team || 'A', (t) => `กลุ่ม ${t}`)}</select>`, '') : ''}
+    ${keys.includes('owner') && areasList.length ? field('พื้นที่ (เฉพาะผู้รับผิดชอบพื้นที่)', `<select id="a5-owner-area">${options(areasList.map((a) => a.id), m?.area_id || areasList[0]?.id, (id) => { const a = areasList.find((x) => String(x.id) === String(id)); return a ? `${a.code} - ${a.name}` : id; })}</select>`, '') : ''}
+    ${keys.includes('member') && !A5_UNITS_OF[activity] ? field('หน่วยงาน (เฉพาะสมาชิกที่ไม่อยู่ในโครงการ)', `<input id="a5-dept" maxlength="80" placeholder="เช่น PD1" value="${esc((m || preset)?.department || '')}">`) : ''}
+    ${m ? field('สถานะ', `<select id="a5-status">${options(['Active', 'Inactive'], m.status)}</select>`) : ''}`, async () => {
+    if (!chosen) throw new Error('เลือกพนักงานจากรายชื่อก่อน');
+    const r = $('a5-role').value;
+    if (r === 'owner' && !$('a5-owner-area')) throw new Error('ยังไม่มีพื้นที่ เพิ่มพื้นที่ที่แท็บ พื้นที่ ก่อน');
+    const body = { role: r, unit: $('a5-unit')?.value || null, team: r === 'auditor' ? $('a5-team')?.value : null, areaId: r === 'owner' ? Number($('a5-owner-area')?.value) : null, department: r === 'member' ? $('a5-dept')?.value.trim() : null };
+    if (m) await a5Api(activity, `team/${m.id}`, { method: 'PATCH', body: { ...body, status: $('a5-status').value } });
+    else await a5Api(activity, 'team', { method: 'POST', body: { ...body, year: a5Year, employeeId: chosen.employeeId } });
+    toast(m ? 'บันทึกแล้ว' : 'เพิ่มแล้ว');
+    closePopup();
+    rerender();
+  });
+  if (!chosen) {
+    a5EmployeeSearch(activity, (p) => {
+      chosen = p;
+      if ($('a5-dept') && !$('a5-dept').value && p.department) $('a5-dept').value = p.department; // สมาชิก: the employee's own department
+    });
+    $('a5-emp-q').closest('.search-block').addEventListener('pick-clear', () => { chosen = null; });
+  }
+  const show = (id, on) => { if ($(id)) $(id).closest('.field').style.display = on ? '' : 'none'; };
+  const syncRole = () => {
+    const r = $('a5-role').value;
+    show('a5-team', r === 'auditor');
+    show('a5-owner-area', r === 'owner');
+    show('a5-dept', r === 'member' && !$('a5-unit')?.value);
+  };
+  if ($('a5-unit')) $('a5-unit').onchange = () => { $('a5-role').innerHTML = roleOptions($('a5-unit').value, $('a5-role').value); syncRole(); };
+  $('a5-role').onchange = syncRole;
+  syncRole();
+}
+
+// รหัสเข้าระบบ of one team row m ({ id, employee_id, name, login }): create / change the password, then the message to send
+function a5LoginPopup(activity, m, rerender) {
+  // the password: typed by the creator / ผู้ดูแล (e.g. a member who forgot it) or blank = random (ผู้ใช้กำหนด 2026-11-04)
+  const go = async (reset) => {
+    const password = $('a5-login-pw').value;
+    if (password && password.length < 8) throw new Error('รหัสผ่านต้องมีอย่างน้อย 8 ตัว');
+    const r = await a5Api(activity, `team/${m.id}/login`, { method: 'POST', body: { reset, password, mustChange: $('a5-login-change').checked } });
+    const name = ACTIVITIES.find(([id]) => id === activity)?.[1] || activity;
+    const text = `เชิญเข้าระบบ TSAT4 Activity (${name} ปี ${a5Year})\nลิงก์: ${location.origin}\nรหัสพนักงาน: ${r.employeeId}\nรหัสผ่าน${r.mustChange ? 'ชั่วคราว' : ''}: ${r.password}${r.mustChange ? '\nเข้าครั้งแรก ระบบจะให้ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัว)' : ''}`;
+    openPopup(`ส่งรหัสให้ ${esc(m.name || m.employee_id)}`, `<p class="sum-meta">${r.reset ? 'เปลี่ยนรหัสผ่านแล้ว รหัสเดิมใช้ไม่ได้' : 'สร้างบัญชีแล้ว'} · ระบบไม่เก็บรหัสนี้ คัดลอกส่งให้สมาชิก (LINE / อีเมล)</p>
+      <textarea id="a5-login-text" rows="6" readonly>${esc(text)}</textarea>`, async () => {
+      await navigator.clipboard.writeText(text);
+      toast('คัดลอกแล้ว');
+      closePopup();
+      rerender();
+    }, 'คัดลอกข้อความ');
+    $('a5-login-text').onfocus = () => $('a5-login-text').select();
+  };
+  const has = m.login !== 'none';
+  openPopup(has ? 'เปลี่ยนรหัสผ่าน' : 'สร้างบัญชีเข้าระบบ', `<p class="sum-meta">${esc(m.employee_id)} ${esc(m.name || '')}${has ? ' มีบัญชีแล้ว · รหัสเดิมจะใช้ไม่ได้' : ''}</p>
+    ${field('รหัสผ่าน (ว่าง = ระบบสุ่มให้)', '<input id="a5-login-pw" type="text" minlength="8" maxlength="72" autocomplete="off" placeholder="อย่างน้อย 8 ตัว">')}
+    <label class="check"><input id="a5-login-change" type="checkbox" checked> ให้สมาชิกตั้งรหัสใหม่เองตอนเข้าครั้งแรก</label>`, () => go(has), has ? 'เปลี่ยนรหัส' : 'สร้างบัญชี');
+}
+
+// What a5TeamForm needs for one activity: its role labels and sub-teams (5S teams / SMF projects), 5S areas
+async function a5TeamSpec(activity) {
+  if (activity === 'cfo') return { activity, roles: CFO_ROLE_LABEL, units: null, areasList: [] };
+  if (activity === 'smf') return { activity, roles: aplRolesOf(activity), units: await aplUnitsOf(activity), areasList: [] };
+  const areas = await a5Api(activity, `areas?year=${a5Year}`).catch(() => ({ areas: [] }));
+  return { activity, roles: A5_ROLE_LABEL, units: A5_UNITS_OF[activity] || null, areasList: (areas.areas || []).filter((a) => a.status === 'Active') };
+}
+
 // บัญชีเข้าระบบของรายชื่อ (mt_main_user, เห็นเฉพาะผู้ดูแล)
 const A5_LOGIN = { active: 'มีแล้ว', inactive: 'ปิดใช้งาน', none: '<span class="sum-meta">ยังไม่มี</span>' };
 async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL, unitsIn = null) {
@@ -672,53 +760,7 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
   a5Lift(body);
   if (!admin) return;
   bindRowSelect($('a5-rows'), (id) => { picked = rows.find((m) => String(m.id) === id); ['a5-edit', 'a5-del', 'a5-login'].forEach((b) => { $(b).disabled = !picked; }); });
-  // One form for add (m = null: pick the employee) and edit (m = the row: the employee stays, the rest can change).
-  const form = (m) => {
-    let chosen = m ? { employeeId: m.employee_id, name: m.name } : null;
-    // 5S has no committee: a team is required (an old row without one may stay as it is until a team is picked)
-    const teamKeys = A5_UNITS_OF[activity] ? unitKeys.filter((k) => k || (m && !unitOf(m))) : unitKeys;
-    const unit0 = m ? unitOf(m) : teamKeys[0];
-    // 5S: a5RolesOf · project teams (SMF): the four leads + สมาชิก · the committee: every role of the activity
-    const rolesFor = (unit) => (!units ? keys : A5_UNITS_OF[activity] ? a5RolesOf(unit) : unit ? ['chairman', 'vice', 'advisor', 'admin', 'member'] : keys.filter((r) => !['owner', 'auditor'].includes(r)));
-    // ผู้ดูแล (admin, SMF smart) of a year are added by the creator only; the ผู้ดูแล add their members (server grantsAdmin)
-    const lead = (r, unit) => r === 'smart' || (r === 'admin' && !(activity === 'smf' && unit));
-    const roleOptions = (unit, current) => options(rolesFor(unit).filter((r) => keys.includes(r) && (me?.creator || r === current || !lead(r, unit))), current || '', (v) => roleLabel(v, unit));
-    const who = m ? field('พนักงาน', `<input value="${esc(`${m.employee_id} · ${m.name || ''}`)}" disabled>`) : a5EmpField('พนักงาน');
-    openPopup(m ? `แก้ไขรายชื่อปี ${a5Year}` : `เพิ่มรายชื่อปี ${a5Year}`, `${who}
-      ${units ? field('ทีม', `<select id="a5-unit">${options(teamKeys, unit0, (v) => units[v])}</select>`) : ''}
-      ${field('บทบาท', `<select id="a5-role">${roleOptions(unit0, m?.role)}</select>`)}
-      ${hasTeam ? field('กลุ่มตรวจ (เฉพาะผู้ตรวจประเมิน)', `<select id="a5-team">${options(A5_TEAMS, m?.team || 'A', (t) => `กลุ่ม ${t}`)}</select>`, '') : ''}
-      ${keys.includes('owner') && areasList.length ? field('พื้นที่ (เฉพาะผู้รับผิดชอบพื้นที่)', `<select id="a5-owner-area">${options(areasList.map((a) => a.id), m?.area_id || areasList[0]?.id, (id) => { const a = areasList.find((x) => String(x.id) === String(id)); return a ? `${a.code} - ${a.name}` : id; })}</select>`, '') : ''}
-      ${keys.includes('member') && !A5_UNITS_OF[activity] ? field('หน่วยงาน (เฉพาะสมาชิกที่ไม่อยู่ในโครงการ)', `<input id="a5-dept" maxlength="80" placeholder="เช่น PD1" value="${esc(m?.department || '')}">`) : ''}
-      ${m ? field('สถานะ', `<select id="a5-status">${options(['Active', 'Inactive'], m.status)}</select>`) : ''}`, async () => {
-      if (!chosen) throw new Error('เลือกพนักงานจากรายชื่อก่อน');
-      const r = $('a5-role').value;
-      if (r === 'owner' && !$('a5-owner-area')) throw new Error('ยังไม่มีพื้นที่ เพิ่มพื้นที่ที่แท็บ พื้นที่ ก่อน');
-      const body = { role: r, unit: $('a5-unit')?.value || null, team: r === 'auditor' ? $('a5-team')?.value : null, areaId: r === 'owner' ? Number($('a5-owner-area')?.value) : null, department: r === 'member' ? $('a5-dept')?.value.trim() : null };
-      if (m) await a5Api(activity, `team/${m.id}`, { method: 'PATCH', body: { ...body, status: $('a5-status').value } });
-      else await a5Api(activity, 'team', { method: 'POST', body: { ...body, year: a5Year, employeeId: chosen.employeeId } });
-      toast(m ? 'บันทึกแล้ว' : 'เพิ่มแล้ว');
-      closePopup();
-      rerender();
-    });
-    if (!m) {
-      a5EmployeeSearch(activity, (p) => {
-        chosen = p;
-        if ($('a5-dept') && !$('a5-dept').value && p.department) $('a5-dept').value = p.department; // สมาชิก: the employee's own department
-      });
-      $('a5-emp-q').closest('.search-block').addEventListener('pick-clear', () => { chosen = null; });
-    }
-    const show = (id, on) => { if ($(id)) $(id).closest('.field').style.display = on ? '' : 'none'; };
-    const syncRole = () => {
-      const r = $('a5-role').value;
-      show('a5-team', r === 'auditor');
-      show('a5-owner-area', r === 'owner');
-      show('a5-dept', r === 'member' && !$('a5-unit')?.value);
-    };
-    if ($('a5-unit')) $('a5-unit').onchange = () => { $('a5-role').innerHTML = roleOptions($('a5-unit').value, $('a5-role').value); syncRole(); };
-    $('a5-role').onchange = syncRole;
-    syncRole();
-  };
+  const form = (m) => a5TeamForm({ activity, roles, units, areasList, rerender }, m);
   $('a5-add').onclick = () => form(null);
   $('a5-edit').onclick = () => picked && form(picked);
   $('a5-del').onclick = () => picked && confirmPopup('ลบรายชื่อ', `ตรวจ ${esc(picked.employee_id)} ${esc(picked.name)} (${esc(roles[picked.role] || picked.role)}) อีกครั้งก่อนลบ`, async () => {
@@ -728,30 +770,7 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
   });
   // ส่งรหัสเข้าระบบ (ผู้ใช้กำหนด 2026-11-04): a temporary password (server team/:id/login) + a message to copy and send
   // (LINE / email): link · รหัสพนักงาน · password · the first sign-in sets a new password
-  $('a5-login').onclick = () => {
-    if (!picked) return;
-    const m = picked;
-    // the password: typed by the creator / ผู้ดูแล (e.g. a member who forgot it) or blank = random (ผู้ใช้กำหนด 2026-11-04)
-    const go = async (reset) => {
-      const password = $('a5-login-pw').value;
-      if (password && password.length < 8) throw new Error('รหัสผ่านต้องมีอย่างน้อย 8 ตัว');
-      const r = await a5Api(activity, `team/${m.id}/login`, { method: 'POST', body: { reset, password, mustChange: $('a5-login-change').checked } });
-      const name = ACTIVITIES.find(([id]) => id === activity)?.[1] || activity;
-      const text = `เชิญเข้าระบบ TSAT4 Activity (${name} ปี ${a5Year})\nลิงก์: ${location.origin}\nรหัสพนักงาน: ${r.employeeId}\nรหัสผ่าน${r.mustChange ? 'ชั่วคราว' : ''}: ${r.password}${r.mustChange ? '\nเข้าครั้งแรก ระบบจะให้ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัว)' : ''}`;
-      openPopup(`ส่งรหัสให้ ${esc(m.name || m.employee_id)}`, `<p class="sum-meta">${r.reset ? 'เปลี่ยนรหัสผ่านแล้ว รหัสเดิมใช้ไม่ได้' : 'สร้างบัญชีแล้ว'} · ระบบไม่เก็บรหัสนี้ คัดลอกส่งให้สมาชิก (LINE / อีเมล)</p>
-        <textarea id="a5-login-text" rows="6" readonly>${esc(text)}</textarea>`, async () => {
-        await navigator.clipboard.writeText(text);
-        toast('คัดลอกแล้ว');
-        closePopup();
-        rerender();
-      }, 'คัดลอกข้อความ');
-      $('a5-login-text').onfocus = () => $('a5-login-text').select();
-    };
-    const has = m.login !== 'none';
-    openPopup(has ? 'เปลี่ยนรหัสผ่าน' : 'สร้างบัญชีเข้าระบบ', `<p class="sum-meta">${esc(m.employee_id)} ${esc(m.name || '')}${has ? ' มีบัญชีแล้ว · รหัสเดิมจะใช้ไม่ได้' : ''}</p>
-      ${field('รหัสผ่าน (ว่าง = ระบบสุ่มให้)', '<input id="a5-login-pw" type="text" minlength="8" maxlength="72" autocomplete="off" placeholder="อย่างน้อย 8 ตัว">')}
-      <label class="check"><input id="a5-login-change" type="checkbox" checked> ให้สมาชิกตั้งรหัสใหม่เองตอนเข้าครั้งแรก</label>`, () => go(has), has ? 'เปลี่ยนรหัส' : 'สร้างบัญชี');
-  };
+  $('a5-login').onclick = () => picked && a5LoginPopup(activity, picked, rerender);
   $('a5-copy').onclick = () => confirmPopup('คัดลอกทีม', `คัดลอกรายชื่อทีมปี ${a5Year - 1} มาเป็นปี ${a5Year}${me?.creator ? '' : ' (ไม่รวมผู้ดูแล: ผู้ดูแลระบบเป็นผู้กำหนด)'} (รายชื่อที่มีอยู่แล้วจะไม่ซ้ำ)`, async () => {
     const r = await a5Api(activity, 'team/copy', { method: 'POST', body: { from: a5Year - 1, to: a5Year } });
     toast(`คัดลอก ${r.copied} รายชื่อ`);

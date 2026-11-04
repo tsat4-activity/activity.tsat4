@@ -1038,3 +1038,7 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
 .apl-intro-up{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;padding:4px 0 8px}.apl-intro-up .field{flex:0 1 560px;min-width:260px;margin:0}.apl-intro-up input[type=file]{width:100%}
 /* เต็มจอ: the book fills the screen */
 .apl-book:fullscreen{justify-content:center;background:#222;padding:12px}.apl-book:fullscreen .apl-book-stage{width:min(100%,calc((100vh - 70px) * var(--ratio,1.7778)))}.apl-book:fullscreen .apl-book-bar,.apl-book:fullscreen .apl-book-bar .sum-meta{color:#eee}.apl-book:fullscreen .icon-btn{color:#eee}
+/* access levels (access.js): sidebar badge + สิทธิ์ของฉัน + สิทธิ์ผู้ใช้ */
+.nav-level{margin-left:auto;font-size:10px;line-height:1;padding:3px 6px;border-radius:999px;background:var(--mo-soft,#eef3ee);color:var(--mo-muted,#666);white-space:nowrap}.nav-level-admin{background:#d9f2e3;color:#1e7a45}.nav-level-committee{background:#e4ecfb;color:#2f5aa8}.nav-level-operator{background:#fdf0d9;color:#9a6200}.nav-level-viewer{background:#eee;color:#666}body.sidebar-collapsed .nav-level{display:none}
+.acc-chip{display:inline-block;margin:1px 2px;padding:2px 8px;border-radius:999px;background:var(--mo-soft,#eef3ee);font-size:12px;white-space:nowrap}.acc-chip.is-muted{opacity:.5}
+.popup.popup-wide{width:min(820px,100%)}

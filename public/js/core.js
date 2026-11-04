@@ -567,11 +567,12 @@ function showShell() {
   const access = me.founder ? 'ผู้สร้างระบบ' : me.creator ? 'ผู้ช่วยดูแลระบบ' : me.executive ? 'ผู้บริหาร' : me.adminOf?.length ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน';
   $('header-role').textContent = `${access} · ${me.employeeId}`;
   document.querySelectorAll('[data-system]').forEach((node) => node.classList.toggle('d-none', !me.creator));
+  if (typeof accessNav === 'function') accessNav(); // access.js: level badges + Setting only for ผู้ดูแล
   openView(view);
 }
 
 function zoneOf(name) {
-  if (name === 'setup' || name === 'act-plan' || name === 'system') return 'setup';
+  if (name === 'setup' || name === 'act-plan' || name === 'system' || name === 'access') return 'setup';
   if (name === 'activity' || name.startsWith('workflow') || name.startsWith('smf')) return 'act';
   if (typeof plantOf === 'function' && plantOf(name)) return 'act';
   return '';
@@ -579,7 +580,7 @@ function zoneOf(name) {
 
 function openView(name) {
   setHeaderMeta('');
-  if (name === 'system' && !me.creator) name = 'main';
+  if ((name === 'system' || name === 'access') && !me.creator) name = 'main';
   view = name;
   // Dashboard pages use the compact sizes (body[data-dash] in app.css).
   if (TITLES[name]?.[0] === 'Dashboard') document.body.dataset.dash = '1';
