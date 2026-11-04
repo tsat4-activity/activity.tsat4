@@ -39,6 +39,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-04 · Claude [5S] · Introduction ทุกกิจกรรม: 5S / CFO มีแท็บ Dashboard > Introduction (แท็บแรก, เปิดหน้าแรกยังเป็น Summary) และ Setting > Introduction อัปโหลด PDF / รูปรายปีเหมือน SMF (route intro เปิดให้ทุกกิจกรรม, bucket img_<act> + mt_<act>_setting เดิม) · ไม่ต้องรัน SQL
 - 2026-11-04 · Antigravity [5S / Standardized Toolbar Buttons & Modal Audit Form Popup] · ปรับปรุงหน้า Transaction ระบบกิจกรรม > 5S ให้เป็นไปตามมาตรฐานระบบ (Standard):
   - **Standard Toolbar Buttons:** ปรับปุ่มแถบเครื่องมือของหน้า 5S Transaction (Audit) ให้ใช้ชุดปุ่มมาตรฐานเดียวกัน คือ `[ เพิ่ม ] [ แก้ไข ] [ ลบ ]` โดยเปลี่ยนปุ่ม 'เปิด Audit' เป็น 'เพิ่ม' เพื่อให้เหมือนกับหน้า Transaction อื่นๆ ในระบบ
   - **Standard Modal Popup Form:** เปลี่ยนแบบฟอร์มบันทึกและแก้ไขผลการตรวจประเมิน 5S (`atxForm`) จากเดิมที่ล้างหน้าทั้งหน้า (`body.innerHTML`) ให้เปิดเป็นหน้าต่าง Modal Popup มาตรฐาน (`openPopup`) บนตารางรายการเดิม

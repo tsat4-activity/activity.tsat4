@@ -7,8 +7,8 @@ const CFO = 'cfo';
 const CFO_SCOPE_COLORS = CHART_THEMES.cool.series.slice(0, 3);
 const CFO_BASE_COLORS = CHART_THEMES.cool.base;
 const CFO_ROLE_LABEL = { ...ACT_TEAM_ROLES, admin: 'ผู้ประสานงาน (ผู้จัดทำ)', member: 'สมาชิก (ตัวแทนหน่วยงาน)' }; // TGO forms call the coordinator ผู้จัดทำ
-const CFO_DASH_TABS = { summary: 'Summary', scope: 'Scope', usage: 'Usage (SAP)', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
-const CFO_SET_TABS = { team: 'Team', activities: 'Activities', ef: 'Emission Factor', material: 'Materials (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'Company' }; // English names (ผู้ใช้กำหนด 2026-11-03)
+const CFO_DASH_TABS = { intro: 'Introduction', summary: 'Summary', scope: 'Scope', usage: 'Usage (SAP)', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
+const CFO_SET_TABS = { team: 'Team', activities: 'Activities', ef: 'Emission Factor', material: 'Materials (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'Company', intro: 'Introduction' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 // TGO Fr-03.2 weighted criteria (server s3Rule, ผู้ใช้กำหนด 2026-11-02): level 1–5 per issue · Magnitude comes from the data
 const CFO_S3_LEVELS = [
   ['magnitude', 'Magnitude', '% GHG ของหมวด เทียบ Scope 1+2+3 (ระบบคิดจากข้อมูลจริง)'],
@@ -132,6 +132,7 @@ async function cfoDashboard(target) {
   const rerender = () => cfoDashboard(target).catch(onErr);
   target.querySelectorAll('[data-cfodash]').forEach((node) => { node.onclick = () => { cfoDashTab = node.dataset.cfodash; rerender(); }; });
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
+  if (cfoDashTab === 'intro') return aplDrawIntro(body, CFO); // act-planner.js, every activity (ผู้ใช้กำหนด 2026-11-04)
   if (cfoDashTab === 'scope') return cfoDrawProgress(body);
   if (cfoDashTab === 'usage') return cfoDrawUsage(body);
   if (cfoDashTab === 'company') return cfoDrawCompany(body, me.access.admin, rerender);
@@ -825,6 +826,7 @@ async function cfoSetting(target) {
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   if (cfoSetTab === 'team') return a5SetTeam(body, CFO, me.access.admin, rerender, CFO_ROLE_LABEL);
   if (cfoSetTab === 's3') return cfoSetS3(body, rerender);
+  if (cfoSetTab === 'intro') return aplSetIntro(body, CFO, me.access.admin, rerender);
   const m = await a5Api(CFO, 'cfo/master');
   cfoMaster = m;
   const draw = { activities: cfoSetActivities, ef: cfoSetEfTab, material: cfoSetMaterial, company: cfoSetCompany }[cfoSetTab] || cfoSetActivities;

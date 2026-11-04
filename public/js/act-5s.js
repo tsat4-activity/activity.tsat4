@@ -17,9 +17,9 @@ const A5_UNIT_LOOK = { '': ['#475569', 'groups'], standard: ['#0d9488', 'verifie
 const a5RolesOf = (unit) => ['chairman', 'vice', 'advisor', 'admin', ...(unit === 'audit' ? ['owner', 'auditor'] : unit ? ['member'] : [])];
 // Sub-teams per activity (server ACT_UNITS); others have one team
 const A5_UNITS_OF = { '5s': A5_UNITS };
-const A5_DASH_TABS = { summary: 'Summary', ranking: 'Ranking', auditor: 'Auditor', schedule: 'Schedule', audit: 'Audit Plan', team: 'Team' };
+const A5_DASH_TABS = { intro: 'Introduction', summary: 'Summary', ranking: 'Ranking', auditor: 'Auditor', schedule: 'Schedule', audit: 'Audit Plan', team: 'Team' };
 // Setting tabs: ทีม, แผนงาน, then the activity's own tables (ผู้ใช้กำหนด 2026-10-29)
-const A5_SET_TABS = { team: 'Team', gantt: 'Plan', areas: 'Areas', checklist: 'Checklist', plan: 'Audit plan' }; // English names (ผู้ใช้กำหนด 2026-11-03)
+const A5_SET_TABS = { team: 'Team', gantt: 'Plan', areas: 'Areas', checklist: 'Checklist', plan: 'Audit plan', intro: 'Introduction' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 let a5Year = new Date().getFullYear();
 let a5DashTab = 'summary';
 let a5SetTab = 'team';
@@ -96,6 +96,7 @@ async function a5Dashboard(target, activity) {
   target.querySelectorAll('[data-a5dash]').forEach((node) => { node.onclick = () => { a5DashTab = node.dataset.a5dash; rerender(); }; });
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('a5-body');
+  if (a5DashTab === 'intro') return aplDrawIntro(body, activity); // act-planner.js, every activity (ผู้ใช้กำหนด 2026-11-04)
   if (a5DashTab === 'schedule') return aplRender(body, activity, { inPage: true, readOnly: true });
   const draw = { summary: a5DrawSummary, ranking: a5DrawRanking, auditor: a5DrawAuditors, audit: a5DrawSchedule, team: a5DrawTeam }[a5DashTab] || a5DrawSummary;
   await draw(body, activity, me);
@@ -560,6 +561,7 @@ async function a5Setting(target, activity) {
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('a5-body');
   if (a5SetTab === 'gantt') return aplRender(body, activity, { inPage: true });
+  if (a5SetTab === 'intro') return aplSetIntro(body, activity, admin, rerender);
   const draw = { areas: a5SetAreas, team: a5SetTeam, checklist: a5SetChecklist, plan: a5SetPlan }[a5SetTab] || a5SetAreas;
   await draw(body, activity, admin, rerender);
 }

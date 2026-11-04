@@ -620,7 +620,8 @@ async function aplDrawIntro(body, activity) {
   } else if (doc) {
     pages = await aplPdfPages(doc.file, Math.min(2400, stage.clientWidth * (window.devicePixelRatio || 1)));
   } else {
-    stage.innerHTML = '<div class="empty">ยังไม่มีเอกสาร · ผู้ดูแลอัปโหลดได้ที่ Setting > Introduction</div>';
+    stage.innerHTML = '<div class="empty">ยังไม่มีเอกสาร Introduction · ผู้ดูแลอัปโหลด PDF หรือรูปได้ที่ Setting > Introduction</div>';
+    $('apl-book-no').closest('.apl-book-bar').classList.add('d-none');
     return;
   }
   if (!document.body.contains(stage)) return;
@@ -708,7 +709,7 @@ async function aplSetIntro(body, activity, admin, rerender) {
       ${field(`ไฟล์ปี ${a5Year}: PDF หรือรูปหลายรูป (เรียงหน้าตามชื่อไฟล์)`, '<input id="apl-intro-file" type="file" accept="application/pdf,image/*" multiple>')}
       ${button('apl-intro-up', 'อัปโหลด', 'primary', 'disabled')}${own ? button('apl-intro-del', `ลบฉบับปี ${a5Year}`, 'danger') : ''}
     </div>` : ''}
-    <p class="sum-meta" id="apl-intro-note">${own ? `ปี ${a5Year} มี ${d.pages.length} หน้า · อัปโหลดใหม่ = แทนที่ทั้งชุด` : d.shown ? `ปี ${a5Year} ยังไม่มี Dashboard แสดงฉบับปี ${d.shown} (${d.pages.length} หน้า)` : `ยังไม่มีเอกสารที่อัปโหลด Dashboard แสดง PDF ที่มากับระบบ`}</p>
+    <p class="sum-meta" id="apl-intro-note">${own ? `ปี ${a5Year} มี ${d.pages.length} หน้า · อัปโหลดใหม่ = แทนที่ทั้งชุด` : d.shown ? `ปี ${a5Year} ยังไม่มี Dashboard แสดงฉบับปี ${d.shown} (${d.pages.length} หน้า)` : (APL_INTRO[activity] ? 'ยังไม่มีเอกสารที่อัปโหลด Dashboard แสดง PDF ที่มากับระบบ' : 'ยังไม่มีเอกสาร เลือกไฟล์ PDF หรือรูปแล้วกด อัปโหลด')}</p>
     <div class="apl-intro-thumbs">${d.pages.map((url, i) => `<figure><img src="${esc(url)}" alt="หน้า ${i + 1}" loading="lazy"><figcaption>${i + 1}</figcaption></figure>`).join('')}</div>`;
   if (!admin) return;
   const pick = $('apl-intro-file');

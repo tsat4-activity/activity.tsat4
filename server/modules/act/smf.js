@@ -165,9 +165,10 @@ export function mountSmf(app) {
     res.json({ ok: true, saved: rows.length });
   });
 
-  // Dashboard > Introduction (ผู้ใช้กำหนด 2026-11-04): the pages of a year, uploaded by the ผู้ดูแล in Setting > Introduction as
+  // Dashboard > Introduction (ผู้ใช้กำหนด 2026-11-04, every activity: 5S · CFO · SMF): the pages of a year, uploaded by the ผู้ดูแล in Setting > Introduction as
   // images or a PDF (the browser turns each PDF page into a JPEG) · JPEG ≤ 700 KB in the activity bucket intro/<year>/ ·
   // the list is mt_<act>_setting intro_<year> = JSON [{ url, path }] · a year without pages shows the latest year before it
+  const every = actRoute(app); // not only SMF
   const introKey = (year) => `intro_${year}`;
   const introOf = async (t) => {
     const rows = must(await tx.from(t.setting).select('key,value')).filter((r) => /^intro_\d{4}$/.test(r.key));
@@ -175,7 +176,7 @@ export function mountSmf(app) {
       try { return [Number(r.key.slice(6)), JSON.parse(r.value)]; } catch { return [Number(r.key.slice(6)), []]; }
     }).filter(([y, pages]) => y && Array.isArray(pages) && pages.length));
   };
-  route('get', '/api/act/:activity/intro', async (req, res, activity, t) => {
+  every('get', '/api/act/:activity/intro', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const all = await introOf(t);
@@ -183,7 +184,7 @@ export function mountSmf(app) {
     res.json({ year, shown, years: [...all.keys()].sort(), pages: shown ? all.get(shown).map((p) => p.url) : [] });
   });
   // pages: [data:image/jpeg;base64,...] in order · mode replace (the first batch) or append (the next batches)
-  route('post', '/api/act/:activity/intro', async (req, res, activity, t) => {
+  every('post', '/api/act/:activity/intro', async (req, res, activity, t) => {
     const year = yearOf(req.body?.year);
     if (!year || !(await requireAdmin(req, res, activity, year))) return;
     const images = Array.isArray(req.body?.pages) ? req.body.pages.slice(0, 10) : [];
@@ -205,7 +206,7 @@ export function mountSmf(app) {
     if (replace && old.length) await tx.storage.from(t.bucket).remove(old.map((p) => p.path));
     res.json({ ok: true, pages: pages.length });
   });
-  route('delete', '/api/act/:activity/intro/:year', async (req, res, activity, t) => {
+  every('delete', '/api/act/:activity/intro/:year', async (req, res, activity, t) => {
     const year = yearOf(req.params.year);
     if (!year || !(await requireAdmin(req, res, activity, year))) return;
     const old = (await introOf(t)).get(year) || [];
