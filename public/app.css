@@ -1022,3 +1022,4 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
 .apl-book-bar{display:flex;align-items:center;gap:12px}
 @media (prefers-reduced-motion:reduce){.apl-page.turn-out,.apl-page.turn-in{animation-duration:.01s}}
 .apl-intro-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}.apl-intro-thumbs figure{margin:0;text-align:center}.apl-intro-thumbs img{width:100%;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.15);background:#fff}.apl-intro-thumbs figcaption{font-size:12px;color:var(--mo-muted,#888)}
+.apl-intro-up{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;padding:4px 0 8px}.apl-intro-up .field{flex:0 1 560px;min-width:260px;margin:0}.apl-intro-up input[type=file]{width:100%}

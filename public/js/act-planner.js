@@ -699,9 +699,9 @@ async function aplSetIntro(body, activity, admin, rerender) {
   const d = await a5Api(activity, `intro?year=${a5Year}`);
   const own = d.shown === a5Year;
   body.innerHTML = `
-    ${admin ? `<div class="toolbar a5-filters">
-      ${field(`ไฟล์ปี ${a5Year} (PDF หรือรูปหลายรูปตามลำดับหน้า)`, '<input id="apl-intro-file" type="file" accept="application/pdf,image/*" multiple>')}
-      <div class="action-bar">${button('apl-intro-up', 'อัปโหลด', 'primary', 'disabled')}${own ? button('apl-intro-del', `ลบฉบับปี ${a5Year}`, 'danger') : ''}</div>
+    ${admin ? `<div class="apl-intro-up">
+      ${field(`ไฟล์ปี ${a5Year}: PDF หรือรูปหลายรูป (เรียงหน้าตามชื่อไฟล์)`, '<input id="apl-intro-file" type="file" accept="application/pdf,image/*" multiple>')}
+      ${button('apl-intro-up', 'อัปโหลด', 'primary', 'disabled')}${own ? button('apl-intro-del', `ลบฉบับปี ${a5Year}`, 'danger') : ''}
     </div>` : ''}
     <p class="sum-meta" id="apl-intro-note">${own ? `ปี ${a5Year} มี ${d.pages.length} หน้า · อัปโหลดใหม่ = แทนที่ทั้งชุด` : d.shown ? `ปี ${a5Year} ยังไม่มี Dashboard แสดงฉบับปี ${d.shown} (${d.pages.length} หน้า)` : `ยังไม่มีเอกสารที่อัปโหลด Dashboard แสดง PDF ที่มากับระบบ`}</p>
     <div class="apl-intro-thumbs">${d.pages.map((url, i) => `<figure><img src="${esc(url)}" alt="หน้า ${i + 1}" loading="lazy"><figcaption>${i + 1}</figcaption></figure>`).join('')}</div>`;
