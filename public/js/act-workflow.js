@@ -544,7 +544,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
 
       <div class="wfa-step-body" id="wfa-wiz-body"></div>
 
-      <div class="wfa-wizard-nav" style="margin-top:16px;border-top:1px solid var(--mo-line);padding-top:12px">
+      <div class="wfa-wizard-nav">
         <button class="btn btn-secondary" type="button" id="wfa-wiz-prev">
           <span class="material-symbols-rounded">chevron_left</span> ย้อนกลับ
         </button>
@@ -664,7 +664,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
   if (popupEl) {
     popupEl.style.alignSelf = 'start';
     popupEl.style.marginTop = 'max(16px, min(4vh, 28px))';
-    popupEl.style.width = 'min(760px, 95vw)';
+    popupEl.style.width = 'min(620px, 95vw)';
     popupEl.style.height = 'min(88vh, 740px)';
     popupEl.style.maxHeight = 'min(92vh, 860px)';
   }
@@ -1253,7 +1253,7 @@ async function wfaOpenDetail(id, onRefresh) {
     if (p) {
       p.style.alignSelf = 'start';
       p.style.marginTop = 'max(16px, min(4vh, 28px))';
-      p.style.width = 'min(760px, 95vw)';
+      p.style.width = 'min(620px, 95vw)';
       p.style.height = 'min(88vh, 740px)';
       p.style.maxHeight = 'min(92vh, 860px)';
     }

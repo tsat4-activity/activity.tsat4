@@ -217,7 +217,7 @@ async function atxForm(activity, me, onDone, editId = 0) {
 
   const popupEl = $('popup')?.querySelector('.popup');
   if (popupEl) {
-    popupEl.style.width = 'min(760px, 95vw)';
+    popupEl.style.width = 'min(620px, 95vw)';
   }
   const actionsEl = popupEl?.querySelector('.popup-actions');
   if (actionsEl && !$('atx-pop-summary')) {
@@ -280,13 +280,13 @@ async function atxForm(activity, me, onDone, editId = 0) {
       return `<div class="atx-item${isScored ? (isLow ? ' is-low' : ' is-good') : ''}">
         <div class="atx-item-header">
           <div class="atx-item-title">
-            <div>
-              <span class="atx-no-pill">${item.item_no}</span>
+            <span class="atx-no-pill">${item.item_no}</span>
+            <div style="flex:1 1 auto;min-width:0;text-align:left">
               <span class="atx-title-text">${esc(actNoLead(item.title))}</span>
+              ${issue ? `<div class="atx-carry">
+                Issue เดิม <strong>${esc(issue.issue_no)}</strong>: ${esc(issue.description)} · ${locked ? '<b style="color:var(--mo-danger)">ยังไม่มี Action → ข้อนี้ได้ 0 คะแนน</b>' : '<span style="color:var(--mo-success)">มี Action แล้ว ให้คะแนน ≥ 4 เพื่อปิด Issue</span>'}
+              </div>` : ''}
             </div>
-            ${issue ? `<div class="atx-carry">
-              Issue เดิม <strong>${esc(issue.issue_no)}</strong>: ${esc(issue.description)} · ${locked ? '<b style="color:var(--mo-danger)">ยังไม่มี Action → ข้อนี้ได้ 0 คะแนน</b>' : '<span style="color:var(--mo-success)">มี Action แล้ว ให้คะแนน ≥ 4 เพื่อปิด Issue</span>'}
-            </div>` : ''}
           </div>
           <div class="atx-scores">
             ${locked ? '<span class="atx-zero">0</span>' : Array.from({ length: item.score_max }, (_, i) => i + 1).map((n) => `
