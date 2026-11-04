@@ -20,6 +20,17 @@ export function calcReduction(before, after) {
 
 // In-memory fallback only while the tables are not created yet in Supabase: any other failure must not look saved
 const tableMissing = (error) => ['PGRST205', '42P01'].includes(error?.code);
+// A column the database does not have yet: say which file to run. Saving without it would lose the team or the project.
+const WF_SQL = 'ตาราง Work Flow ยังไม่มีคอลัมน์ใหม่ ต้องรัน db/act/workflow.sql ใน Tx Data';
+const columnMissing = (error) => ['PGRST204', '42703'].includes(error?.code);
+const wf = (fn) => wrap(async (req, res) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    if (!columnMissing(err)) throw err;
+    fail(res, 503, WF_SQL);
+  }
+});
 
 // A picture is a real image: https (Storage) or a base64 data URL, nothing that can break out of src="" (audit 2026-11-05)
 const IMAGE_URL = /^(https?:\/\/[^\s"'<>()\\]+|data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+)$/;
@@ -53,7 +64,7 @@ export function mountWorkflow(app) {
   };
 
   // 1. List ideas
-  app.get('/api/workflow/ideas', wrap(requireUser), wrap(async (req, res) => {
+  app.get('/api/workflow/ideas', wrap(requireUser), wf(async (req, res) => {
     const admin = await isAdmin(req);
     const projCode = String(req.query.project_code || '').trim();
     const q = String(req.query.q || '').trim().toLowerCase();
@@ -151,7 +162,7 @@ export function mountWorkflow(app) {
   }));
 
   // 2. Get single idea with images and evaluations
-  app.get('/api/workflow/ideas/:id', wrap(requireUser), wrap(async (req, res) => {
+  app.get('/api/workflow/ideas/:id', wrap(requireUser), wf(async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
 
@@ -206,7 +217,7 @@ export function mountWorkflow(app) {
   }));
 
   // 3. Create new idea
-  app.post('/api/workflow/ideas', wrap(requireUser), wrap(async (req, res) => {
+  app.post('/api/workflow/ideas', wrap(requireUser), wf(async (req, res) => {
     const b = req.body || {};
     const processName = String(b.process_name || '').trim().slice(0, 200);
     const projectName = String(b.project_name || '').trim().slice(0, 200);
@@ -258,16 +269,7 @@ export function mountWorkflow(app) {
 
     if (tx) {
       try {
-        let { data, error } = await tx.from(T_IDEAS).insert([row]).select().maybeSingle();
-        if (error && error.code === '42703') {
-          // If extra columns not yet in DB, retry without them so DB insert still succeeds
-          const { project_code, team_name, team_members, ...baseRow } = row;
-          const retry = await tx.from(T_IDEAS).insert([baseRow]).select().maybeSingle();
-          if (!retry.error && retry.data) {
-            data = { ...retry.data, project_code, team_name, team_members };
-            error = null;
-          }
-        }
+        const { data, error } = await tx.from(T_IDEAS).insert([row]).select().maybeSingle();
         if (error && !tableMissing(error)) throw error;
         if (error) {
           console.warn('workflow ideas table is missing, using fallback:', error.message || error);
@@ -342,7 +344,7 @@ export function mountWorkflow(app) {
   }));
 
   // 4. Update idea
-  app.patch('/api/workflow/ideas/:id', wrap(requireUser), wrap(async (req, res) => {
+  app.patch('/api/workflow/ideas/:id', wrap(requireUser), wf(async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
 
@@ -414,7 +416,7 @@ export function mountWorkflow(app) {
   }));
 
   // 5. Delete idea
-  app.delete('/api/workflow/ideas/:id', wrap(requireUser), wrap(async (req, res) => {
+  app.delete('/api/workflow/ideas/:id', wrap(requireUser), wf(async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
 
@@ -448,7 +450,7 @@ export function mountWorkflow(app) {
   }));
 
   // 6. Upload image for idea
-  app.post('/api/workflow/ideas/:id/images', wrap(requireUser), wrap(async (req, res) => {
+  app.post('/api/workflow/ideas/:id/images', wrap(requireUser), wf(async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
 
@@ -519,7 +521,7 @@ export function mountWorkflow(app) {
   }));
 
   // 7. Delete image
-  app.delete('/api/workflow/images/:id', wrap(requireUser), wrap(async (req, res) => {
+  app.delete('/api/workflow/images/:id', wrap(requireUser), wf(async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
     let image = mem.images.find((img) => img.id === id) || null;
@@ -555,7 +557,7 @@ export function mountWorkflow(app) {
   }));
 
   // 8. Admin evaluation & status update
-  app.post('/api/workflow/ideas/:id/evaluate', wrap(requireUser), wrap(async (req, res) => {
+  app.post('/api/workflow/ideas/:id/evaluate', wrap(requireUser), wf(async (req, res) => {
     if (!(await isAdmin(req))) return fail(res, 403, 'เฉพาะ Admin เท่านั้นที่สามารถประเมินโครงการได้');
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
@@ -604,7 +606,7 @@ export function mountWorkflow(app) {
   }));
 
   // 9. Dashboard stats
-  app.get('/api/workflow/stats', wrap(requireUser), wrap(async (req, res) => {
+  app.get('/api/workflow/stats', wrap(requireUser), wf(async (req, res) => {
     const projCode = String(req.query.project_code || '').trim();
     let ideas = [];
     let useMem = false;
@@ -691,7 +693,7 @@ export function mountWorkflow(app) {
   }));
 
   // 10. Export CSV
-  app.get('/api/workflow/export', wrap(requireUser), wrap(async (req, res) => {
+  app.get('/api/workflow/export', wrap(requireUser), wf(async (req, res) => {
     let ideas = [];
     let useMem = false;
 

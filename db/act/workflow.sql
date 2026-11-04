@@ -55,3 +55,5 @@ create index if not exists idx_automation_ideas_proj on public.automation_ideas(
 create index if not exists idx_automation_images_idea on public.automation_images(idea_id);
 create index if not exists idx_automation_eval_idea on public.automation_evaluations(idea_id);
 
+-- ให้ API เห็นคอลัมน์ใหม่ทันที
+notify pgrst, 'reload schema';
