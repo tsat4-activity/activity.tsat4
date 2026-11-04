@@ -39,6 +39,10 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-04 · Antigravity [5S / Standardized Toolbar Buttons & Modal Audit Form Popup] · ปรับปรุงหน้า Transaction ระบบกิจกรรม > 5S ให้เป็นไปตามมาตรฐานระบบ (Standard):
+  - **Standard Toolbar Buttons:** ปรับปุ่มแถบเครื่องมือของหน้า 5S Transaction (Audit) ให้ใช้ชุดปุ่มมาตรฐานเดียวกัน คือ `[ เพิ่ม ] [ แก้ไข ] [ ลบ ]` โดยเปลี่ยนปุ่ม 'เปิด Audit' เป็น 'เพิ่ม' เพื่อให้เหมือนกับหน้า Transaction อื่นๆ ในระบบ
+  - **Standard Modal Popup Form:** เปลี่ยนแบบฟอร์มบันทึกและแก้ไขผลการตรวจประเมิน 5S (`atxForm`) จากเดิมที่ล้างหน้าทั้งหน้า (`body.innerHTML`) ให้เปิดเป็นหน้าต่าง Modal Popup มาตรฐาน (`openPopup`) บนตารางรายการเดิม
+  - **Pinned Top & Score Summary:** กล่อง Popup ตรึงขอบบนในตำแหน่งคงที่ตามมาตรฐาน (`.popup:has(.atx-modal)`), เนื้อหาแบบฟอร์มและรายการเกณฑ์ 25 ข้อสามารถเลื่อนสกอร์ได้อิสระภายในกล่อง และแถบด้านล่างแสดงสรุปคะแนนประเมิน (`ให้คะแนนแล้ว X/25 · รวม Y/125 · Z% · PASS/ต้องปรับปรุง`) ชิดซ้าย พร้อมปุ่ม `[ ยกเลิก ] [ บันทึกผลตรวจ ]` ชิดขวา (`public/js/act-tx.js`, `public/app.css`)
 - 2026-11-04 · Claude [5S] · SMF Introduction อัปโหลดเองได้: Setting > Introduction เลือก PDF (เบราว์เซอร์แปลงเป็นรูปหน้าละ JPEG 1600 px) หรือรูปหลายรูป → bucket img_smf intro/<ปี>/ + mt_smf_setting intro_<ปี> (GET/POST/DELETE intro) · Dashboard แสดงฉบับของปีนั้น ไม่มี = ปีล่าสุดก่อนหน้า ไม่มีเลย = PDF ที่มากับระบบ · ไม่ต้องรัน SQL (ใช้ bucket img_smf + mt_smf_setting เดิม)
 - 2026-11-04 · Claude [5S] · SMF Dashboard แท็บ Introduction (แท็บแรก): PDF TSAT4-SMF 2569-001 (public/docs/smf-intro-2569-001.pdf) เปิดแบบพลิกหน้าหนังสือ · PDF.js 3.11.174 จาก cdnjs (worker ผ่าน blob) · ปุ่ม / ลูกศรซ้ายขวา / คลิกครึ่งซ้ายขวา / ปัด · เอกสารใหม่ = เปลี่ยนไฟล์แล้วแก้ APL_INTRO ใน act-planner.js
 - 2026-11-04 · Antigravity [SMF / Popup Top Position Pinning & Stable Wizard Height] · ตรึงตำแหน่งส่วนบนของหน้าต่าง Popup ให้อยู่ระดับเดียวกัน ไม่ขยับขึ้นลงตามความสูงของเนื้อหา:

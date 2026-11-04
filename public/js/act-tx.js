@@ -96,7 +96,7 @@ async function atxAudits(body, activity, me) {
       ${field('ประเภทพื้นที่', `<select id="atx-f-atype">${options(['', ...A5_AREA_TYPES], atxFilter.areaType, (v) => v || 'ทั้งหมด')}</select>`)}
       ${field('พื้นที่', `<select id="atx-f-area"><option value="">ทั้งหมด</option>${areas.filter((a) => !atxFilter.areaType || a.areaType === atxFilter.areaType).map((a) => `<option value="${a.area_id}"${String(a.area_id) === String(atxFilter.area) ? ' selected' : ''}>${esc(a.areaCode)} ${esc(a.areaName)}</option>`).join('')}</select>`)}
       ${searchSlot('ค้นหา', 'atx-f-q', 'atx-f-search', { placeholder: 'Audit ID หรือชื่อพื้นที่' })}
-      <div class="action-bar">${canAudit ? button('atx-new', 'เปิด Audit', 'primary') : ''}${button('atx-edit', 'แก้ไข', 'secondary', 'disabled')}${data.canDelete ? button('atx-del', 'ลบ', 'danger', 'disabled') : ''}</div>
+      <div class="action-bar">${canAudit ? button('atx-new', 'เพิ่ม', 'primary') : ''}${button('atx-edit', 'แก้ไข', 'secondary', 'disabled')}${data.canDelete ? button('atx-del', 'ลบ', 'danger', 'disabled') : ''}</div>
     </div>
     <div class="table-wrap sheet" id="atx-rows"></div>
     <p class="sum-meta" id="atx-count"></p>`;
@@ -140,8 +140,8 @@ async function atxAudits(body, activity, me) {
   $('atx-f-search').onclick = () => { atxFilter.q = $('atx-f-q').value; draw(); };
   onEnter('atx-f-q', () => { atxFilter.q = $('atx-f-q').value; draw(); });
   a5Lift(body);
-  if ($('atx-new')) $('atx-new').onclick = () => atxForm(body, activity, me).catch(onErr);
-  $('atx-edit').onclick = () => picked?.canEdit && atxForm(body, activity, me, picked.id).catch(onErr);
+  if ($('atx-new')) $('atx-new').onclick = () => atxForm(activity, me, reload).catch(onErr);
+  $('atx-edit').onclick = () => picked?.canEdit && atxForm(activity, me, reload, picked.id).catch(onErr);
   if ($('atx-del')) $('atx-del').onclick = () => picked && confirmPopup('ลบใบตรวจ', `ลบ ${esc(picked.audit_no)} และ Issue ที่เปิดจากใบนี้ (Issue เดิมที่ใบนี้ยืนยันไปแล้วจะไม่ย้อนกลับ)`, async () => {
     await a5Api(activity, `audits/${picked.id}`, { method: 'DELETE' });
     toast('ลบแล้ว');
@@ -164,8 +164,8 @@ async function atxAuditDetail(activity, id) {
     </div>`, () => closePopup(), 'ปิด');
 }
 
-// New audit, or edit one (editId): type and area are fixed when editing.
-async function atxForm(body, activity, me, editId = 0) {
+// New audit, or edit one (editId): type and area are fixed when editing. Standard modal popup.
+async function atxForm(activity, me, onDone, editId = 0) {
   const isCurYear = a5Year === new Date().getFullYear();
   const defaultDate = isCurYear ? actIso(new Date()) : `${a5Year}-01-15`;
   const state = { type: '', areaId: '', date: defaultDate, team: '', participated: new Set(), receivers: [], scores: {}, text: {}, photo: {}, editId, auditNo: '', ownItems: new Set() };
@@ -196,7 +196,24 @@ async function atxForm(body, activity, me, editId = 0) {
   const openBy = () => new Map(form.openIssues.map((i) => [i.checklist_id, i]));
   const forcedZero = (issue) => issue && !(String(issue.action_description || '').trim() && issue.after_photos > 0);
 
+  const title = state.editId ? `แก้ไขผลตรวจ ${esc(state.auditNo)}` : 'บันทึกผลตรวจ 5S';
+  const saveLabel = state.editId ? 'บันทึกการแก้ไข' : 'บันทึกผลตรวจ';
+  openPopup(title, '<div class="atx-modal"><div class="atx-modal-body" id="atx-modal-body"></div></div>', async () => {
+    await atxSave(activity, state, form, openBy(), onDone);
+  }, saveLabel);
+
+  const popupEl = $('popup');
+  const actionsEl = popupEl?.querySelector('.popup-actions');
+  if (actionsEl && !$('atx-pop-summary')) {
+    const sumEl = document.createElement('div');
+    sumEl.id = 'atx-pop-summary';
+    sumEl.className = 'atx-pop-summary';
+    actionsEl.prepend(sumEl);
+  }
+
   const draw = () => {
+    const modalBody = $('atx-modal-body');
+    if (!modalBody) return;
     const open = state.type === 'COMMITTEE' ? openBy() : new Map();
     const groups = [...new Set(form.items.map((i) => i.s_group))].sort((x, y) => x - y);
     const scoreOf = (item) => (forcedZero(open.get(item.id)) ? 0 : state.scores[item.id]);
@@ -218,7 +235,7 @@ async function atxForm(body, activity, me, editId = 0) {
         </div>` : ''}
       </div>`;
     };
-    body.innerHTML = `
+    modalBody.innerHTML = `
       ${state.editId ? `<p class="atx-note">แก้ไข ${esc(state.auditNo)} · ประเภทและพื้นที่เปลี่ยนไม่ได้ · ข้อที่ Issue เดิมไม่มี Action ยังเป็น 0</p>` : ''}
       <div class="toolbar atx-head">
         ${state.editId ? `<span class="badge badge-primary">${esc(ATX_TYPES[state.type])}</span>` : a5Seg('data-atype', Object.fromEntries(form.types.map((t) => [t, ATX_TYPES[t]])), state.type)}
@@ -229,13 +246,16 @@ async function atxForm(body, activity, me, editId = 0) {
       ${state.type === 'COMMITTEE' ? `<div class="atx-people"><span class="sum-meta">ผู้ตรวจ:</span>${teamMembers().map((m) => `<label class="atx-check"><input type="checkbox" data-part="${esc(m.employeeId)}"${state.participated.has(m.employeeId) ? ' checked' : ''}> ${esc(m.employeeId)} ${esc(m.name)}</label>`).join('') || '<span class="sum-meta">ทีมนี้ยังไม่มีรายชื่อ</span>'}</div>` : ''}
       <div class="atx-people"><span class="sum-meta">ผู้รับตรวจ:</span>${state.receivers.map((p, i) => `<span class="atx-chip">${esc(p.employeeId)} ${esc(p.name)} <button type="button" data-unrecv="${i}" aria-label="เอาออก">×</button></span>`).join('')}<span class="atx-recv-pick">${a5EmpField('', '')}</span></div>
       ${state.type === 'COMMITTEE' && state.areaId && form.openIssues.length ? `<p class="atx-note">พื้นที่นี้มี Issue ค้าง ${form.openIssues.length} รายการ จะถูกยืนยันในการตรวจครั้งนี้ (ไม่มี Action = ข้อนั้นได้ 0 · มี Action และให้ ≥ 4 = ปิด)</p>` : ''}
-      ${state.areaId ? groups.map((g) => `<section class="atx-group"><div class="card-title">${esc(a5GroupName(activity, g))}</div>${form.items.filter((i) => i.s_group === g).map(itemRow).join('')}</section>`).join('') : '<p class="empty">เลือกพื้นที่เพื่อเริ่มให้คะแนน</p>'}
-      <div class="atx-foot">
-        <span>ให้คะแนนแล้ว ${done}/${form.items.length} · รวม <strong>${total}/${max}</strong> · <strong>${percent.toFixed(2)}%</strong> · ${percent >= form.settings.pass_percent ? 'PASS' : 'ต้องปรับปรุง'}</span>
-        <div class="action-bar">${button('atx-cancel', 'ยกเลิก')}${button('atx-save', state.editId ? 'บันทึกการแก้ไข' : 'บันทึกผลตรวจ', 'primary', state.areaId ? '' : 'disabled')}</div>
-      </div>`;
+      ${state.areaId ? groups.map((g) => `<section class="atx-group"><div class="card-title">${esc(a5GroupName(activity, g))}</div>${form.items.filter((i) => i.s_group === g).map(itemRow).join('')}</section>`).join('') : '<p class="empty">เลือกพื้นที่เพื่อเริ่มให้คะแนน</p>'}`;
 
-    body.querySelectorAll('[data-atype]').forEach((node) => { node.onclick = async () => { state.type = node.dataset.atype; state.areaId = ''; form.openIssues = []; draw(); }; });
+    const sumEl = $('atx-pop-summary');
+    if (sumEl) {
+      sumEl.innerHTML = `ให้คะแนนแล้ว <strong>${done}/${form.items.length}</strong> · รวม <strong>${total}/${max}</strong> · <strong>${percent.toFixed(2)}%</strong> · <span class="badge ${percent >= form.settings.pass_percent ? 'badge-success' : 'badge-danger'}">${percent >= form.settings.pass_percent ? 'PASS' : 'ต้องปรับปรุง'}</span>`;
+    }
+    const saveBtn = $('popup-save');
+    if (saveBtn) saveBtn.disabled = !state.areaId;
+
+    modalBody.querySelectorAll('[data-atype]').forEach((node) => { node.onclick = async () => { state.type = node.dataset.atype; state.areaId = ''; form.openIssues = []; draw(); }; });
     $('atx-area').onchange = async () => {
       state.areaId = $('atx-area').value;
       form = { ...form, openIssues: state.areaId && state.type === 'COMMITTEE' ? (await a5Api(activity, `audit-form?year=${a5Year}&area=${state.areaId}`)).openIssues : [] };
@@ -243,58 +263,63 @@ async function atxForm(body, activity, me, editId = 0) {
     };
     $('atx-date').onchange = () => { state.date = $('atx-date').value; };
     if ($('atx-team')) $('atx-team').onchange = () => { state.team = $('atx-team').value; resetParticipants(); draw(); };
-    body.querySelectorAll('[data-part]').forEach((node) => { node.onchange = () => { if (node.checked) state.participated.add(node.dataset.part); else state.participated.delete(node.dataset.part); }; });
-    body.querySelectorAll('[data-unrecv]').forEach((node) => { node.onclick = () => { state.receivers.splice(Number(node.dataset.unrecv), 1); draw(); }; });
-    // Add a receiver: search in the field next to the chips, pick from the list under it (no popup).
+    modalBody.querySelectorAll('[data-part]').forEach((node) => { node.onchange = () => { if (node.checked) state.participated.add(node.dataset.part); else state.participated.delete(node.dataset.part); }; });
+    modalBody.querySelectorAll('[data-unrecv]').forEach((node) => { node.onclick = () => { state.receivers.splice(Number(node.dataset.unrecv), 1); draw(); }; });
     a5EmployeeSearch(activity, (p) => {
       if (!state.receivers.some((r) => r.employeeId === p.employeeId)) state.receivers.push(p);
       setTimeout(draw, 0);
     });
-    body.querySelectorAll('[data-score]').forEach((node) => {
+    modalBody.querySelectorAll('[data-score]').forEach((node) => {
       node.onclick = () => {
         const [id, n] = node.dataset.score.split(':').map(Number);
         state.scores[id] = n;
-        // Redraw keeps the page where it was, so scoring 25 items does not jump to the top.
-        const scroller = body.closest('.view-body');
+        const scroller = $('atx-modal-body');
         const y = scroller ? scroller.scrollTop : 0;
         draw();
         if (scroller) scroller.scrollTop = y;
       };
     });
-    body.querySelectorAll('[data-text]').forEach((node) => { node.oninput = () => { state.text[node.dataset.text] = node.value; }; });
+    modalBody.querySelectorAll('[data-text]').forEach((node) => { node.oninput = () => { state.text[node.dataset.text] = node.value; }; });
     form.items.forEach((item) => atxPhotoInput(`atx-photo-${item.id}`, (data) => { state.photo[item.id] = data; }));
-    $('atx-cancel').onclick = () => atxAudits(body, activity, me).catch(onErr);
-    $('atx-save').onclick = () => atxSave(body, activity, me, state, form, open);
   };
   draw();
 }
 
-function atxSave(body, activity, me, state, form, open) {
+async function atxSave(activity, state, form, open, onDone) {
   const missing = form.items.filter((i) => state.scores[i.id] == null && !(open.get(i.id) && !(String(open.get(i.id).action_description || '').trim() && open.get(i.id).after_photos > 0))).map((i) => i.item_no);
-  if (missing.length) return toast(`ให้คะแนนให้ครบ (ข้อที่ ${missing.join(', ')})`, 'error');
+  if (missing.length) {
+    toast(`ให้คะแนนให้ครบ (ข้อที่ ${missing.join(', ')})`, 'error');
+    throw new Error(`ให้คะแนนให้ครบ (ข้อที่ ${missing.join(', ')})`);
+  }
   const need = state.type === 'COMMITTEE' ? form.items.filter((i) => !open.get(i.id) && !state.ownItems.has(i.id) && state.scores[i.id] <= form.settings.issue_score) : [];
   const noText = need.filter((i) => !String(state.text[i.id] || '').trim()).map((i) => i.item_no);
-  if (noText.length) return toast(`ใส่รายละเอียด Issue (ข้อที่ ${noText.join(', ')})`, 'error');
+  if (noText.length) {
+    toast(`ใส่รายละเอียด Issue (ข้อที่ ${noText.join(', ')})`, 'error');
+    throw new Error(`ใส่รายละเอียด Issue (ข้อที่ ${noText.join(', ')})`);
+  }
   const noPhoto = need.filter((i) => !state.photo[i.id]).map((i) => i.item_no);
-  if (noPhoto.length) return toast(`แนบรูปปัญหา (ข้อที่ ${noPhoto.join(', ')})`, 'error');
-  confirmPopup(state.editId ? 'บันทึกการแก้ไข' : 'บันทึกผลตรวจ', `${state.editId ? `แก้ไข ${esc(state.auditNo)}` : `บันทึก ${esc(ATX_TYPES[state.type])} ของพื้นที่ที่เลือก`}${need.length ? ` และเปิด Issue ${need.length} รายการ` : ''}`, async () => {
-    const result = await a5Api(activity, state.editId ? `audits/${state.editId}` : 'audits', {
-      method: state.editId ? 'PATCH' : 'POST',
-      body: {
-        type: state.type, areaId: Number(state.areaId), auditedAt: state.date, team: state.team,
-        participated: [...state.participated], receivers: state.receivers.map((r) => r.employeeId),
-        scores: state.scores, issues: need.map((i) => ({ checklistId: i.id, description: state.text[i.id] }))
-      }
-    });
-    let failedPhotos = 0;
-    await Promise.all((result.issues || []).map(async (issue) => {
-      try {
-        await a5Api(activity, `issues/${issue.id}/photo`, { method: 'POST', body: { kind: 'BEFORE', image: state.photo[issue.checklist_id] } });
-      } catch (err) { failedPhotos += 1; toast(`${issue.issue_no}: ${err.message}`, 'error'); }
-    }));
-    toast(`บันทึก ${result.auditNo} แล้ว · ${result.percent}%${failedPhotos ? ` · รูปไม่ขึ้น ${failedPhotos} รายการ (แนบใหม่ที่แท็บ Issue)` : ''}`);
-    atxAudits(body, activity, me).catch(onErr);
-  }, 'บันทึก');
+  if (noPhoto.length) {
+    toast(`แนบรูปปัญหา (ข้อที่ ${noPhoto.join(', ')})`, 'error');
+    throw new Error(`แนบรูปปัญหา (ข้อที่ ${noPhoto.join(', ')})`);
+  }
+
+  const result = await a5Api(activity, state.editId ? `audits/${state.editId}` : 'audits', {
+    method: state.editId ? 'PATCH' : 'POST',
+    body: {
+      type: state.type, areaId: Number(state.areaId), auditedAt: state.date, team: state.team,
+      participated: [...state.participated], receivers: state.receivers.map((r) => r.employeeId),
+      scores: state.scores, issues: need.map((i) => ({ checklistId: i.id, description: state.text[i.id] }))
+    }
+  });
+  let failedPhotos = 0;
+  await Promise.all((result.issues || []).map(async (issue) => {
+    try {
+      await a5Api(activity, `issues/${issue.id}/photo`, { method: 'POST', body: { kind: 'BEFORE', image: state.photo[issue.checklist_id] } });
+    } catch (err) { failedPhotos += 1; toast(`${issue.issue_no}: ${err.message}`, 'error'); }
+  }));
+  toast(`บันทึก ${result.auditNo} แล้ว · ${result.percent}%${failedPhotos ? ` · รูปไม่ขึ้น ${failedPhotos} รายการ (แนบใหม่ที่แท็บ Issue)` : ''}`);
+  closePopup();
+  if (onDone) onDone();
 }
 
 // ---------- issues ----------
