@@ -276,17 +276,17 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
         ? item.team_members.map((m) => (typeof m === 'object' ? (m.name || m.employee_id) : m)).filter(Boolean).join(', ')
         : '';
       const presenterHtml = item.team_name
-        ? `<div class="wfa-col-emp"><strong>${esc(item.team_name)}</strong><small class="sum-meta">${esc(memberNames || item.full_name)} · ${esc(item.department || '-')}</small></div>`
-        : `<div class="wfa-col-emp"><span>${esc(item.full_name)}</span><small class="sum-meta">${esc(item.department || '-')}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</small></div>`;
+        ? `<div class="wfa-col-emp" title="${esc(`${item.team_name} · ${memberNames || item.full_name} · ${item.department || '-'}`)}"><strong>${esc(item.team_name)}</strong><small class="sum-meta">${esc(memberNames || item.full_name)} · ${esc(item.department || '-')}</small></div>`
+        : `<div class="wfa-col-emp" title="${esc(`${item.full_name} · ${item.department || '-'}`)}"><span>${esc(item.full_name)}</span><small class="sum-meta">${esc(item.department || '-')}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</small></div>`;
 
       return `
         <tr data-pick-id="${item.id}" class="row-pick">
           <td>${idx + 1}</td>
           <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
-          <td><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
-          <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
+          <td title="${esc(item.project_name)}"><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
+          <td title="${esc(item.process_name)}"><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
           <td>${presenterHtml}</td>
-          <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
+          <td title="${esc(item.proposed_technology || '-')}"><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
           <td>
             <div class="wfa-col-savings">
               ${tPct ? `<span class="wfa-saving-mini" title="ลดเวลาทำงาน"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
@@ -294,7 +294,7 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
               ${!tPct && !pPct ? '<span class="sum-meta">-</span>' : ''}
             </div>
           </td>
-          <td><span class="badge ${status.class}">${status.label}</span></td>
+          <td title="${esc(status.label)}"><span class="badge ${status.class}">${status.label}</span></td>
           <td style="text-align:center" onclick="event.stopPropagation()">
             <button class="btn btn-secondary small" type="button" data-act-view="${item.id}" style="padding:2px 8px;min-height:22px;font-size:11px" title="กดแสดงผล Improvement Proposal">
               <span class="material-symbols-rounded" style="font-size:13px">visibility</span> แสดงผล
@@ -306,18 +306,18 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 
     const contentHtml = `
       <div class="table-wrap sheet" id="wfa-table-wrap">
-        <table class="mo-data-table">
+        <table class="mo-data-table wfa-list-table">
           <thead>
             <tr>
-              <th style="width:45px">no</th>
-              <th style="width:90px">วันที่ส่ง</th>
+              <th style="width:44px">no</th>
+              <th style="width:84px">วันที่ส่ง</th>
               <th>ชื่อโปรเจค (AFTER)</th>
               <th>กระบวนการเดิม (BEFORE)</th>
-              <th>ผู้เสนอ / ทีม / แผนก</th>
-              <th>เทคโนโลยี</th>
-              <th>ผลประหยัด / KPI</th>
-              <th style="width:115px">สถานะ</th>
-              <th style="width:120px;text-align:center">การจัดการ</th>
+              <th style="width:190px">ผู้เสนอ / ทีม / แผนก</th>
+              <th style="width:124px">เทคโนโลยี</th>
+              <th style="width:138px">ผลประหยัด / KPI</th>
+              <th style="width:124px">สถานะ</th>
+              <th style="width:84px;text-align:center">จัดการ</th>
             </tr>
           </thead>
           <tbody>

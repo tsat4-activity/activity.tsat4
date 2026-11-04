@@ -1059,3 +1059,9 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
 .nav-level{margin-left:auto;font-size:10px;line-height:1;padding:3px 6px;border-radius:999px;background:var(--mo-soft,#eef3ee);color:var(--mo-muted,#666);white-space:nowrap}.nav-level-admin{background:#d9f2e3;color:#1e7a45}.nav-level-committee{background:#e4ecfb;color:#2f5aa8}.nav-level-operator{background:#fdf0d9;color:#9a6200}.nav-level-viewer{background:#eee;color:#666}body.sidebar-collapsed .nav-level{display:none}
 .acc-chip{display:inline-block;margin:1px 2px;padding:2px 8px;border-radius:999px;background:var(--mo-soft,#eef3ee);font-size:12px;white-space:nowrap}.acc-chip.is-muted{opacity:.5}
 .popup.popup-wide{width:min(820px,100%)}
+/* Work Flow list: every column on the page, long text ends in … (the full text is the title) · a phone scrolls inside the frame */
+table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px}
+.wfa-list-table td{max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wfa-list-table :is(.wfa-col-title,.wfa-col-title strong,.wfa-col-emp,.wfa-col-emp>*,.wfa-text-muted,.wfa-tech-badge,.badge){display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wfa-list-table .wfa-tech-badge,.wfa-list-table .badge{width:fit-content}
+.wfa-list-table .wfa-col-savings{display:flex;flex-wrap:nowrap;gap:4px;overflow:hidden}
