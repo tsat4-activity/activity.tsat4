@@ -86,6 +86,7 @@ POST /api/act/:activity/projects auth
 POST /api/act/:activity/projects/copy auth
 POST /api/act/:activity/tasks auth
 POST /api/act/:activity/team auth
+POST /api/act/:activity/team/:id/login auth
 POST /api/act/:activity/team/copy auth
 POST /api/login
 POST /api/logout

@@ -1,7 +1,9 @@
+import { randomInt } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { mx, tx } from '../../core/db.js';
 import { fail, cleanTerm } from '../../core/http.js';
 import { nameOf } from '../../core/users.js';
-import { ACT_UNITS, AUDIT_UNIT, unitsOf, accessOf, actRoute, fetchAll, fetchIn, grantsAdmin, namesOf, requireAdmin, roundTo, tablesOf, throwIf, viewerOf, yearOf } from './common.js';
+import { ACTIVITIES, ACT_UNITS, AUDIT_UNIT, unitsOf, accessOf, actRoute, fetchAll, fetchIn, grantsAdmin, namesOf, requireAdmin, roundTo, tablesOf, throwIf, viewerOf, yearOf } from './common.js';
 import { seed5sMockAudits } from './audit-mock.js';
 
 // Checklist audits (5S and similar): Dashboard reads for everyone, Setting writes for the year's admins.
@@ -515,7 +517,10 @@ export function mountAudit(app) {
     ]);
     const areaMap = new Map((areas || []).map((a) => [Number(a.id), a]));
     const departments = [...new Set([...(empDepts.data || []).map((r) => String(r.department || '').trim()), ...rows.map((r) => String(r.department || '').trim())].filter(Boolean))].sort();
-    const names = await namesOf([...rows.map((r) => r.employee_id), ...rows.map((r) => r.manager_id).filter(Boolean)]);
+    const [names, access] = await Promise.all([namesOf([...rows.map((r) => r.employee_id), ...rows.map((r) => r.manager_id).filter(Boolean)]), accessOf(req, activity, year)]);
+    // ผู้ดูแล see who can sign in yet (mt_main_user): active / inactive / none
+    const logins = access.admin ? new Map((await fetchIn(() => mx.from('mt_main_user').select('employee_id,status'), 'employee_id', rows.map((r) => String(r.employee_id))))
+      .map((u) => [String(u.employee_id), u.status === 'Active' ? 'active' : 'inactive'])) : null;
     res.json({
       year,
       departments,
@@ -527,7 +532,8 @@ export function mountAudit(app) {
           department: r.department || names.get(String(r.employee_id))?.department || '',
           manager_name: r.manager_id ? names.get(String(r.manager_id))?.name || '' : '',
           area_code: area?.code || '',
-          area_name: area?.name || ''
+          area_name: area?.name || '',
+          ...(logins ? { login: logins.get(String(r.employee_id)) || 'none' } : {})
         };
       })
     });
@@ -727,6 +733,41 @@ export function mountAudit(app) {
     const del = await tx.from(tablesOf(activity).team).delete().eq('id', row.id);
     throwIf(del.error);
     res.json({ ok: true });
+  });
+
+  // Sign-in for a member (ผู้ใช้กำหนด 2026-11-04): the ผู้ดูแล makes a temporary password and sends the link + รหัสพนักงาน +
+  // password. The account starts expired, so the first sign-in has to set a new password (users.js passwordExpired).
+  // An existing account is reset only when asked, and never one with wider rights (creator / ผู้บริหาร / ผู้ดูแลระบบ / a
+  // ผู้ดูแล of any activity that year) unless the creator does it. Only the password goes back, once; it is not stored.
+  const TEMP_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  route('post', '/api/act/:activity/team/:id/login', async (req, res, activity) => {
+    const { data: row, error } = await tx.from(tablesOf(activity).team).select('id,year,employee_id,role,unit,status').eq('id', Number(req.params.id)).maybeSingle();
+    throwIf(error);
+    if (!row) return fail(res, 404, 'ไม่พบรายชื่อ');
+    if (!(await requireAdmin(req, res, activity, row.year))) return;
+    if (row.status !== 'Active') return fail(res, 400, 'รายชื่อนี้เป็น Inactive');
+    const employeeId = String(row.employee_id);
+    const [employee, user] = await Promise.all([
+      mx.from('mt_main_employee').select('employee_id,status').eq('employee_id', employeeId).maybeSingle(),
+      mx.from('mt_main_user').select('*').eq('employee_id', employeeId).maybeSingle()
+    ]);
+    throwIf(employee.error, user.error);
+    if (!employee.data || employee.data.status !== 'Active') return fail(res, 400, 'ไม่พบพนักงานที่ Active ในรายชื่อพนักงาน');
+    if (user.data && req.body?.reset !== true) return fail(res, 409, 'คนนี้มีบัญชีแล้ว');
+    if (user.data && !req.user.creator) {
+      const wide = user.data.creator || user.data.executive || (Array.isArray(user.data.admin_of) && user.data.admin_of.length);
+      const leads = wide ? [] : await Promise.all(ACTIVITIES.map((a) => tx.from(tablesOf(a).team).select('role,unit').eq('year', row.year).eq('employee_id', employeeId).eq('status', 'Active')));
+      if (wide || leads.some((r, i) => (r.data || []).some((x) => grantsAdmin(ACTIVITIES[i], x)))) return fail(res, 403, 'บัญชีนี้มีสิทธิ์ผู้ดูแล รีเซ็ตได้เฉพาะผู้ดูแลระบบ');
+    }
+    const password = Array.from({ length: 10 }, () => TEMP_CHARS[randomInt(TEMP_CHARS.length)]).join('');
+    // changed 91 days ago = expired now: the member sets their own password at the first sign-in
+    const changed = new Date(Date.now() - 91 * 86400000).toISOString();
+    const patch = { password_hash: await bcrypt.hash(password, 10), password_changed_at: changed, status: 'Active' };
+    const saved = user.data
+      ? await mx.from('mt_main_user').update(patch).eq('employee_id', employeeId)
+      : await mx.from('mt_main_user').insert({ employee_id: employeeId, role: 'employee', ...patch });
+    throwIf(saved.error);
+    res.json({ ok: true, employeeId, password, reset: Boolean(user.data) });
   });
 
   // Rows go in one by one so a row that already exists (unique constraint) is simply skipped.
