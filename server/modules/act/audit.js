@@ -759,15 +759,19 @@ export function mountAudit(app) {
       const leads = wide ? [] : await Promise.all(ACTIVITIES.map((a) => tx.from(tablesOf(a).team).select('role,unit').eq('year', row.year).eq('employee_id', employeeId).eq('status', 'Active')));
       if (wide || leads.some((r, i) => (r.data || []).some((x) => grantsAdmin(ACTIVITIES[i], x)))) return fail(res, 403, 'บัญชีนี้มีสิทธิ์ผู้ดูแล รีเซ็ตได้เฉพาะผู้ดูแลระบบ');
     }
-    const password = Array.from({ length: 10 }, () => TEMP_CHARS[randomInt(TEMP_CHARS.length)]).join('');
-    // changed 91 days ago = expired now: the member sets their own password at the first sign-in
-    const changed = new Date(Date.now() - 91 * 86400000).toISOString();
+    // the creator / ผู้ดูแล may type the password (ผู้ใช้กำหนด 2026-11-04, e.g. a member who forgot it) · blank = a random one
+    const typed = String(req.body?.password ?? '');
+    if (typed && typed.length < 8) return fail(res, 400, 'รหัสผ่านต้องมีอย่างน้อย 8 ตัว');
+    const password = typed || Array.from({ length: 10 }, () => TEMP_CHARS[randomInt(TEMP_CHARS.length)]).join('');
+    // mustChange (default): changed 91 days ago = expired now, the member sets their own password at the next sign-in
+    const mustChange = req.body?.mustChange !== false;
+    const changed = new Date(Date.now() - (mustChange ? 91 * 86400000 : 0)).toISOString();
     const patch = { password_hash: await bcrypt.hash(password, 10), password_changed_at: changed, status: 'Active' };
     const saved = user.data
       ? await mx.from('mt_main_user').update(patch).eq('employee_id', employeeId)
       : await mx.from('mt_main_user').insert({ employee_id: employeeId, role: 'employee', ...patch });
     throwIf(saved.error);
-    res.json({ ok: true, employeeId, password, reset: Boolean(user.data) });
+    res.json({ ok: true, employeeId, password, reset: Boolean(user.data), mustChange });
   });
 
   // Rows go in one by one so a row that already exists (unique constraint) is simply skipped.

@@ -662,7 +662,7 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
   const roleLabel = (role, unit) => (role === 'member' && unit && !A5_UNITS_OF[activity] ? 'สมาชิก' : roles[role] || role);
   const rows = listQuery([...data.members].sort((a, b) => unitKeys.indexOf(unitOf(a)) - unitKeys.indexOf(unitOf(b)) || keys.indexOf(a.role) - keys.indexOf(b.role) || String(a.team || '').localeCompare(String(b.team || '')) || String(a.area_code || '').localeCompare(String(b.area_code || '')) || String(a.employee_id).localeCompare(String(b.employee_id))), a5Heads.team, (m, key) => (key === 'role' ? roleLabel(m.role, unitOf(m)) : key === 'unit' ? units[unitOf(m)] : m[key] || ''));
   body.innerHTML = `
-    ${admin ? `<div class="action-bar a5-actions">${button('a5-add', 'เพิ่มรายชื่อ', 'primary')}${button('a5-edit', 'แก้ไข', 'secondary', 'disabled')}${button('a5-del', 'ลบ', 'danger', 'disabled')}${button('a5-login', 'ส่งรหัสเข้าระบบ', 'secondary', 'disabled')}${button('a5-copy', `คัดลอกจากปี ${a5Year - 1}`)}</div>` : ''}
+    ${admin ? `<div class="action-bar a5-actions">${button('a5-add', 'เพิ่มรายชื่อ', 'primary')}${button('a5-edit', 'แก้ไข', 'secondary', 'disabled')}${button('a5-del', 'ลบ', 'danger', 'disabled')}${button('a5-login', 'รหัสเข้าระบบ', 'secondary', 'disabled')}${button('a5-copy', `คัดลอกจากปี ${a5Year - 1}`)}</div>` : ''}
     <div class="table-wrap sheet" id="a5-rows"></div>
     <p class="sum-meta">${rows.length} รายชื่อ</p>`;
   const teamCell = (m) => (hasTeam ? `<td>${m.team ? `<span class="a5-dot is-done" style="--team:${a5TeamColor(m.team)}"></span> กลุ่ม ${esc(m.team)}` : (m.area_code ? `<span class="sum-meta">[${esc(m.area_code)}]</span> ${esc(m.area_name || '')}` : '')}</td>` : '');
@@ -729,11 +729,14 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
   $('a5-login').onclick = () => {
     if (!picked) return;
     const m = picked;
+    // the password: typed by the creator / ผู้ดูแล (e.g. a member who forgot it) or blank = random (ผู้ใช้กำหนด 2026-11-04)
     const go = async (reset) => {
-      const r = await a5Api(activity, `team/${m.id}/login`, { method: 'POST', body: { reset } });
+      const password = $('a5-login-pw').value;
+      if (password && password.length < 8) throw new Error('รหัสผ่านต้องมีอย่างน้อย 8 ตัว');
+      const r = await a5Api(activity, `team/${m.id}/login`, { method: 'POST', body: { reset, password, mustChange: $('a5-login-change').checked } });
       const name = ACTIVITIES.find(([id]) => id === activity)?.[1] || activity;
-      const text = `เชิญเข้าระบบ TSAT4 Activity (${name} ปี ${a5Year})\nลิงก์: ${location.origin}\nรหัสพนักงาน: ${r.employeeId}\nรหัสผ่านชั่วคราว: ${r.password}\nเข้าครั้งแรก ระบบจะให้ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัว)`;
-      openPopup(`ส่งรหัสให้ ${esc(m.name || m.employee_id)}`, `<p class="sum-meta">${r.reset ? 'รีเซ็ตรหัสผ่านแล้ว รหัสเดิมใช้ไม่ได้' : 'สร้างบัญชีแล้ว'} · รหัสนี้แสดงครั้งเดียว คัดลอกส่งให้สมาชิก (LINE / อีเมล)</p>
+      const text = `เชิญเข้าระบบ TSAT4 Activity (${name} ปี ${a5Year})\nลิงก์: ${location.origin}\nรหัสพนักงาน: ${r.employeeId}\nรหัสผ่าน${r.mustChange ? 'ชั่วคราว' : ''}: ${r.password}${r.mustChange ? '\nเข้าครั้งแรก ระบบจะให้ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัว)' : ''}`;
+      openPopup(`ส่งรหัสให้ ${esc(m.name || m.employee_id)}`, `<p class="sum-meta">${r.reset ? 'เปลี่ยนรหัสผ่านแล้ว รหัสเดิมใช้ไม่ได้' : 'สร้างบัญชีแล้ว'} · ระบบไม่เก็บรหัสนี้ คัดลอกส่งให้สมาชิก (LINE / อีเมล)</p>
         <textarea id="a5-login-text" rows="6" readonly>${esc(text)}</textarea>`, async () => {
         await navigator.clipboard.writeText(text);
         toast('คัดลอกแล้ว');
@@ -742,9 +745,10 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
       }, 'คัดลอกข้อความ');
       $('a5-login-text').onfocus = () => $('a5-login-text').select();
     };
-    if (m.login === 'none') go(false).catch(onErr);
-    // openPopup, not confirmPopup: go() opens the next popup and confirmPopup would close it
-    else openPopup('รีเซ็ตรหัสผ่าน', `<p class="sum-meta">${esc(m.employee_id)} ${esc(m.name || '')} มีบัญชีแล้ว · สร้างรหัสผ่านชั่วคราวใหม่ (รหัสเดิมใช้ไม่ได้)</p>`, () => go(true), 'รีเซ็ต');
+    const has = m.login !== 'none';
+    openPopup(has ? 'เปลี่ยนรหัสผ่าน' : 'สร้างบัญชีเข้าระบบ', `<p class="sum-meta">${esc(m.employee_id)} ${esc(m.name || '')}${has ? ' มีบัญชีแล้ว · รหัสเดิมจะใช้ไม่ได้' : ''}</p>
+      ${field('รหัสผ่าน (ว่าง = ระบบสุ่มให้)', '<input id="a5-login-pw" type="text" minlength="8" maxlength="72" autocomplete="off" placeholder="อย่างน้อย 8 ตัว">')}
+      <label class="check"><input id="a5-login-change" type="checkbox" checked> ให้สมาชิกตั้งรหัสใหม่เองตอนเข้าครั้งแรก</label>`, () => go(has), has ? 'เปลี่ยนรหัส' : 'สร้างบัญชี');
   };
   $('a5-copy').onclick = () => confirmPopup('คัดลอกทีม', `คัดลอกรายชื่อทีมปี ${a5Year - 1} มาเป็นปี ${a5Year}${me?.creator ? '' : ' (ไม่รวมผู้ดูแล: ผู้ดูแลระบบเป็นผู้กำหนด)'} (รายชื่อที่มีอยู่แล้วจะไม่ซ้ำ)`, async () => {
     const r = await a5Api(activity, 'team/copy', { method: 'POST', body: { from: a5Year - 1, to: a5Year } });
