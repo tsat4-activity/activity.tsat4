@@ -39,6 +39,18 @@ function planSummary(rows, today) {
   const completedCount = kids.length
     ? kids.filter((r) => Number(r.progress) >= 100).length
     : mains.filter((r) => Number(r.progress) >= 100).length;
+  const subtasks = (kids.length ? kids : mains).map((r) => {
+    const st = planStatus(r, today);
+    return {
+      id: r.id,
+      title: r.title,
+      progress: Number(r.progress) || 0,
+      code: st.code,
+      label: st.label,
+      start: r.start_date,
+      end: r.end_date
+    };
+  });
   return {
     items: mains.length,
     percent,
@@ -46,7 +58,8 @@ function planSummary(rows, today) {
     overdue: overdue.length,
     late: overdue.sort((a, b) => a.end.localeCompare(b.end)).slice(0, 5),
     completedCount,
-    totalTasks: (kids.length || mains.length)
+    totalTasks: (kids.length || mains.length),
+    subtasks
   };
 }
 

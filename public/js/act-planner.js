@@ -995,7 +995,7 @@ async function aplDrawSmfOverview(body, activity) {
       </div>
       ${plan ? `
         <div class="ov-progress"><div class="ov-bar"><span style="width:${pctVal}%"></span></div></div>
-        ${isCount ? `<div class="ov-count-sub">สำเร็จแล้ว <b>${completed}</b> จากเป้าหมาย <b>${targetCount}</b> ${esc(u.unit || 'โครงการ')}</div>` : ''}
+        <div class="ov-count-sub">${isCount ? `สำเร็จแล้ว <b>${completed}</b> จากเป้าหมาย <b>${targetCount}</b> ${esc(u.unit || 'โครงการ')}` : `สำเร็จแล้ว <b>${completed}</b> จาก <b>${plan.totalTasks || plan.items || 1}</b> หัวข้อแผนงาน`}</div>
         <div class="ov-chips">${chips}</div>
       ` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}
     </div>`;
@@ -1023,6 +1023,33 @@ async function aplDrawSmfOverview(body, activity) {
       ${late}
     </div>`;
 
+    const subtasksSec = plan?.subtasks?.length ? `
+      <div class="ov-subtasks-wrap">
+        <details class="ov-subtasks"${u.code === 'workflow' ? ' open' : ''}>
+          <summary>
+            <span class="ov-subtasks-title">
+              <span class="material-symbols-rounded">account_tree</span>
+              โปรเจคย่อย (${plan.subtasks.length} รายการ)
+            </span>
+            <span class="ov-subtasks-arrow material-symbols-rounded">expand_more</span>
+          </summary>
+          <div class="ov-subtasks-list">
+            ${plan.subtasks.map((st, sIdx) => `
+              <div class="ov-subtask-item" title="${st.start && st.end ? `${actShort(st.start)} – ${actShort(st.end)} · ` : ''}${st.label || ''} (${st.progress}%)">
+                <div class="ov-subtask-head">
+                  <span class="ov-subtask-name">${sIdx + 1}. ${esc(actNoLead(st.title))}</span>
+                  <span class="ov-subtask-pct ${st.progress >= 100 ? 'is-done' : ''}">${st.progress}%</span>
+                </div>
+                <div class="ov-subtask-bar">
+                  <span style="width:${Math.min(100, Math.max(0, st.progress))}%" class="${st.progress >= 100 ? 'is-done' : ''}"></span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </details>
+      </div>
+    ` : '';
+
     return `<article class="card ov-card" style="--ov:${CHART.series[i % CHART.series.length]}">
       <div class="ov-head">
         <div class="ov-title-group">
@@ -1034,9 +1061,9 @@ async function aplDrawSmfOverview(body, activity) {
         </div>
       </div>
       ${progressSec}
-      ${kpiSection(u)}
       ${summarySec}
-      ${u.code === 'workflow' ? `<div style="margin-top:4px">${button('', 'ส่งข้อมูล / จัดการ Work Flow Automation', 'primary small', `data-ov-proj="${u.id}"`)}</div>` : ''}
+      ${subtasksSec}
+      ${u.code === 'workflow' ? `<div style="margin-top:6px">${button('', 'ส่งข้อมูล / จัดการ Work Flow Automation', 'primary small', `data-ov-proj="${u.id}"`)}</div>` : ''}
     </article>`;
   };
   body.innerHTML = `<div class="ch-kpis">${kpis}</div>
