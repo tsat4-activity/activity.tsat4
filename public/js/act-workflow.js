@@ -359,7 +359,6 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
           <input type="checkbox" id="wfa-flt-my" ${filter.myOnly ? 'checked' : ''}> เฉพาะของฉัน
         </label>
         <div class="a5-year">${a5YearSelect(userMe.years)}</div>
-        ${button('wfa-btn-view', 'แสดงผล', 'secondary', 'disabled')}
         <div class="action-bar a5-actions" style="margin:0">
           ${button('wfa-btn-add', 'เพิ่ม', 'primary')}
           ${button('wfa-btn-edit', 'แก้ไข', 'secondary', 'disabled')}
@@ -395,7 +394,6 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
   function bindTxEvents() {
     let picked = null;
     const updateActions = () => {
-      if ($('wfa-btn-view')) $('wfa-btn-view').disabled = !picked;
       if ($('wfa-btn-edit')) $('wfa-btn-edit').disabled = !picked || !picked.can_edit;
       if ($('wfa-btn-del')) $('wfa-btn-del').disabled = !picked || !picked.can_edit;
     };
@@ -411,12 +409,6 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
       $('a5-year').onchange = () => {
         a5Year = Number($('a5-year').value);
         rerender();
-      };
-    }
-
-    if ($('wfa-btn-view')) {
-      $('wfa-btn-view').onclick = () => {
-        if (picked) wfaOpenDetail(picked.id, loadData);
       };
     }
 
@@ -715,22 +707,24 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
       }).join('');
 
       const teamSectionHtml = isTeam ? `
-        <div class="field" style="margin-bottom:12px">
-          <label class="required">ชื่อกลุ่ม / ชื่อทีม (Team Name) *</label>
-          <input id="wfa-team-name" maxlength="200" value="${esc(state.team_name)}" placeholder="เช่น กลุ่ม AI Vision Line 1, กลุ่ม Smart OEE Press">
+        <div class="field" style="margin-bottom:10px">
+          <label class="field required">
+            ชื่อกลุ่ม / ชื่อทีม (Team Name)
+            <input id="wfa-team-name" maxlength="200" value="${esc(state.team_name)}" placeholder="เช่น กลุ่ม AI Vision Line 1, กลุ่ม Smart OEE Press" style="margin-top:4px">
+          </label>
         </div>
       ` : '';
 
       const teamMembersPickerHtml = isTeam && teamMembers.length ? `
-        <div class="field" style="margin-top:12px">
-          <label>เลือกสมาชิกในกลุ่มที่ร่วมทำโปรเจค (เลือกได้หลายคน):</label>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;max-height:160px;overflow-y:auto;border:1px solid var(--mo-line);border-radius:6px;padding:8px;background:var(--mo-surface)">
+        <div class="field" style="margin-top:10px">
+          <label style="font-weight:600;font-size:12px;margin-bottom:6px;display:block">เลือกสมาชิกในกลุ่มที่ร่วมทำโปรเจค (เลือกได้หลายคน):</label>
+          <div class="wfa-member-grid">
             ${teamMembers.map((m) => {
               const isChecked = state.team_members.some((tm) => tm.employee_id === m.employee_id || tm.name === m.name);
               return `
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:4px" class="hover-surface">
+                <label class="wfa-member-card ${isChecked ? 'is-selected' : ''}">
                   <input type="checkbox" name="wfa-team-member" value="${esc(m.employee_id)}" data-name="${esc(m.name)}" data-dept="${esc(m.department || '')}" ${isChecked ? 'checked' : ''}>
-                  <span>${esc(m.name)} <small style="color:var(--mo-text-muted)">(${esc(m.department || '-')})</small></span>
+                  <span>${esc(m.name)} <small>(${esc(m.department || '-')})</small></span>
                 </label>
               `;
             }).join('')}
@@ -740,20 +734,22 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
 
       body.innerHTML = `
         <div class="wfa-step-section">
-          <div class="wfa-sec-badge">Section 01</div>
-          <h3 style="margin:4px 0">${isTeam ? 'ข้อมูลกลุ่มและผู้ส่ง (Team & Submitter)' : 'ข้อมูลสมาชิกผู้ส่ง (Member Information)'}</h3>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <span class="wfa-sec-badge">Section 01</span>
+            <h3 style="margin:0;font-size:15px;font-weight:700">${isTeam ? 'ข้อมูลกลุ่มและผู้ส่ง (Team & Submitter)' : 'ข้อมูลสมาชิกผู้ส่ง (Member Information)'}</h3>
+          </div>
           ${teamSectionHtml}
           ${memberOptions ? `
-          <div class="field" style="margin-bottom:12px">
+          <div class="field" style="margin-bottom:10px">
             <label>${isTeam ? 'เลือกหัวหน้ากลุ่ม / ผู้ส่งหลัก (เชื่อมโยงรหัส ชื่อ และแผนกอัตโนมัติ)' : 'เลือกสมาชิกในทีม SMF (เชื่อมโยงรหัส ชื่อ และแผนกอัตโนมัติ)'}</label>
             <select id="wfa-pick-member">
               <option value="">-- เลือกจากรายชื่อ หรือกรอกเองด้านล่าง --</option>
               ${memberOptions}
             </select>
           </div>` : ''}
-          <div class="wfa-form-grid">
+          <div class="wfa-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
             ${field(isTeam ? 'รหัสพนักงานผู้ส่ง' : 'รหัสพนักงาน', `<input id="wfa-empid" value="${esc(state.employee_id)}" placeholder="เช่น 2101999" autocomplete="off">`)}
-            ${field(isTeam ? 'ชื่อ-นามสกุลผู้ส่ง *' : 'ชื่อ-นามสกุล *', `<input id="wfa-name" value="${esc(state.full_name)}" placeholder="เช่น นางสาว อัจฉรา โสกาบุญ" autocomplete="off">`)}
+            ${field(isTeam ? 'ชื่อ-นามสกุลผู้ส่ง' : 'ชื่อ-นามสกุล', `<input id="wfa-name" value="${esc(state.full_name)}" placeholder="เช่น นางสาว อัจฉรา โสกาบุญ" autocomplete="off">`, 'required')}
             ${field('แผนก / หน่วยงาน', `<input id="wfa-dept" value="${esc(state.department)}" placeholder="เช่น PLN & STO" autocomplete="off">`)}
             ${field('วันที่ส่ง', `<input value="${new Date().toLocaleDateString('th-TH')}" readonly class="is-locked">`)}
           </div>
