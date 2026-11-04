@@ -662,7 +662,10 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
   openPopup(isEdit ? `แก้ไขข้อมูลโปรเจค ${projTitle}` : `ส่งข้อมูลโปรเจค ${projTitle}`, modalHtml, handleFinalSave, 'บันทึก');
   const popupEl = $('popup')?.querySelector('.popup');
   if (popupEl) {
+    popupEl.style.alignSelf = 'start';
+    popupEl.style.marginTop = 'max(16px, min(4vh, 28px))';
     popupEl.style.width = 'min(920px, 96vw)';
+    popupEl.style.height = 'min(88vh, 740px)';
     popupEl.style.maxHeight = 'min(92vh, 860px)';
   }
 
@@ -1248,7 +1251,10 @@ async function wfaOpenDetail(id, onRefresh) {
   if (popupNode) {
     const p = popupNode.querySelector('.popup');
     if (p) {
+      p.style.alignSelf = 'start';
+      p.style.marginTop = 'max(16px, min(4vh, 28px))';
       p.style.width = 'min(920px, 96vw)';
+      p.style.height = 'min(88vh, 740px)';
       p.style.maxHeight = 'min(92vh, 860px)';
     }
     wfaBindProposalThumbs(popupNode);
