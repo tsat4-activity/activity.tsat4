@@ -15,21 +15,21 @@ const WFA_TECH_OPTIONS = [
 ];
 
 const WFA_BENEFITS = [
-  { id: 'paper', label: 'Reduce Paper (ลดการใช้กระดาษ)', icon: 'description' },
-  { id: 'time', label: 'Reduce Working Time (ลดเวลาการทำงาน)', icon: 'timer' },
-  { id: 'steps', label: 'Reduce Process Steps (ลดขั้นตอนการทำงาน)', icon: 'route' },
-  { id: 'manpower', label: 'Reduce Manpower (ลดกำลังคน)', icon: 'groups' },
-  { id: 'error', label: 'Reduce Human Error (ลดความผิดพลาด)', icon: 'rule' },
-  { id: 'waiting', label: 'Reduce Waiting Time (ลดเวลารอคอย)', icon: 'hourglass_empty' },
-  { id: 'access', label: 'Improve Data Accessibility (เข้าถึงข้อมูลง่ายขึ้น)', icon: 'database' },
-  { id: 'tracking', label: 'Improve Tracking & Monitoring (ติดตามสถานะได้แม่นยำ)', icon: 'monitoring' }
+  { id: 'paper', label: 'Reduce Paper', th: 'ลดการใช้กระดาษ', icon: 'description' },
+  { id: 'time', label: 'Reduce Working Time', th: 'ลดเวลาการทำงาน', icon: 'schedule' },
+  { id: 'steps', label: 'Reduce Process Steps', th: 'ลดขั้นตอนการทำงาน', icon: 'route' },
+  { id: 'manpower', label: 'Reduce Manpower', th: 'ลดกำลังคน', icon: 'groups' },
+  { id: 'error', label: 'Reduce Human Error', th: 'ลดความผิดพลาด', icon: 'verified_user' },
+  { id: 'wait', label: 'Reduce Waiting Time', th: 'ลดเวลารอคอย', icon: 'hourglass_empty' },
+  { id: 'access', label: 'Improve Data Accessibility', th: 'เข้าถึงข้อมูลได้ง่ายขึ้น', icon: 'cloud_done' },
+  { id: 'track', label: 'Improve Tracking & Monitoring', th: 'ติดตามสถานะได้ดีขึ้น', icon: 'monitoring' }
 ];
 
 const WFA_STATUS_BADGES = {
-  Idea: { label: 'Idea (แนวคิด)', class: 'badge-warning', color: '#f59e0b' },
-  Prototype: { label: 'Prototype (ต้นแบบ)', class: 'badge-primary', color: '#3b82f6' },
-  Testing: { label: 'Testing (ทดสอบ)', class: 'badge-primary', color: '#8b5cf6' },
-  Implemented: { label: 'Implemented (ใช้งานจริง)', class: 'badge-success', color: '#10b981' }
+  Idea: { label: 'Idea (แนวคิด)', class: 'badge-neutral' },
+  Prototype: { label: 'Prototype (ต้นแบบ)', class: 'badge-warning' },
+  Testing: { label: 'Testing (ทดสอบ)', class: 'badge-info' },
+  Implemented: { label: 'Implemented (ใช้งานจริง)', class: 'badge-success' }
 };
 
 function wfaCalcReduction(before, after) {
@@ -40,16 +40,199 @@ function wfaCalcReduction(before, after) {
   return Math.round(((b - a) / b) * 1000) / 10;
 }
 
+// Render a single Improvement Proposal card matching Image 2 (16:9 Before/After + Details + Expected Results table)
+function wfaProposalCardHtml(item, { showActions = true } = {}) {
+  const imgs = Array.isArray(item.images) ? item.images : [];
+  const beforeImgs = imgs.filter((img) => img.image_type === 'BEFORE');
+  const afterImgs = imgs.filter((img) => img.image_type === 'AFTER');
+  const firstBefore = beforeImgs[0] || null;
+  const firstAfter = afterImgs[0] || null;
+
+  const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
+  const tPct = item.time_saving_pct ?? wfaCalcReduction(item.time_before, item.time_after);
+  const pPct = item.paper_reduction_pct ?? wfaCalcReduction(item.paper_before, item.paper_after);
+  const sPct = item.steps_reduction_pct ?? wfaCalcReduction(item.steps_before, item.steps_after);
+  const dateText = item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : '';
+
+  const beforeCap = firstBefore?.image_description || item.current_problem || item.current_description || '-';
+  const afterCap = firstAfter?.image_description || item.improvement_description || '-';
+
+  return `
+    <article class="wfa-proposal-card" data-prop-card="${item.id}">
+      <div class="wfa-prop-top">
+        <div>
+          <h3 class="wfa-prop-heading">Improvement Proposal</h3>
+          <div class="wfa-prop-submeta">
+            ผู้เสนอ: ${esc(item.full_name || '-')}${item.employee_id ? ` (${esc(item.employee_id)})` : ''} · แผนก: ${esc(item.department || '-')}${dateText ? ` · วันที่ส่ง: ${esc(dateText)}` : ''}
+          </div>
+        </div>
+        <div class="wfa-prop-top-actions">
+          <span class="badge ${status.class}">${status.label}</span>
+          ${showActions ? `
+            <button class="btn btn-secondary small" type="button" data-act-view="${item.id}">
+              <span class="material-symbols-rounded">visibility</span> ${item.can_evaluate ? 'รายละเอียด / ประเมิน' : 'รายละเอียด'}
+            </button>
+            ${item.can_edit ? `
+              <button class="btn btn-danger small" type="button" data-act-del="${item.id}" title="ลบโครงการ">
+                <span class="material-symbols-rounded">delete</span>
+              </button>
+            ` : ''}
+          ` : ''}
+        </div>
+      </div>
+
+      <div class="wfa-prop-proj-title">Project: ${esc(item.project_name || '-')}</div>
+
+      <div class="wfa-prop-media-grid">
+        <!-- BEFORE Column (16:9) -->
+        <div class="wfa-prop-media-col">
+          <div class="wfa-prop-img-wrap">
+            ${firstBefore ? `<img src="${firstBefore.image_url}" alt="Before" class="img-zoom" id="wfa-prop-b-img-${item.id}">` : `
+              <div class="wfa-prop-img-empty">
+                <span class="material-symbols-rounded">image</span>
+                <span>ไม่มีรูปภาพ Before (16:9)</span>
+              </div>
+            `}
+          </div>
+          ${beforeImgs.length > 1 ? `
+            <div class="wfa-prop-thumbs">
+              ${beforeImgs.map((img, i) => `
+                <button type="button" class="wfa-prop-thumb-btn ${i === 0 ? 'is-active' : ''}" data-swap-img="wfa-prop-b-img-${item.id}" data-swap-cap="wfa-prop-b-cap-${item.id}" data-src="${img.image_url}" data-desc="${esc(img.image_description || beforeCap)}">
+                  <img src="${img.image_url}" alt="Before ${i + 1}">
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+          <span class="wfa-prop-pill is-before">BEFORE</span>
+          <div class="wfa-prop-cap-title">${esc(item.process_name || 'Current Process')}</div>
+          <div class="wfa-prop-cap-sub" id="wfa-prop-b-cap-${item.id}">${esc(beforeCap)}</div>
+        </div>
+
+        <!-- AFTER Column (16:9) -->
+        <div class="wfa-prop-media-col">
+          <div class="wfa-prop-img-wrap">
+            ${firstAfter ? `<img src="${firstAfter.image_url}" alt="After" class="img-zoom" id="wfa-prop-a-img-${item.id}">` : `
+              <div class="wfa-prop-img-empty">
+                <span class="material-symbols-rounded">auto_awesome</span>
+                <span>ไม่มีรูปภาพ After (16:9)</span>
+              </div>
+            `}
+          </div>
+          ${afterImgs.length > 1 ? `
+            <div class="wfa-prop-thumbs">
+              ${afterImgs.map((img, i) => `
+                <button type="button" class="wfa-prop-thumb-btn ${i === 0 ? 'is-active' : ''}" data-swap-img="wfa-prop-a-img-${item.id}" data-swap-cap="wfa-prop-a-cap-${item.id}" data-src="${img.image_url}" data-desc="${esc(img.image_description || afterCap)}">
+                  <img src="${img.image_url}" alt="After ${i + 1}">
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+          <span class="wfa-prop-pill is-after">AFTER</span>
+          <div class="wfa-prop-cap-title">${esc(item.proposed_technology || item.project_name || 'Digital Solution')}</div>
+          <div class="wfa-prop-cap-sub" id="wfa-prop-a-cap-${item.id}">${esc(afterCap)}</div>
+        </div>
+      </div>
+
+      <!-- รายละเอียดการปรับปรุง -->
+      <div class="wfa-prop-sec">
+        <h4 class="wfa-prop-sec-title">รายละเอียดการปรับปรุง</h4>
+        <div class="wfa-prop-detail-item">
+          <span class="wfa-prop-detail-lbl">Before</span>
+          <p class="wfa-prop-detail-text">${esc(item.current_description || '-')}${item.current_problem && item.current_problem !== item.current_description ? ` · ปัญหา: ${esc(item.current_problem)}` : ''}</p>
+        </div>
+        <div class="wfa-prop-detail-item">
+          <span class="wfa-prop-detail-lbl">After</span>
+          <p class="wfa-prop-detail-text">${esc(item.improvement_description || '-')}</p>
+        </div>
+      </div>
+
+      <!-- ผลลัพธ์ที่คาดหวัง -->
+      <div class="wfa-prop-sec">
+        <h4 class="wfa-prop-sec-title">ผลลัพธ์ที่คาดหวัง</h4>
+        <table class="wfa-prop-table">
+          <thead>
+            <tr>
+              <th>ตัวชี้วัด</th>
+              <th class="num">Before</th>
+              <th class="num">After</th>
+              <th class="num">ผลประหยัด</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>เวลาทำงาน</td>
+              <td class="num">${Number(item.time_before || 0).toLocaleString('th-TH')} นาที</td>
+              <td class="num">${Number(item.time_after || 0).toLocaleString('th-TH')} นาที</td>
+              <td class="num is-save">${tPct != null ? `ลดลง ${tPct}%` : 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>การใช้กระดาษ</td>
+              <td class="num">${Number(item.paper_before || 0).toLocaleString('th-TH')} แผ่น/เดือน</td>
+              <td class="num">${Number(item.paper_after || 0).toLocaleString('th-TH')} แผ่น/เดือน</td>
+              <td class="num is-save">${pPct != null ? `ลดลง ${pPct}%` : 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>ขั้นตอนการทำงาน</td>
+              <td class="num">${Number(item.steps_before || 0).toLocaleString('th-TH')} ขั้นตอน</td>
+              <td class="num">${Number(item.steps_after || 0).toLocaleString('th-TH')} ขั้นตอน</td>
+              <td class="num is-save">${sPct != null ? `ลดลง ${sPct}%` : 'N/A'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wfa-prop-foot">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <span class="wfa-prop-chip"><span class="material-symbols-rounded" style="font-size:14px">memory</span> ${esc(item.proposed_technology || '-')}</span>
+          ${(item.improvement_benefits || []).map((b) => `<span class="wfa-prop-chip">${esc(b)}</span>`).join('')}
+        </div>
+        <div>
+          ความยาก: <b>${esc(item.difficulty || '-')}</b> · งบประมาณ: <b>${esc(item.budget || '-')}</b>${item.frequency ? ` · ความถี่: <b>${esc(item.frequency)}</b>` : ''}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function wfaBindProposalThumbs(root) {
+  root.querySelectorAll('[data-swap-img]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const imgEl = $(btn.dataset.swapImg);
+      const capEl = $(btn.dataset.swapCap);
+      if (imgEl) imgEl.src = btn.dataset.src;
+      if (capEl && btn.dataset.desc) capEl.textContent = btn.dataset.desc;
+      btn.parentElement.querySelectorAll('.wfa-prop-thumb-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
+    };
+  });
+}
+
 // SMF: Transaction - Work Flow Automation Project View
-async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData, byMonth, projTabs) {
+async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmData, byMonth, projTabs) {
+  // Merge global logged-in user `me` (from core.js) with activity access `actMe`
+  const userMe = { ...(typeof me === 'object' && me ? me : {}), ...(actMe || {}) };
   let ideas = [];
   let stats = {};
   let depts = [];
   let showMonthlyTable = false;
+  let viewMode = 'proposal'; // 'proposal' (Image 2 style) or 'table'
   let teamMembers = [];
+
   try {
     const tData = await a5Api('smf', `team?year=${a5Year}`).catch(() => ({ members: [] }));
-    teamMembers = (tData.members || []).filter((m) => m.status === 'Active');
+    const seen = new Set();
+    for (const m of (tData.members || [])) {
+      if (m.status !== 'Active') continue;
+      const empId = String(m.employee_id || '').trim();
+      if (!empId || seen.has(empId)) continue;
+      seen.add(empId);
+      teamMembers.push({
+        employee_id: empId,
+        name: String(m.name || '').trim(),
+        department: String(m.department || '').trim(),
+        role: String(m.role || '').trim()
+      });
+    }
   } catch (_) {}
 
   const filter = {
@@ -77,7 +260,7 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
   };
 
   function render() {
-    const canEdit = Boolean(me.access?.admin || me.access?.member || me.access?.smart);
+    const canEdit = Boolean(userMe.access?.admin || userMe.access?.member || userMe.access?.smart);
     const targetCount = currentProj.target_count || 10;
     const implementedCount = stats.byStatus?.Implemented || 0;
     const totalSubmitted = ideas.length;
@@ -97,9 +280,81 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
       </tr>`;
     }).join('');
 
+    const contentHtml = !ideas.length
+      ? '<div class="card"><p class="empty">ยังไม่มีการส่งข้อมูลโปรเจค Work Flow Automation หรือไม่พบข้อมูลตามตัวกรอง · คลิก "+ ส่งข้อมูลโปรเจค" เพื่อส่งแนวคิดแรก</p></div>'
+      : viewMode === 'proposal'
+        ? `<div class="wfa-proposal-list">${ideas.map((item) => wfaProposalCardHtml(item, { showActions: true })).join('')}</div>`
+        : `
+          <div class="wfa-table-card card">
+            <div class="wfa-table-head" style="display:flex;justify-content:space-between;align-items:center">
+              <strong>รายการโปรเจค Work Flow Automation ที่สมาชิกส่ง (${ideas.length} เรื่อง)</strong>
+              <span class="sum-meta">คลิกแถวเพื่อดูรายละเอียด Improvement Proposal หรือประเมินสถานะ</span>
+            </div>
+            <div class="table-wrap sheet">
+              <table class="mo-data-table">
+                <thead>
+                  <tr>
+                    <th style="width:50px">ลำดับ</th>
+                    <th style="width:90px">วันที่ส่ง</th>
+                    <th>โปรเจคที่ดำเนินการ (AFTER)</th>
+                    <th>กระบวนการเดิม (BEFORE)</th>
+                    <th>ผู้เสนอ / แผนก</th>
+                    <th>เทคโนโลยี</th>
+                    <th>ผลประหยัด</th>
+                    <th>สถานะ</th>
+                    <th style="width:80px">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${ideas.map((item, idx) => {
+                    const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
+                    const tPct = item.time_saving_pct != null ? `${item.time_saving_pct}%` : null;
+                    const pPct = item.paper_reduction_pct != null ? `${item.paper_reduction_pct}%` : null;
+                    return `
+                      <tr data-pick-id="${item.id}" style="cursor:pointer">
+                        <td>${idx + 1}</td>
+                        <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
+                        <td><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
+                        <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
+                        <td>
+                          <div class="wfa-col-emp">
+                            <span>${esc(item.full_name)}</span>
+                            <small class="sum-meta">${esc(item.department || '-')}</small>
+                          </div>
+                        </td>
+                        <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
+                        <td>
+                          <div class="wfa-col-savings">
+                            ${tPct ? `<span class="wfa-saving-mini"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
+                            ${pPct ? `<span class="wfa-saving-mini is-paper"><span class="material-symbols-rounded">description</span>${pPct}</span>` : ''}
+                            ${!tPct && !pPct ? '<span class="sum-meta">-</span>' : ''}
+                          </div>
+                        </td>
+                        <td><span class="badge ${status.class}">${status.label}</span></td>
+                        <td>
+                          <div class="wfa-col-actions">
+                            <button class="btn btn-secondary small" type="button" data-act-view="${item.id}" title="ดูรายละเอียด">
+                              <span class="material-symbols-rounded">visibility</span>
+                            </button>
+                            ${item.can_edit ? `
+                              <button class="btn btn-danger small" type="button" data-act-del="${item.id}" title="ลบ">
+                                <span class="material-symbols-rounded">delete</span>
+                              </button>
+                            ` : ''}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
     target.innerHTML = `
       <div class="view-body"><section class="card">
-        ${pageBar(a5Seg('data-smfproj', projTabs, currentProj.id), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'smf')}
+        ${pageBar(a5Seg('data-smfproj', projTabs, currentProj.id), `<div class="a5-year">${a5YearSelect(userMe.years)}</div>`, 'smf')}
         <div id="smf-body" style="padding-top:12px;display:flex;flex-direction:column;gap:14px">
           
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
@@ -115,6 +370,10 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
             <div class="action-bar a5-actions" style="margin:0">
               <button class="btn btn-primary" type="button" id="wfa-btn-add">
                 <span class="material-symbols-rounded">add_circle</span> ส่งข้อมูลโปรเจค (6 ขั้นตอน)
+              </button>
+              <button class="btn btn-secondary" type="button" id="wfa-btn-viewmode">
+                <span class="material-symbols-rounded">${viewMode === 'proposal' ? 'table_rows' : 'view_agenda'}</span>
+                ${viewMode === 'proposal' ? 'มุมมองตาราง' : 'มุมมอง Proposal'}
               </button>
               <button class="btn btn-secondary" type="button" id="wfa-btn-export">
                 <span class="material-symbols-rounded">download</span> Export รายงาน (CSV)
@@ -186,78 +445,8 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
             </label>
           </div>
 
-          <!-- Project Submissions Table -->
-          <div class="wfa-table-card card">
-            <div class="wfa-table-head" style="display:flex;justify-content:space-between;align-items:center">
-              <strong>รายการโปรเจค Work Flow Automation ที่สมาชิกส่ง (${ideas.length} เรื่อง)</strong>
-              <span class="sum-meta">คลิกแถวเพื่อดูรายละเอียด Before-After คู่ขนาน หรือประเมินสถานะ</span>
-            </div>
-            <div class="table-wrap sheet">
-              ${ideas.length ? `
-                <table class="mo-data-table">
-                  <thead>
-                    <tr>
-                      <th style="width:50px">ลำดับ</th>
-                      <th style="width:90px">วันที่ส่ง</th>
-                      <th>โปรเจคที่ดำเนินการ (AFTER)</th>
-                      <th>กระบวนการเดิม (BEFORE)</th>
-                      <th>ผู้เสนอ / แผนก</th>
-                      <th>เทคโนโลยี</th>
-                      <th>ผลประหยัด</th>
-                      <th>สถานะ</th>
-                      <th style="width:80px">จัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${ideas.map((item, idx) => {
-                      const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
-                      const tPct = item.time_saving_pct != null ? `${item.time_saving_pct}%` : null;
-                      const pPct = item.paper_reduction_pct != null ? `${item.paper_reduction_pct}%` : null;
-                      return `
-                        <tr data-pick-id="${item.id}" style="cursor:pointer">
-                          <td>${idx + 1}</td>
-                          <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
-                          <td>
-                            <div class="wfa-col-title">
-                              <strong>${esc(item.project_name)}</strong>
-                            </div>
-                          </td>
-                          <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
-                          <td>
-                            <div class="wfa-col-emp">
-                              <span>${esc(item.full_name)}</span>
-                              <small class="sum-meta">${esc(item.department || '-')}</small>
-                            </div>
-                          </td>
-                          <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
-                          <td>
-                            <div class="wfa-col-savings">
-                              ${tPct ? `<span class="wfa-saving-mini"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
-                              ${pPct ? `<span class="wfa-saving-mini is-paper"><span class="material-symbols-rounded">description</span>${pPct}</span>` : ''}
-                              ${!tPct && !pPct ? '<span class="sum-meta">-</span>' : ''}
-                            </div>
-                          </td>
-                          <td><span class="badge ${status.class}">${status.label}</span></td>
-                          <td>
-                            <div class="wfa-col-actions">
-                              <button class="btn btn-secondary small" type="button" data-act-view="${item.id}" title="ดูรายละเอียด">
-                                <span class="material-symbols-rounded">visibility</span>
-                              </button>
-                              ${item.can_edit ? `
-                                <button class="btn btn-danger small" type="button" data-act-del="${item.id}" title="ลบ">
-                                  <span class="material-symbols-rounded">delete</span>
-                                </button>
-                              ` : ''}
-                            </div>
-                          </td>
-                        </tr>
-                      `;
-                    }).join('')}
-                  </tbody>
-                </table>
-              ` : '<p class="empty">ยังไม่มีการส่งข้อมูลโปรเจค Work Flow Automation หรือไม่พบข้อมูลตามตัวกรอง · คลิก "+ ส่งข้อมูลโปรเจค" เพื่อส่งแนวคิดแรก</p>'}
-            </div>
-          </div>
+          <!-- Project Submissions (Proposal Cards or Table) -->
+          ${contentHtml}
 
           <!-- Optional Collapsible 12-Month Target/Actual Table -->
           <div id="wfa-month-wrap" class="${showMonthlyTable ? '' : 'd-none'}" style="margin-top:10px">
@@ -314,7 +503,11 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
       };
     }
 
-    $('wfa-btn-add').onclick = () => wfaOpenSubmitWizard(me, loadData, teamMembers);
+    $('wfa-btn-add').onclick = () => wfaOpenSubmitWizard(userMe, loadData, teamMembers);
+    $('wfa-btn-viewmode').onclick = () => {
+      viewMode = viewMode === 'proposal' ? 'table' : 'proposal';
+      render();
+    };
     $('wfa-btn-export').onclick = () => window.open('/api/workflow/export', '_blank');
     $('wfa-btn-toggle-month').onclick = () => {
       showMonthlyTable = !showMonthlyTable;
@@ -326,6 +519,8 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
     $('wfa-flt-dept').onchange = () => { filter.department = $('wfa-flt-dept').value; loadData(); };
     $('wfa-flt-status').onchange = () => { filter.status = $('wfa-flt-status').value; loadData(); };
     $('wfa-flt-my').onchange = () => { filter.myOnly = $('wfa-flt-my').checked; loadData(); };
+
+    wfaBindProposalThumbs(target);
 
     target.querySelectorAll('[data-act-view]').forEach((node) => {
       node.onclick = (e) => {
@@ -351,7 +546,7 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
       node.onclick = () => wfaOpenDetail(Number(node.dataset.pickId), loadData);
     });
 
-    // 12-Month Table calculation & save handlers
+    // Monthly table calculations & save
     const numOf = (el) => (el.value !== '' && Number.isFinite(Number(el.value)) ? Number(el.value) : null);
     const recalc = () => {
       let tSum = 0, tCount = 0, aSum = 0, aCount = 0;
@@ -374,32 +569,32 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
       if ($('smf-sum-info')) $('smf-sum-info').textContent = `บันทึกแล้ว ${aCount}/12 เดือน`;
     };
 
+    target.querySelectorAll('.smf-target, .smf-actual').forEach((inp) => { inp.oninput = recalc; });
     recalc();
-    target.querySelector('#smf-rows').addEventListener('input', recalc);
 
     if ($('smf-copy-target')) {
       $('smf-copy-target').onclick = () => {
-        const firstTarget = target.querySelector('#smf-rows tr[data-month="1"] .smf-target').value;
-        if (firstTarget === '') return toast('กรุณากรอกเป้าหมายเดือนที่ 1 ก่อน', 'warn');
-        target.querySelectorAll('#smf-rows tr .smf-target').forEach((el) => { el.value = firstTarget; });
+        const first = target.querySelector('#smf-rows tr[data-month="1"] .smf-target');
+        if (!first || first.value === '') { toast('กรอกเป้าหมายเดือน 1 ก่อน', 'error'); return; }
+        target.querySelectorAll('#smf-rows .smf-target').forEach((inp) => { inp.value = first.value; });
         recalc();
-        toast('คัดลอกเป้าหมายไปทุกเดือนแล้ว');
+        toast('คัดลอกเป้าหมายเดือน 1 ไปทุกเดือนแล้ว');
       };
     }
 
     if ($('smf-save')) {
       $('smf-save').onclick = async () => {
-        const months = [...target.querySelectorAll('#smf-rows tr')].map((tr) => ({
+        const rows = [...target.querySelectorAll('#smf-rows tr')].map((tr) => ({
           month: Number(tr.dataset.month),
           target: numOf(tr.querySelector('.smf-target')),
           actual: numOf(tr.querySelector('.smf-actual')),
-          note: tr.querySelector('.smf-note').value || null
+          note: tr.querySelector('.smf-note').value.trim()
         }));
         try {
           $('smf-save').disabled = true;
-          await a5Api('smf', 'project-months', { method: 'PUT', body: { year: a5Year, projectId: currentProj.id, months } });
-          toast('บันทึกเป้าหมายและผลงานสำเร็จ');
-          loadData();
+          await a5Api('smf', 'project-months', { method: 'PUT', body: { year: a5Year, projectId: currentProj.id, rows } });
+          toast(`บันทึกข้อมูล ${currentProj.name} เรียบร้อย`);
+          rerender();
         } catch (err) {
           onErr(err);
         } finally {
@@ -413,15 +608,18 @@ async function wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData
 }
 
 // 6-Step Submission Wizard in Modal Popup
-function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
+function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
   let step = 1;
   const beforeImages = [];
   const afterImages = [];
 
+  const myEmpId = String(userMe?.employeeId || '').trim();
+  const matchedMember = teamMembers.find((m) => m.employee_id === myEmpId);
+
   const state = {
-    employee_id: me?.employeeId || '',
-    full_name: me?.name || '',
-    department: me?.department || '',
+    employee_id: myEmpId,
+    full_name: String(userMe?.name || matchedMember?.name || '').trim(),
+    department: String(userMe?.department || matchedMember?.department || '').trim(),
     process_name: '',
     current_description: '',
     current_problem: '',
@@ -438,7 +636,8 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
     steps_after: 0,
     difficulty: 'Medium',
     budget: 'Free',
-    project_status: 'Idea'
+    project_status: 'Idea',
+    admin_note: ''
   };
 
   const modalHtml = `
@@ -451,13 +650,13 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
           ['4', 'ประโยชน์', 'verified'],
           ['5', 'ผลลัพธ์', 'calculate'],
           ['6', 'ดำเนินการ', 'rocket_launch']
-        ].map(([sNum, sLabel, sIcon], idx) => {
+        ].map(([, sLabel, sIcon], idx) => {
           const num = idx + 1;
           const cls = num === step ? 'is-current' : num < step ? 'is-done' : '';
           return `
-            <div class="wfa-step-item ${cls}" data-wfa-step="${num}">
+            <div class="wfa-step-item ${cls}" data-wfa-step="${num}" title="ไปยังขั้นตอนที่ ${num}: ${sLabel}">
               <div class="wfa-step-circle">
-                ${num < step ? '<span class="material-symbols-rounded">check</span>' : `<span class="material-symbols-rounded">${sIcon}</span>`}
+                <span class="material-symbols-rounded">${sIcon}</span>
               </div>
               <div class="wfa-step-lbl">${sLabel}</div>
             </div>
@@ -468,18 +667,103 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
       <div class="wfa-step-body" id="wfa-wiz-body"></div>
 
       <div class="wfa-wizard-nav" style="margin-top:16px;border-top:1px solid var(--mo-line);padding-top:12px">
-        <button class="btn btn-secondary" type="button" id="wfa-wiz-prev" ${step === 1 ? 'disabled' : ''}>
+        <button class="btn btn-secondary" type="button" id="wfa-wiz-prev">
           <span class="material-symbols-rounded">chevron_left</span> ย้อนกลับ
         </button>
-        <div class="wfa-nav-spacer"></div>
-        <button class="btn btn-primary" type="button" id="wfa-wiz-next">
+        <div class="wfa-nav-spacer" style="text-align:center;font-size:12px;color:var(--mo-text-muted)" id="wfa-wiz-step-indicator"></div>
+        <button class="btn btn-secondary" type="button" id="wfa-wiz-next">
           ถัดไป <span class="material-symbols-rounded">chevron_right</span>
         </button>
       </div>
     </div>
   `;
 
-  openPopup('ส่งข้อมูลโปรเจค Work Flow Automation', modalHtml, null);
+  function saveCurrentStep() {
+    if (step === 1) {
+      if ($('wfa-empid')) state.employee_id = $('wfa-empid').value.trim();
+      if ($('wfa-name')) state.full_name = $('wfa-name').value.trim();
+      if ($('wfa-dept')) state.department = $('wfa-dept').value.trim();
+    } else if (step === 2) {
+      if ($('wfa-proc-name')) state.process_name = $('wfa-proc-name').value.trim();
+      if ($('wfa-proc-desc')) state.current_description = $('wfa-proc-desc').value.trim();
+      if ($('wfa-proc-prob')) state.current_problem = $('wfa-proc-prob').value.trim();
+      if ($('wfa-proc-freq')) state.frequency = $('wfa-proc-freq').value || state.frequency;
+    } else if (step === 3) {
+      if ($('wfa-proj-name')) state.project_name = $('wfa-proj-name').value.trim();
+      if ($('wfa-proj-desc')) state.improvement_description = $('wfa-proj-desc').value.trim();
+      if ($('wfa-proj-tech')) state.proposed_technology = $('wfa-proj-tech').value || state.proposed_technology;
+    } else if (step === 4) {
+      const chks = document.querySelectorAll('[name="wfa-benefit"]:checked');
+      if (chks.length || document.querySelector('[name="wfa-benefit"]')) {
+        state.improvement_benefits = Array.from(chks).map((n) => n.value);
+      }
+    } else if (step === 5) {
+      if ($('wfa-t-b')) state.time_before = Number($('wfa-t-b').value) || 0;
+      if ($('wfa-t-a')) state.time_after = Number($('wfa-t-a').value) || 0;
+      if ($('wfa-p-b')) state.paper_before = Number($('wfa-p-b').value) || 0;
+      if ($('wfa-p-a')) state.paper_after = Number($('wfa-p-a').value) || 0;
+      if ($('wfa-s-b')) state.steps_before = Number($('wfa-s-b').value) || 0;
+      if ($('wfa-s-a')) state.steps_after = Number($('wfa-s-a').value) || 0;
+    } else if (step === 6) {
+      if ($('wfa-remarks')) state.admin_note = $('wfa-remarks').value.trim();
+    }
+  }
+
+  // Validate only when clicking Save (บันทึก)
+  async function handleFinalSave() {
+    saveCurrentStep();
+
+    if (!state.full_name) {
+      step = 1;
+      renderStep();
+      $('wfa-name')?.focus();
+      throw new Error('กรุณาระบุชื่อ-นามสกุลผู้ส่ง (ขั้นตอนที่ 1)');
+    }
+    if (!state.process_name) {
+      step = 2;
+      renderStep();
+      $('wfa-proc-name')?.focus();
+      throw new Error('กรุณาระบุชื่อกระบวนการเดิมที่ต้องการปรับปรุง (ขั้นตอนที่ 2 BEFORE)');
+    }
+    if (!state.current_description) {
+      step = 2;
+      renderStep();
+      $('wfa-proc-desc')?.focus();
+      throw new Error('กรุณาอธิบายวิธีการทำงานปัจจุบัน (ขั้นตอนที่ 2 BEFORE)');
+    }
+    if (!state.current_problem) {
+      step = 2;
+      renderStep();
+      $('wfa-proc-prob')?.focus();
+      throw new Error('กรุณาระบุปัญหาที่พบในปัจจุบัน (ขั้นตอนที่ 2 BEFORE)');
+    }
+    if (!state.project_name) {
+      step = 3;
+      renderStep();
+      $('wfa-proj-name')?.focus();
+      throw new Error('กรุณาระบุชื่อแนวคิดหรือโครงการ (ขั้นตอนที่ 3 AFTER)');
+    }
+    if (!state.improvement_description) {
+      step = 3;
+      renderStep();
+      $('wfa-proj-desc')?.focus();
+      throw new Error('กรุณาระบุแนวทางการปรับปรุง (ขั้นตอนที่ 3 AFTER)');
+    }
+
+    const payload = {
+      ...state,
+      images: [...beforeImages, ...afterImages]
+    };
+
+    await api('/api/workflow/ideas', { method: 'POST', body: payload });
+    toast('บันทึกข้อมูลโปรเจค Work Flow Automation สำเร็จแล้ว');
+    closePopup();
+    if (onSuccess) onSuccess();
+  }
+
+  openPopup('ส่งข้อมูลโปรเจค Work Flow Automation', modalHtml, handleFinalSave, 'บันทึก');
+
+  let empLookupTimer = null;
 
   function renderStep() {
     const body = $('wfa-wiz-body');
@@ -492,49 +776,109 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
       item.classList.toggle('is-done', num < step);
     });
 
-    $('wfa-wiz-prev').disabled = step === 1;
-    $('wfa-wiz-next').innerHTML = step === 6
-      ? `<span class="material-symbols-rounded">send</span> ยืนยันและส่งแนวคิด`
-      : `ถัดไป <span class="material-symbols-rounded">chevron_right</span>`;
+    if ($('wfa-wiz-prev')) $('wfa-wiz-prev').disabled = step <= 1;
+    if ($('wfa-wiz-next')) $('wfa-wiz-next').disabled = step >= 6;
+    if ($('wfa-wiz-step-indicator')) $('wfa-wiz-step-indicator').textContent = `ขั้นตอนที่ ${step} / 6 · กดถัดไป/ย้อนกลับได้อิสระ และกด "บันทึก" เมื่อกรอกครบ`;
 
     if (step === 1) {
-      const memberOptions = (teamMembers || []).map((m) => `<option value="${esc(m.emp_id || '')}" data-name="${esc(m.name)}" data-dept="${esc(m.unit || '')}">${esc(m.name)} (${esc(m.unit || m.role || '-')}) - ${esc(m.emp_id || '-')}</option>`).join('');
+      const memberOptions = teamMembers.map((m) => {
+        const sel = m.employee_id === state.employee_id ? ' selected' : '';
+        return `<option value="${esc(m.employee_id)}" data-name="${esc(m.name)}" data-dept="${esc(m.department || '')}"${sel}>${esc(m.employee_id)} · ${esc(m.name)}${m.department ? ` (${esc(m.department)})` : ''}</option>`;
+      }).join('');
+
       body.innerHTML = `
         <div class="wfa-step-section">
           <div class="wfa-sec-badge">Section 01</div>
           <h3 style="margin:4px 0">ข้อมูลสมาชิกผู้ส่ง (Member Information)</h3>
           ${memberOptions ? `
           <div class="field" style="margin-bottom:12px">
-            <label>เลือกสมาชิกในทีม SMF (เพื่อกรอกข้อมูลอัตโนมัติ)</label>
-            <select id="wfa-pick-member" class="input">
+            <label>เลือกสมาชิกในทีม SMF (เชื่อมโยงรหัส ชื่อ และแผนกอัตโนมัติ)</label>
+            <select id="wfa-pick-member">
               <option value="">-- เลือกสมาชิกในทีม หรือกรอกเองด้านล่าง --</option>
               ${memberOptions}
             </select>
           </div>` : ''}
           <div class="wfa-form-grid">
-            ${field('รหัสพนักงาน', `<input id="wfa-empid" value="${esc(state.employee_id)}" placeholder="เช่น 2101999">`)}
-            ${field('ชื่อ-นามสกุล', `<input id="wfa-name" value="${esc(state.full_name)}" placeholder="เช่น นางสาว อัจฉรา โสกาบุญ">`)}
-            ${field('แผนก / หน่วยงาน', `<input id="wfa-dept" value="${esc(state.department)}" placeholder="เช่น PLN & STO">`)}
+            ${field('รหัสพนักงาน', `<input id="wfa-empid" value="${esc(state.employee_id)}" placeholder="เช่น 2101999" autocomplete="off">`)}
+            ${field('ชื่อ-นามสกุล *', `<input id="wfa-name" value="${esc(state.full_name)}" placeholder="เช่น นางสาว อัจฉรา โสกาบุญ" autocomplete="off">`)}
+            ${field('แผนก / หน่วยงาน', `<input id="wfa-dept" value="${esc(state.department)}" placeholder="เช่น PLN & STO" autocomplete="off">`)}
             ${field('วันที่ส่ง', `<input value="${new Date().toLocaleDateString('th-TH')}" readonly class="is-locked">`)}
           </div>
         </div>
       `;
+
+      const applyPerson = (empId, name, dept) => {
+        state.employee_id = String(empId || '').trim();
+        state.full_name = String(name || '').trim();
+        state.department = String(dept || '').trim();
+        if ($('wfa-empid') && document.activeElement !== $('wfa-empid')) $('wfa-empid').value = state.employee_id;
+        if ($('wfa-name') && document.activeElement !== $('wfa-name')) $('wfa-name').value = state.full_name;
+        if ($('wfa-dept') && document.activeElement !== $('wfa-dept')) $('wfa-dept').value = state.department;
+        if ($('wfa-pick-member')) {
+          const matchOpt = [...$('wfa-pick-member').options].find((o) => o.value === state.employee_id);
+          $('wfa-pick-member').value = matchOpt ? state.employee_id : '';
+        }
+      };
+
       if ($('wfa-pick-member')) {
         $('wfa-pick-member').onchange = () => {
-          const opt = $('wfa-pick-member').selectedOptions[0];
-          if (opt && opt.value) {
-            state.employee_id = opt.value;
-            state.full_name = opt.dataset.name || '';
-            state.department = opt.dataset.dept || '';
+          const empId = $('wfa-pick-member').value;
+          const found = teamMembers.find((m) => m.employee_id === empId);
+          if (found) {
+            state.employee_id = found.employee_id;
+            state.full_name = found.name;
+            state.department = found.department;
             if ($('wfa-empid')) $('wfa-empid').value = state.employee_id;
             if ($('wfa-name')) $('wfa-name').value = state.full_name;
             if ($('wfa-dept')) $('wfa-dept').value = state.department;
           }
         };
       }
-      if ($('wfa-empid')) $('wfa-empid').oninput = () => { state.employee_id = $('wfa-empid').value.trim(); };
-      if ($('wfa-name')) $('wfa-name').oninput = () => { state.full_name = $('wfa-name').value.trim(); };
-      if ($('wfa-dept')) $('wfa-dept').oninput = () => { state.department = $('wfa-dept').value.trim(); };
+
+      if ($('wfa-empid')) {
+        $('wfa-empid').oninput = () => {
+          const val = $('wfa-empid').value.trim();
+          state.employee_id = val;
+          // 1. Check SMF team members immediately
+          const hit = teamMembers.find((m) => m.employee_id === val);
+          if (hit) {
+            applyPerson(hit.employee_id, hit.name, hit.department);
+            return;
+          }
+          // 2. Query employee master if 5+ chars typed
+          clearTimeout(empLookupTimer);
+          if (val.length >= 5) {
+            empLookupTimer = setTimeout(async () => {
+              try {
+                const res = await a5Api('smf', `employees?year=${a5Year}&q=${encodeURIComponent(val)}`);
+                const exact = (res.employees || []).find((p) => String(p.employeeId) === val);
+                if (exact && $('wfa-empid')?.value.trim() === val) {
+                  applyPerson(exact.employeeId, exact.name, exact.department);
+                }
+              } catch (_) {}
+            }, 250);
+          }
+        };
+      }
+
+      if ($('wfa-name')) {
+        $('wfa-name').oninput = () => {
+          const val = $('wfa-name').value.trim();
+          state.full_name = val;
+          const hit = teamMembers.find((m) => m.name === val);
+          if (hit) {
+            state.employee_id = hit.employee_id;
+            state.department = hit.department || state.department;
+            if ($('wfa-empid')) $('wfa-empid').value = state.employee_id;
+            if ($('wfa-dept')) $('wfa-dept').value = state.department;
+            if ($('wfa-pick-member')) $('wfa-pick-member').value = hit.employee_id;
+          }
+        };
+      }
+
+      if ($('wfa-dept')) {
+        $('wfa-dept').oninput = () => { state.department = $('wfa-dept').value.trim(); };
+      }
     } else if (step === 2) {
       body.innerHTML = `
         <div class="wfa-step-section">
@@ -543,15 +887,15 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
           
           <div class="field">
             <label class="required">ชื่อกระบวนการที่ต้องการปรับปรุง (Process Name)</label>
-            <input id="wfa-proc-name" maxlength="200" value="${esc(state.process_name)}" placeholder="เช่น การบันทึกผลตรวจสอบชิ้นงาน, เอกสารเบิกจ่ายชิ้นส่วน">
+            <input id="wfa-proc-name" maxlength="200" value="${esc(state.process_name)}" placeholder="เช่น Paper Checklist, การบันทึกผลตรวจสอบชิ้นงาน">
           </div>
           <div class="field">
             <label class="required">อธิบายวิธีการทำงานปัจจุบัน</label>
-            <textarea id="wfa-proc-desc" rows="2" placeholder="อธิบายขั้นตอนการทำงานเดิมที่เป็นปัญหาหรือเป็นกระดาษ">${esc(state.current_description)}</textarea>
+            <textarea id="wfa-proc-desc" rows="2" placeholder="เช่น ต้องพิมพ์ใบตรวจสอบเครื่องจักรทุกวัน พนักงานเขียนข้อมูลและส่งให้หัวหน้าเซ็นอนุมัติ">${esc(state.current_description)}</textarea>
           </div>
           <div class="field">
-            <label class="required">ปัญหาที่พบ (Current Problem)</label>
-            <textarea id="wfa-proc-prob" rows="2" placeholder="เช่น ใช้เวลานาน, เอกสารหาย, คีย์ซ้ำซ้อน">${esc(state.current_problem)}</textarea>
+            <label class="required">ปัญหาที่พบ / คำอธิบายใต้ภาพ Before (Current Problem)</label>
+            <textarea id="wfa-proc-prob" rows="2" placeholder="เช่น กรอกกระดาษ ส่งเอกสาร และจัดเก็บแฟ้ม ใช้เวลานาน">${esc(state.current_problem)}</textarea>
           </div>
           <div class="field">
             <label>ความถี่ในการทำงาน</label>
@@ -562,19 +906,24 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
 
           <div class="wfa-img-upload-sec">
             <div class="wfa-img-upload-head">
-              <strong>แนบรูปภาพ Before (เอกสาร/สภาพปัญหา)</strong>
-              <span class="sum-meta">JPG, PNG (เลือกได้หลายรูป)</span>
+              <strong>แนบรูปภาพ Before (อัตราส่วน 16:9 เท่านั้น)</strong>
+              <span class="sum-meta">JPG, PNG · ระบบครอปอัตราส่วน 16:9 อัตโนมัติ</span>
             </div>
             <div class="wfa-img-grid" id="wfa-before-imgs"></div>
             <div class="wfa-file-drop">
               <input type="file" id="wfa-file-before" accept="image/jpeg,image/png,image/jpg" multiple class="d-none">
-              <button class="btn btn-secondary small" type="button" onclick="$('wfa-file-before').click()">
-                <span class="material-symbols-rounded">upload_file</span> เลือกรูป Before
+              <button class="btn btn-secondary small" type="button" id="wfa-btn-pick-before">
+                <span class="material-symbols-rounded">upload_file</span> เลือกรูป Before (16:9)
               </button>
             </div>
           </div>
         </div>
       `;
+      $('wfa-proc-name').oninput = () => { state.process_name = $('wfa-proc-name').value.trim(); };
+      $('wfa-proc-desc').oninput = () => { state.current_description = $('wfa-proc-desc').value.trim(); };
+      $('wfa-proc-prob').oninput = () => { state.current_problem = $('wfa-proc-prob').value.trim(); };
+      $('wfa-proc-freq').onchange = () => { state.frequency = $('wfa-proc-freq').value; };
+      $('wfa-btn-pick-before').onclick = () => $('wfa-file-before').click();
       renderImageList('wfa-before-imgs', beforeImages, 'BEFORE');
       $('wfa-file-before').onchange = (e) => handleFileUpload(e, beforeImages, 'wfa-before-imgs', 'BEFORE');
     } else if (step === 3) {
@@ -585,11 +934,11 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
 
           <div class="field">
             <label class="required">ชื่อแนวคิดหรือโครงการ (Project Name)</label>
-            <input id="wfa-proj-name" maxlength="200" value="${esc(state.project_name)}" placeholder="เช่น Digital QC Inspection Sheet, Online Parts Requisition">
+            <input id="wfa-proj-name" maxlength="200" value="${esc(state.project_name)}" placeholder="เช่น Digital Maintenance Checklist">
           </div>
           <div class="field">
             <label class="required">แนวทางการปรับปรุง</label>
-            <textarea id="wfa-proj-desc" rows="2" placeholder="อธิบายระบบหรือโซลูชันที่จะนำมาใช้">${esc(state.improvement_description)}</textarea>
+            <textarea id="wfa-proj-desc" rows="2" placeholder="เช่น ใช้ QR Code เปิด Web App กรอกข้อมูล ตรวจสอบ และจัดเก็บในฐานข้อมูลอัตโนมัติ">${esc(state.improvement_description)}</textarea>
           </div>
           <div class="field">
             <label>เครื่องมือ / เทคโนโลยีที่ต้องการใช้</label>
@@ -600,19 +949,23 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
 
           <div class="wfa-img-upload-sec">
             <div class="wfa-img-upload-head">
-              <strong>แนบรูปภาพ After (Flowchart, Mockup, แนวคิด)</strong>
-              <span class="sum-meta">JPG, PNG</span>
+              <strong>แนบรูปภาพ After (อัตราส่วน 16:9 เท่านั้น)</strong>
+              <span class="sum-meta">JPG, PNG · ระบบครอปอัตราส่วน 16:9 อัตโนมัติ</span>
             </div>
             <div class="wfa-img-grid" id="wfa-after-imgs"></div>
             <div class="wfa-file-drop">
               <input type="file" id="wfa-file-after" accept="image/jpeg,image/png,image/jpg" multiple class="d-none">
-              <button class="btn btn-secondary small" type="button" onclick="$('wfa-file-after').click()">
-                <span class="material-symbols-rounded">add_photo_alternate</span> เลือกรูป After
+              <button class="btn btn-secondary small" type="button" id="wfa-btn-pick-after">
+                <span class="material-symbols-rounded">add_photo_alternate</span> เลือกรูป After (16:9)
               </button>
             </div>
           </div>
         </div>
       `;
+      $('wfa-proj-name').oninput = () => { state.project_name = $('wfa-proj-name').value.trim(); };
+      $('wfa-proj-desc').oninput = () => { state.improvement_description = $('wfa-proj-desc').value.trim(); };
+      $('wfa-proj-tech').onchange = () => { state.proposed_technology = $('wfa-proj-tech').value; };
+      $('wfa-btn-pick-after').onclick = () => $('wfa-file-after').click();
       renderImageList('wfa-after-imgs', afterImages, 'AFTER');
       $('wfa-file-after').onchange = (e) => handleFileUpload(e, afterImages, 'wfa-after-imgs', 'AFTER');
     } else if (step === 4) {
@@ -628,7 +981,10 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
                 <label class="wfa-benefit-card ${checked ? 'is-selected' : ''}">
                   <input type="checkbox" name="wfa-benefit" value="${esc(b.label)}" ${checked ? 'checked' : ''}>
                   <span class="material-symbols-rounded wfa-benefit-icon">${b.icon}</span>
-                  <strong>${esc(b.label)}</strong>
+                  <div>
+                    <strong>${esc(b.label)}</strong>
+                    <div class="sum-meta">${esc(b.th)}</div>
+                  </div>
                 </label>
               `;
             }).join('')}
@@ -636,7 +992,10 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
         </div>
       `;
       body.querySelectorAll('[name="wfa-benefit"]').forEach((chk) => {
-        chk.onchange = () => chk.closest('.wfa-benefit-card').classList.toggle('is-selected', chk.checked);
+        chk.onchange = () => {
+          chk.closest('.wfa-benefit-card').classList.toggle('is-selected', chk.checked);
+          state.improvement_benefits = Array.from(body.querySelectorAll('[name="wfa-benefit"]:checked')).map((n) => n.value);
+        };
       });
     } else if (step === 5) {
       const tPct = wfaCalcReduction(state.time_before, state.time_after);
@@ -744,16 +1103,24 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
           </div>
 
           <div class="field">
+            <label>สถานะโครงการเริ่มต้น</label>
+            <select id="wfa-init-status">
+              ${options(['Idea', 'Prototype', 'Testing', 'Implemented'], state.project_status, (v) => WFA_STATUS_BADGES[v]?.label || v)}
+            </select>
+          </div>
+
+          <div class="field">
             <label>หมายเหตุเพิ่มเติม (ถ้ามี)</label>
             <textarea id="wfa-remarks" rows="2" placeholder="ระบุผู้เกี่ยวข้องหรือข้อคิดเห็น">${esc(state.admin_note || '')}</textarea>
           </div>
 
           <div class="wfa-summary-box">
-            <div class="wfa-sum-title">สรุปข้อมูลที่จะส่ง:</div>
-            <div class="wfa-sum-row"><span>ชื่อโปรเจค:</span><b>${esc(state.project_name || '-')}</b></div>
-            <div class="wfa-sum-row"><span>กระบวนการเดิม:</span><b>${esc(state.process_name || '-')}</b></div>
+            <div class="wfa-sum-title">สรุปข้อมูลก่อนกดปุ่ม "บันทึก":</div>
+            <div class="wfa-sum-row"><span>ผู้ส่ง:</span><b>${esc(state.full_name || '-')} (${esc(state.department || '-')})</b></div>
+            <div class="wfa-sum-row"><span>ชื่อโปรเจค (After):</span><b>${esc(state.project_name || '-')}</b></div>
+            <div class="wfa-sum-row"><span>กระบวนการเดิม (Before):</span><b>${esc(state.process_name || '-')}</b></div>
             <div class="wfa-sum-row"><span>เทคโนโลยี:</span><b>${esc(state.proposed_technology)}</b></div>
-            <div class="wfa-sum-row"><span>รูปภาพ:</span><b>Before ${beforeImages.length} รูป · After ${afterImages.length} รูป</b></div>
+            <div class="wfa-sum-row"><span>รูปภาพ (16:9):</span><b>Before ${beforeImages.length} รูป · After ${afterImages.length} รูป</b></div>
           </div>
         </div>
       `;
@@ -770,6 +1137,12 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
           body.querySelectorAll('[name="wfa-budget"]').forEach((n) => n.closest('.wfa-radio-pill').classList.toggle('is-selected', n.checked));
         };
       });
+      if ($('wfa-init-status')) {
+        $('wfa-init-status').onchange = () => { state.project_status = $('wfa-init-status').value; };
+      }
+      if ($('wfa-remarks')) {
+        $('wfa-remarks').oninput = () => { state.admin_note = $('wfa-remarks').value.trim(); };
+      }
     }
   }
 
@@ -777,15 +1150,15 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
     const wrap = $(containerId);
     if (!wrap) return;
     if (!list.length) {
-      wrap.innerHTML = `<p class="sum-meta">ยังไม่มีรูปภาพแนบ</p>`;
+      wrap.innerHTML = `<p class="sum-meta">ยังไม่มีรูปภาพแนบ (อัตราส่วน 16:9)</p>`;
       return;
     }
     wrap.innerHTML = list.map((img, idx) => `
       <div class="wfa-img-thumb-box">
         <div class="wfa-img-thumb" style="background-image:url('${img.image_url}')">
-          <button class="wfa-img-del" type="button" data-del-img="${idx}">×</button>
+          <button class="wfa-img-del" type="button" data-del-img="${idx}" title="ลบรูป">×</button>
         </div>
-        <input class="wfa-img-desc-input" value="${esc(img.image_description || '')}" placeholder="คำอธิบายภาพ" data-desc-img="${idx}">
+        <input class="wfa-img-desc-input" value="${esc(img.image_description || '')}" placeholder="คำอธิบายใต้ภาพ ${type}" data-desc-img="${idx}">
       </div>
     `).join('');
 
@@ -802,108 +1175,28 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
     });
   }
 
-  function handleFileUpload(e, list, containerId, type) {
+  // Strictly 16:9 center-crop using cropJpeg(file, 1280, 720)
+  async function handleFileUpload(e, list, containerId, type) {
     const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    files.forEach((file) => {
-      if (!file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const img = new Image();
-        img.onload = () => {
-          const max = 1280;
-          let w = img.width;
-          let h = img.height;
-          if (w > max || h > max) {
-            if (w > h) { h = Math.round((h * max) / w); w = max; }
-            else { w = Math.round((w * max) / h); h = max; }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, w, h);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-          list.push({
-            image_type: type,
-            image_url: dataUrl,
-            image_description: file.name.replace(/\.[^.]+$/, '')
-          });
-          renderImageList(containerId, list, type);
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
     e.target.value = '';
-  }
-
-  function saveCurrentStep() {
-    if (step === 1) {
-      state.employee_id = $('wfa-empid')?.value.trim() || state.employee_id;
-      state.full_name = $('wfa-name')?.value.trim() || state.full_name;
-      state.department = $('wfa-dept')?.value.trim() || state.department;
-    } else if (step === 2) {
-      state.process_name = $('wfa-proc-name')?.value.trim() || '';
-      state.current_description = $('wfa-proc-desc')?.value.trim() || '';
-      state.current_problem = $('wfa-proc-prob')?.value.trim() || '';
-      state.frequency = $('wfa-proc-freq')?.value || state.frequency;
-    } else if (step === 3) {
-      state.project_name = $('wfa-proj-name')?.value.trim() || '';
-      state.improvement_description = $('wfa-proj-desc')?.value.trim() || '';
-      state.proposed_technology = $('wfa-proj-tech')?.value || state.proposed_technology;
-    } else if (step === 4) {
-      state.improvement_benefits = Array.from(document.querySelectorAll('[name="wfa-benefit"]:checked')).map((n) => n.value);
-    } else if (step === 5) {
-      state.time_before = Number($('wfa-t-b')?.value) || 0;
-      state.time_after = Number($('wfa-t-a')?.value) || 0;
-      state.paper_before = Number($('wfa-p-b')?.value) || 0;
-      state.paper_after = Number($('wfa-p-a')?.value) || 0;
-      state.steps_before = Number($('wfa-s-b')?.value) || 0;
-      state.steps_after = Number($('wfa-s-a')?.value) || 0;
-    } else if (step === 6) {
-      state.admin_note = $('wfa-remarks')?.value.trim() || '';
-    }
-  }
-
-  function validateCurrentStep() {
-    if (step === 1) {
-      if (!$('wfa-name')?.value.trim()) {
-        toast('กรุณาระบุชื่อ-นามสกุลผู้ส่ง หรือเลือกจากรายชื่อ', 'error');
-        $('wfa-name')?.focus();
-        return false;
-      }
-    } else if (step === 2) {
-      if (!$('wfa-proc-name')?.value.trim()) {
-        toast('กรุณาระบุชื่อกระบวนการที่ต้องการปรับปรุง', 'error');
-        $('wfa-proc-name')?.focus();
-        return false;
-      }
-      if (!$('wfa-proc-desc')?.value.trim()) {
-        toast('กรุณาอธิบายวิธีการทำงานปัจจุบัน', 'error');
-        $('wfa-proc-desc')?.focus();
-        return false;
-      }
-      if (!$('wfa-proc-prob')?.value.trim()) {
-        toast('กรุณาระบุปัญหาที่พบในปัจจุบัน', 'error');
-        $('wfa-proc-prob')?.focus();
-        return false;
-      }
-    } else if (step === 3) {
-      if (!$('wfa-proj-name')?.value.trim()) {
-        toast('กรุณาระบุชื่อแนวคิดหรือโครงการ', 'error');
-        $('wfa-proj-name')?.focus();
-        return false;
-      }
-      if (!$('wfa-proj-desc')?.value.trim()) {
-        toast('กรุณาระบุแนวทางการปรับปรุง', 'error');
-        $('wfa-proj-desc')?.focus();
-        return false;
+    if (!files.length) return;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const dataUrl = await cropJpeg(file, 1280, 720);
+        list.push({
+          image_type: type,
+          image_url: dataUrl,
+          image_description: ''
+        });
+        renderImageList(containerId, list, type);
+      } catch (err) {
+        toast(err.message || 'เปิดรูปไม่ได้', 'error');
       }
     }
-    return true;
   }
 
+  // Free navigation without blocking validation
   $('wfa-wiz-prev').onclick = () => {
     saveCurrentStep();
     if (step > 1) {
@@ -912,40 +1205,26 @@ function wfaOpenSubmitWizard(me, onSuccess, teamMembers = []) {
     }
   };
 
-  $('wfa-wiz-next').onclick = async () => {
-    if (!validateCurrentStep()) return;
+  $('wfa-wiz-next').onclick = () => {
     saveCurrentStep();
     if (step < 6) {
       step++;
       renderStep();
-      return;
-    }
-
-    // Submit step 6
-    try {
-      $('wfa-wiz-next').disabled = true;
-      $('wfa-wiz-next').innerHTML = `<span class="material-symbols-rounded">sync</span> กำลังบันทึก...`;
-
-      const payload = {
-        ...state,
-        images: [...beforeImages, ...afterImages]
-      };
-
-      await api('/api/workflow/ideas', { method: 'POST', body: payload });
-      toast('ส่งข้อมูลโปรเจค Work Flow Automation สำเร็จแล้ว');
-      closePopup();
-      if (onSuccess) onSuccess();
-    } catch (err) {
-      toast(err.message, 'error');
-      $('wfa-wiz-next').disabled = false;
-      $('wfa-wiz-next').innerHTML = `<span class="material-symbols-rounded">send</span> ยืนยันและส่งแนวคิด`;
     }
   };
+
+  document.querySelectorAll('[data-wfa-step]').forEach((node) => {
+    node.onclick = () => {
+      saveCurrentStep();
+      step = Number(node.dataset.wfaStep) || 1;
+      renderStep();
+    };
+  });
 
   renderStep();
 }
 
-// Modal Detail View with Before vs After Comparison & Admin Evaluation
+// Modal Detail View with Image 2 Improvement Proposal Layout & Admin Evaluation
 async function wfaOpenDetail(id, onRefresh) {
   let data;
   try {
@@ -956,153 +1235,17 @@ async function wfaOpenDetail(id, onRefresh) {
   }
 
   const { idea, images, evaluations } = data;
-  const beforeImgs = images.filter((img) => img.image_type === 'BEFORE');
-  const afterImgs = images.filter((img) => img.image_type === 'AFTER');
-  const status = WFA_STATUS_BADGES[idea.project_status] || WFA_STATUS_BADGES.Idea;
+  const fullIdea = { ...idea, images: images || [] };
 
   const html = `
     <div class="wfa-modal-detail">
-      <div class="wfa-detail-banner">
-        <div class="wfa-detail-head">
-          <div>
-            <span class="badge ${status.class}">${status.label}</span>
-            <h2 class="wfa-detail-title">${esc(idea.project_name)}</h2>
-            <p class="sum-meta">ผู้เสนอ: ${esc(idea.full_name)} (${esc(idea.employee_id)}) · แผนก ${esc(idea.department || '-')} · วันที่ ${idea.created_at ? new Date(idea.created_at).toLocaleDateString('th-TH') : ''}</p>
-          </div>
-          <div class="wfa-detail-tech">
-            <span class="wfa-tech-chip"><span class="material-symbols-rounded">memory</span> ${esc(idea.proposed_technology || '-')}</span>
-          </div>
-        </div>
-      </div>
+      ${wfaProposalCardHtml(fullIdea, { showActions: false })}
 
-      <div class="wfa-comp-grid">
-        <!-- BEFORE Column -->
-        <div class="wfa-comp-col is-before">
-          <div class="wfa-comp-header">
-            <span class="material-symbols-rounded">history</span>
-            <strong>BEFORE (กระบวนการเดิม)</strong>
-          </div>
-          <div class="wfa-comp-body">
-            <div class="wfa-field-pair">
-              <span>กระบวนการ:</span>
-              <b>${esc(idea.process_name)}</b>
-            </div>
-            <div class="wfa-field-pair">
-              <span>ความถี่:</span>
-              <b>${esc(idea.frequency || '-')}</b>
-            </div>
-            <div class="wfa-comp-text-box">
-              <small>วิธีการทำงานปัจจุบัน:</small>
-              <p>${esc(idea.current_description || '-')}</p>
-            </div>
-            <div class="wfa-comp-text-box is-problem">
-              <small>ปัญหาที่พบ:</small>
-              <p>${esc(idea.current_problem || '-')}</p>
-            </div>
-
-            <div class="wfa-comp-metrics">
-              <div class="wfa-metric-col">
-                <span class="sum-meta">เวลาทำงาน</span>
-                <strong>${idea.time_before || 0} นาที</strong>
-              </div>
-              <div class="wfa-metric-col">
-                <span class="sum-meta">ใช้กระดาษ</span>
-                <strong>${idea.paper_before || 0} แผ่น/ด</strong>
-              </div>
-              <div class="wfa-metric-col">
-                <span class="sum-meta">ขั้นตอน</span>
-                <strong>${idea.steps_before || 0} ขั้น</strong>
-              </div>
-            </div>
-
-            <div class="wfa-comp-gallery">
-              <small class="sum-meta">รูปภาพกระบวนการเดิม (${beforeImgs.length} รูป):</small>
-              <div class="wfa-gallery-thumbs">
-                ${beforeImgs.map((img) => `
-                  <a href="${img.image_url}" target="_blank" class="wfa-gallery-link" title="${esc(img.image_description || '')}">
-                    <img src="${img.image_url}" alt="Before photo">
-                    ${img.image_description ? `<span>${esc(img.image_description)}</span>` : ''}
-                  </a>
-                `).join('') || '<p class="sum-meta">ไม่มีรูปภาพแนบ</p>'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- AFTER Column -->
-        <div class="wfa-comp-col is-after">
-          <div class="wfa-comp-header">
-            <span class="material-symbols-rounded">lightbulb</span>
-            <strong>AFTER (แนวทางการปรับปรุง)</strong>
-          </div>
-          <div class="wfa-comp-body">
-            <div class="wfa-field-pair">
-              <span>โครงการ:</span>
-              <b>${esc(idea.project_name)}</b>
-            </div>
-            <div class="wfa-field-pair">
-              <span>เทคโนโลยี:</span>
-              <b>${esc(idea.proposed_technology || '-')}</b>
-            </div>
-            <div class="wfa-comp-text-box">
-              <small>แนวทางการปรับปรุง:</small>
-              <p>${esc(idea.improvement_description || '-')}</p>
-            </div>
-
-            <div class="wfa-comp-metrics is-green">
-              <div class="wfa-metric-col">
-                <span class="sum-meta">เวลาทำงาน</span>
-                <strong>${idea.time_after || 0} นาที</strong>
-                ${idea.time_saving_pct != null ? `<span class="wfa-pct-tag">ลด ${idea.time_saving_pct}%</span>` : ''}
-              </div>
-              <div class="wfa-metric-col">
-                <span class="sum-meta">ใช้กระดาษ</span>
-                <strong>${idea.paper_after || 0} แผ่น/ด</strong>
-                ${idea.paper_reduction_pct != null ? `<span class="wfa-pct-tag">ลด ${idea.paper_reduction_pct}%</span>` : ''}
-              </div>
-              <div class="wfa-metric-col">
-                <span class="sum-meta">ขั้นตอน</span>
-                <strong>${idea.steps_after || 0} ขั้น</strong>
-                ${idea.steps_reduction_pct != null ? `<span class="wfa-pct-tag">ลด ${idea.steps_reduction_pct}%</span>` : ''}
-              </div>
-            </div>
-
-            <div class="wfa-comp-gallery">
-              <small class="sum-meta">รูปภาพแนวคิด / ภาพจำลอง (${afterImgs.length} รูป):</small>
-              <div class="wfa-gallery-thumbs">
-                ${afterImgs.map((img) => `
-                  <a href="${img.image_url}" target="_blank" class="wfa-gallery-link" title="${esc(img.image_description || '')}">
-                    <img src="${img.image_url}" alt="After photo">
-                    ${img.image_description ? `<span>${esc(img.image_description)}</span>` : ''}
-                  </a>
-                `).join('') || '<p class="sum-meta">ไม่มีรูปภาพแนบ</p>'}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Benefits Section -->
-      <div class="wfa-detail-sec">
-        <strong>ประโยชน์ที่ได้รับ:</strong>
-        <div class="wfa-chips-wrap">
-          ${(idea.improvement_benefits || []).map((b) => `<span class="wfa-benefit-tag"><span class="material-symbols-rounded">check</span> ${esc(b)}</span>`).join('') || '<span class="sum-meta">-</span>'}
-        </div>
-      </div>
-
-      <!-- Implementation Meta -->
-      <div class="wfa-meta-bar">
-        <div><span>ระดับความยาก:</span> <b>${esc(idea.difficulty || '-')}</b></div>
-        <div><span>งบประมาณ:</span> <b>${esc(idea.budget || '-')}</b></div>
-        <div><span>อัปเดตล่าสุด:</span> <b>${idea.updated_at ? new Date(idea.updated_at).toLocaleString('th-TH') : '-'}</b></div>
-      </div>
-
-      <!-- Admin Evaluation Box -->
       ${idea.can_evaluate ? `
         <div class="wfa-eval-box">
           <div class="wfa-eval-head">
             <span class="material-symbols-rounded">admin_panel_settings</span>
-            <strong>ส่วนประเมินโครงการสำหรับ Admin</strong>
+            <strong>ส่วนประเมินและอัปเดตสถานะโครงการ (Admin)</strong>
           </div>
           <div class="wfa-eval-form">
             <div class="field">
@@ -1115,7 +1258,6 @@ async function wfaOpenDetail(id, onRefresh) {
               <label>ข้อคิดเห็น / คำแนะนำจาก Admin</label>
               <textarea id="wfa-eval-note" rows="2" placeholder="ใส่ข้อเสนอแนะหรือผลการพิจารณา">${esc(idea.admin_note || '')}</textarea>
             </div>
-            <button class="btn btn-primary" type="button" id="wfa-btn-save-eval">บันทึกผลการประเมิน</button>
           </div>
 
           ${evaluations.length ? `
@@ -1124,7 +1266,7 @@ async function wfaOpenDetail(id, onRefresh) {
               <ul>
                 ${evaluations.map((ev) => `
                   <li>
-                    <span>${ev.admin_id} · สถานะ: <b>${ev.evaluation_status}</b></span>
+                    <span>${esc(ev.admin_id)} · สถานะ: <b>${esc(ev.evaluation_status)}</b></span>
                     <small>${ev.created_at ? new Date(ev.created_at).toLocaleString('th-TH') : ''}</small>
                     ${ev.evaluation_note ? `<p>${esc(ev.evaluation_note)}</p>` : ''}
                   </li>
@@ -1137,22 +1279,22 @@ async function wfaOpenDetail(id, onRefresh) {
     </div>
   `;
 
-  openPopup(`รายละเอียดโครงการ #${idea.id}`, html, null);
-
-  if ($('wfa-btn-save-eval')) {
-    $('wfa-btn-save-eval').onclick = async () => {
-      try {
-        const payload = {
-          project_status: $('wfa-eval-status').value,
-          admin_note: $('wfa-eval-note').value.trim()
-        };
-        await api(`/api/workflow/ideas/${idea.id}/evaluate`, { method: 'POST', body: payload });
-        toast('บันทึกผลการประเมินเรียบร้อย');
-        closePopup();
-        if (onRefresh) onRefresh();
-      } catch (err) {
-        toast(err.message, 'error');
-      }
-    };
+  if (idea.can_evaluate) {
+    openPopup(`Improvement Proposal #${idea.id}`, html, async () => {
+      const payload = {
+        project_status: $('wfa-eval-status').value,
+        admin_note: $('wfa-eval-note').value.trim()
+      };
+      await api(`/api/workflow/ideas/${idea.id}/evaluate`, { method: 'POST', body: payload });
+      toast('บันทึกผลการประเมินเรียบร้อย');
+      closePopup();
+      if (onRefresh) onRefresh();
+    }, 'บันทึกผลประเมิน');
+  } else {
+    openPopup(`Improvement Proposal #${idea.id}`, html, async () => { closePopup(); }, 'ปิด');
+    if ($('popup-cancel')) $('popup-cancel').hidden = true;
   }
+
+  const popupNode = $('popup');
+  if (popupNode) wfaBindProposalThumbs(popupNode);
 }

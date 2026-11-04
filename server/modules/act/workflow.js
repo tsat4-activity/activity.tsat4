@@ -76,9 +76,28 @@ export function mountWorkflow(app) {
       );
     }
 
-    // Decorate with calculated reductions and permissions
+    // Fetch images for the returned ideas so Proposal Cards can render Before/After photos immediately
+    let allImages = [];
+    if (!useMem && tx && ideas.length) {
+      try {
+        const ids = ideas.map((i) => i.id);
+        const { data: imgRows } = await tx.from(T_IMAGES).select('*').in('idea_id', ids).order('created_at');
+        allImages = imgRows || [];
+      } catch (_) {}
+    } else if (useMem) {
+      allImages = [...mem.images];
+    }
+    const imgMap = new Map();
+    for (const img of allImages) {
+      const list = imgMap.get(img.idea_id) || [];
+      list.push(img);
+      imgMap.set(img.idea_id, list);
+    }
+
+    // Decorate with calculated reductions, images, and permissions
     const decorated = ideas.map((item) => ({
       ...item,
+      images: imgMap.get(item.id) || [],
       time_saving_pct: calcReduction(item.time_before, item.time_after),
       paper_reduction_pct: calcReduction(item.paper_before, item.paper_after),
       steps_reduction_pct: calcReduction(item.steps_before, item.steps_after),
