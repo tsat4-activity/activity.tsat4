@@ -214,8 +214,6 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
   let ideas = [];
   let stats = {};
   let depts = [];
-  let showMonthlyTable = false;
-  let viewMode = 'proposal'; // 'proposal' (Image 2 style) or 'table'
   let teamMembers = [];
 
   try {
@@ -260,97 +258,81 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
   };
 
   function render() {
-    const canEdit = Boolean(userMe.access?.admin || userMe.access?.member || userMe.access?.smart);
     const targetCount = currentProj.target_count || 10;
     const implementedCount = stats.byStatus?.Implemented || 0;
     const totalSubmitted = ideas.length;
 
-    // Monthly 12-month table rows HTML
-    const lock = canEdit ? '' : 'disabled';
-    const rowsHtml = Array.from({ length: 12 }, (_, i) => {
-      const m = i + 1;
-      const item = byMonth[m] || {};
-      return `<tr data-month="${m}">
-        <td style="font-weight:600">${m}. ${ACT_MONTHS[i]}</td>
-        <td><input class="input smf-input smf-target" type="number" step="any" value="${item.target ?? ''}" ${lock} placeholder="Target"></td>
-        <td><input class="input smf-input smf-actual" type="number" step="any" value="${item.actual ?? ''}" ${lock} placeholder="Actual"></td>
-        <td class="smf-diff-cell">-</td>
-        <td class="smf-pct-cell">-</td>
-        <td><input class="input smf-input smf-note" type="text" maxlength="300" value="${esc(item.note || '')}" ${lock} placeholder="หมายเหตุ..."></td>
-      </tr>`;
-    }).join('');
-
     const contentHtml = !ideas.length
       ? '<div class="card"><p class="empty">ยังไม่มีการส่งข้อมูลโปรเจค Work Flow Automation หรือไม่พบข้อมูลตามตัวกรอง · คลิก "+ ส่งข้อมูลโปรเจค" เพื่อส่งแนวคิดแรก</p></div>'
-      : viewMode === 'proposal'
-        ? `<div class="wfa-proposal-list">${ideas.map((item) => wfaProposalCardHtml(item, { showActions: true })).join('')}</div>`
-        : `
-          <div class="wfa-table-card card">
-            <div class="wfa-table-head" style="display:flex;justify-content:space-between;align-items:center">
-              <strong>รายการโปรเจค Work Flow Automation ที่สมาชิกส่ง (${ideas.length} เรื่อง)</strong>
-              <span class="sum-meta">คลิกแถวเพื่อดูรายละเอียด Improvement Proposal หรือประเมินสถานะ</span>
-            </div>
-            <div class="table-wrap sheet">
-              <table class="mo-data-table">
-                <thead>
-                  <tr>
-                    <th style="width:50px">ลำดับ</th>
-                    <th style="width:90px">วันที่ส่ง</th>
-                    <th>โปรเจคที่ดำเนินการ (AFTER)</th>
-                    <th>กระบวนการเดิม (BEFORE)</th>
-                    <th>ผู้เสนอ / แผนก</th>
-                    <th>เทคโนโลยี</th>
-                    <th>ผลประหยัด</th>
-                    <th>สถานะ</th>
-                    <th style="width:80px">จัดการ</th>
+      : `
+        <div class="table-wrap sheet">
+          <table class="mo-data-table">
+            <thead>
+              <tr>
+                <th style="width:45px">#</th>
+                <th style="width:90px">วันที่ส่ง</th>
+                <th>ชื่อโปรเจค (AFTER)</th>
+                <th>กระบวนการเดิม (BEFORE)</th>
+                <th>ผู้เสนอ / แผนก</th>
+                <th>เทคโนโลยี</th>
+                <th style="width:105px">รูปภาพ (16:9)</th>
+                <th>ผลประหยัด</th>
+                <th style="width:115px">สถานะ</th>
+                <th style="width:120px;text-align:center">การจัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ideas.map((item, idx) => {
+                const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
+                const tPct = item.time_saving_pct != null ? `${item.time_saving_pct}%` : null;
+                const pPct = item.paper_reduction_pct != null ? `${item.paper_reduction_pct}%` : null;
+                const imgs = Array.isArray(item.images) ? item.images : [];
+                const bCount = imgs.filter((i) => i.image_type === 'BEFORE').length;
+                const aCount = imgs.filter((i) => i.image_type === 'AFTER').length;
+                const imgLabel = (bCount || aCount)
+                  ? `<span class="sum-meta" style="font-weight:600">B:${bCount} · A:${aCount}</span>`
+                  : `<span class="sum-meta">-</span>`;
+                return `
+                  <tr data-pick-id="${item.id}" style="cursor:pointer">
+                    <td>${idx + 1}</td>
+                    <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
+                    <td><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
+                    <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
+                    <td>
+                      <div class="wfa-col-emp">
+                        <span>${esc(item.full_name)}</span>
+                        <small class="sum-meta">${esc(item.department || '-')}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</small>
+                      </div>
+                    </td>
+                    <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
+                    <td>${imgLabel}</td>
+                    <td>
+                      <div class="wfa-col-savings">
+                        ${tPct ? `<span class="wfa-saving-mini" title="ลดเวลาทำงาน"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
+                        ${pPct ? `<span class="wfa-saving-mini is-paper" title="ลดการใช้กระดาษ"><span class="material-symbols-rounded">description</span>${pPct}</span>` : ''}
+                        ${!tPct && !pPct ? '<span class="sum-meta">-</span>' : ''}
+                      </div>
+                    </td>
+                    <td><span class="badge ${status.class}">${status.label}</span></td>
+                    <td style="text-align:center" onclick="event.stopPropagation()">
+                      <div class="action-bar" style="justify-content:center;margin:0;gap:4px">
+                        <button class="btn btn-primary small" type="button" data-act-view="${item.id}" title="กดแสดงผล Improvement Proposal">
+                          <span class="material-symbols-rounded" style="font-size:15px">visibility</span> แสดงผล
+                        </button>
+                        ${item.can_edit ? `
+                          <button class="icon-btn" type="button" data-act-del="${item.id}" title="ลบโครงการ" style="color:var(--mo-danger);width:26px;height:26px">
+                            <span class="material-symbols-rounded" style="font-size:16px">delete</span>
+                          </button>
+                        ` : ''}
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  ${ideas.map((item, idx) => {
-                    const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
-                    const tPct = item.time_saving_pct != null ? `${item.time_saving_pct}%` : null;
-                    const pPct = item.paper_reduction_pct != null ? `${item.paper_reduction_pct}%` : null;
-                    return `
-                      <tr data-pick-id="${item.id}" style="cursor:pointer">
-                        <td>${idx + 1}</td>
-                        <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
-                        <td><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
-                        <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
-                        <td>
-                          <div class="wfa-col-emp">
-                            <span>${esc(item.full_name)}</span>
-                            <small class="sum-meta">${esc(item.department || '-')}</small>
-                          </div>
-                        </td>
-                        <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
-                        <td>
-                          <div class="wfa-col-savings">
-                            ${tPct ? `<span class="wfa-saving-mini"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
-                            ${pPct ? `<span class="wfa-saving-mini is-paper"><span class="material-symbols-rounded">description</span>${pPct}</span>` : ''}
-                            ${!tPct && !pPct ? '<span class="sum-meta">-</span>' : ''}
-                          </div>
-                        </td>
-                        <td><span class="badge ${status.class}">${status.label}</span></td>
-                        <td>
-                          <div class="wfa-col-actions">
-                            <button class="btn btn-secondary small" type="button" data-act-view="${item.id}" title="ดูรายละเอียด">
-                              <span class="material-symbols-rounded">visibility</span>
-                            </button>
-                            ${item.can_edit ? `
-                              <button class="btn btn-danger small" type="button" data-act-del="${item.id}" title="ลบ">
-                                <span class="material-symbols-rounded">delete</span>
-                              </button>
-                            ` : ''}
-                          </div>
-                        </td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `;
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
 
     setHeaderMeta(`<span class="sum-meta">Less Paper. Less Time. More Efficiency.</span> <strong>เป้าหมาย ${targetCount} โครงการ</strong>`);
 
@@ -360,15 +342,8 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
         <button class="btn btn-primary small" type="button" id="wfa-btn-add">
           <span class="material-symbols-rounded">add_circle</span> ส่งข้อมูลโปรเจค (6 ขั้นตอน)
         </button>
-        <button class="btn btn-secondary small" type="button" id="wfa-btn-viewmode">
-          <span class="material-symbols-rounded">${viewMode === 'proposal' ? 'table_rows' : 'view_agenda'}</span>
-          ${viewMode === 'proposal' ? 'มุมมองตาราง' : 'มุมมอง Proposal'}
-        </button>
         <button class="btn btn-secondary small" type="button" id="wfa-btn-export">
           <span class="material-symbols-rounded">download</span> Export รายงาน (CSV)
-        </button>
-        <button class="btn btn-secondary small" type="button" id="wfa-btn-toggle-month">
-          <span class="material-symbols-rounded">calendar_month</span> ${showMonthlyTable ? 'ซ่อนตารางรายเดือน' : 'ตารางรายเดือน'}
         </button>
       </div>
     `;
@@ -411,40 +386,8 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
             </label>
           </div>
 
-          <!-- Project Submissions (Proposal Cards or Table) -->
+          <!-- Project Submissions Table -->
           ${contentHtml}
-
-          <!-- Optional Collapsible 12-Month Target/Actual Table -->
-          <div id="wfa-month-wrap" class="${showMonthlyTable ? '' : 'd-none'}" style="margin-top:10px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <strong>ตารางบันทึกเป้าหมายและผลงานรายเดือน (12 เดือน)</strong>
-              ${canEdit ? `<div class="action-bar a5-actions" style="margin:0">
-                ${button('smf-copy-target', 'คัดลอกเป้าเดือน 1 ไปทุกเดือน', 'secondary')}
-                ${button('smf-save', 'บันทึกข้อมูลรายเดือน', 'primary')}
-              </div>` : ''}
-            </div>
-            <div class="table-wrap sheet">
-              <table class="mo-data-table smf-month-table">
-                <thead><tr>
-                  <th style="width:120px">เดือน</th>
-                  <th style="width:140px">เป้าหมาย (โครงการ)</th>
-                  <th style="width:140px">ผลงานจริง (โครงการ)</th>
-                  <th style="width:110px">ผลต่าง</th>
-                  <th style="width:130px">% บรรลุ</th>
-                  <th>หมายเหตุ</th>
-                </tr></thead>
-                <tbody id="smf-rows">${rowsHtml}</tbody>
-                <tfoot><tr id="smf-summary" style="background:var(--bg-subtle, #f8fafc);font-weight:600">
-                  <td>เฉลี่ยทั้งปี</td>
-                  <td id="smf-sum-target">-</td>
-                  <td id="smf-sum-actual">-</td>
-                  <td id="smf-sum-diff">-</td>
-                  <td id="smf-sum-pct">-</td>
-                  <td id="smf-sum-info" class="sum-meta"></td>
-                </tr></tfoot>
-              </table>
-            </div>
-          </div>
 
         </div>
       </section></div>
@@ -470,23 +413,12 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
     }
 
     $('wfa-btn-add').onclick = () => wfaOpenSubmitWizard(userMe, loadData, teamMembers);
-    $('wfa-btn-viewmode').onclick = () => {
-      viewMode = viewMode === 'proposal' ? 'table' : 'proposal';
-      render();
-    };
     $('wfa-btn-export').onclick = () => window.open('/api/workflow/export', '_blank');
-    $('wfa-btn-toggle-month').onclick = () => {
-      showMonthlyTable = !showMonthlyTable;
-      $('wfa-month-wrap').classList.toggle('d-none', !showMonthlyTable);
-      $('wfa-btn-toggle-month').innerHTML = `<span class="material-symbols-rounded">calendar_month</span> ${showMonthlyTable ? 'ซ่อนตารางรายเดือน' : 'ตารางรายเดือน'}`;
-    };
 
     $('wfa-flt-q').onchange = () => { filter.q = $('wfa-flt-q').value.trim(); loadData(); };
     $('wfa-flt-dept').onchange = () => { filter.department = $('wfa-flt-dept').value; loadData(); };
     $('wfa-flt-status').onchange = () => { filter.status = $('wfa-flt-status').value; loadData(); };
     $('wfa-flt-my').onchange = () => { filter.myOnly = $('wfa-flt-my').checked; loadData(); };
-
-    wfaBindProposalThumbs(target);
 
     target.querySelectorAll('[data-act-view]').forEach((node) => {
       node.onclick = (e) => {
@@ -511,63 +443,6 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
     target.querySelectorAll('tr[data-pick-id]').forEach((node) => {
       node.onclick = () => wfaOpenDetail(Number(node.dataset.pickId), loadData);
     });
-
-    // Monthly table calculations & save
-    const numOf = (el) => (el.value !== '' && Number.isFinite(Number(el.value)) ? Number(el.value) : null);
-    const recalc = () => {
-      let tSum = 0, tCount = 0, aSum = 0, aCount = 0;
-      target.querySelectorAll('#smf-rows tr').forEach((tr) => {
-        const tVal = numOf(tr.querySelector('.smf-target'));
-        const aVal = numOf(tr.querySelector('.smf-actual'));
-        if (tVal != null) { tSum += tVal; tCount++; }
-        if (aVal != null) { aSum += aVal; aCount++; }
-        const [diffHtml, pctHtml] = smfDiffPct(tVal, aVal, true);
-        tr.querySelector('.smf-diff-cell').innerHTML = diffHtml;
-        tr.querySelector('.smf-pct-cell').innerHTML = pctHtml;
-      });
-      const tAvg = tCount > 0 ? tSum / tCount : null;
-      const aAvg = aCount > 0 ? aSum / aCount : null;
-      const [sumDiff, sumPct] = smfDiffPct(tAvg, aAvg, false);
-      if ($('smf-sum-target')) $('smf-sum-target').textContent = tAvg != null ? tAvg.toFixed(2) : '-';
-      if ($('smf-sum-actual')) $('smf-sum-actual').textContent = aAvg != null ? aAvg.toFixed(2) : '-';
-      if ($('smf-sum-diff')) $('smf-sum-diff').innerHTML = sumDiff;
-      if ($('smf-sum-pct')) $('smf-sum-pct').innerHTML = sumPct;
-      if ($('smf-sum-info')) $('smf-sum-info').textContent = `บันทึกแล้ว ${aCount}/12 เดือน`;
-    };
-
-    target.querySelectorAll('.smf-target, .smf-actual').forEach((inp) => { inp.oninput = recalc; });
-    recalc();
-
-    if ($('smf-copy-target')) {
-      $('smf-copy-target').onclick = () => {
-        const first = target.querySelector('#smf-rows tr[data-month="1"] .smf-target');
-        if (!first || first.value === '') { toast('กรอกเป้าหมายเดือน 1 ก่อน', 'error'); return; }
-        target.querySelectorAll('#smf-rows .smf-target').forEach((inp) => { inp.value = first.value; });
-        recalc();
-        toast('คัดลอกเป้าหมายเดือน 1 ไปทุกเดือนแล้ว');
-      };
-    }
-
-    if ($('smf-save')) {
-      $('smf-save').onclick = async () => {
-        const rows = [...target.querySelectorAll('#smf-rows tr')].map((tr) => ({
-          month: Number(tr.dataset.month),
-          target: numOf(tr.querySelector('.smf-target')),
-          actual: numOf(tr.querySelector('.smf-actual')),
-          note: tr.querySelector('.smf-note').value.trim()
-        }));
-        try {
-          $('smf-save').disabled = true;
-          await a5Api('smf', 'project-months', { method: 'PUT', body: { year: a5Year, projectId: currentProj.id, rows } });
-          toast(`บันทึกข้อมูล ${currentProj.name} เรียบร้อย`);
-          rerender();
-        } catch (err) {
-          onErr(err);
-        } finally {
-          if ($('smf-save')) $('smf-save').disabled = false;
-        }
-      };
-    }
   }
 
   await loadData();
