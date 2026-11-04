@@ -357,8 +357,10 @@ async function aplRender(target, activity, opts = {}) {
     };
   });
 
-  if (target._aplKeyHandler) window.removeEventListener('keydown', target._aplKeyHandler);
-  target._aplKeyHandler = (e) => {
+  // one handler for the page on screen: a rerender makes a new target, so it cannot live on target
+  if (aplMoveKeys) window.removeEventListener('keydown', aplMoveKeys);
+  aplMoveKeys = (e) => {
+    if (!document.body.contains(target)) { window.removeEventListener('keydown', aplMoveKeys); aplMoveKeys = null; return; }
     if (!canEdit || !aplSelected) return;
     if (e.target.matches('input, textarea, select')) return;
     if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
@@ -371,7 +373,7 @@ async function aplRender(target, activity, opts = {}) {
       else if (dir === 'down' && curIdx !== -1 && curIdx < curSibs.length - 1) aplMoveTask(aplSelected, 'down');
     }
   };
-  window.addEventListener('keydown', target._aplKeyHandler);
+  window.addEventListener('keydown', aplMoveKeys);
 
   $('apl-add-phase').onclick = () => aplOpenForm(activity, tasks, null, null, rerender, units);
   // With a main item selected, "สร้าง" adds a sub item under it (the + button per row was removed for space).
@@ -521,6 +523,7 @@ function aplOpenForm(activity, tasks, task, parentId, rerender, units = []) {
   $('a5-emp-q').closest('.search-block').addEventListener('pick-clear', () => { ownerId = ''; });
 }
 
+let aplMoveKeys = null;
 const APL_DASH_TABS = { schedule: 'Schedule', team: 'Team' };
 // SMF Dashboard opens on ภาพรวม of its own projects of the year (Smart OEE, Vision Camera, Work Flow Automation);
 // the overview of every activity (5S · CFO · SMF) is the home page (ผู้ใช้กำหนด 2026-11-01).

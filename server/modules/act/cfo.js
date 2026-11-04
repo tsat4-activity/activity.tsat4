@@ -413,14 +413,20 @@ export function mountCfo(app) {
   });
   route('patch', '/api/act/:activity/cfo/ref/:id', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
-    const current = must(await tx.from(t.efRef).select('id,sort_no').eq('id', Number(req.params.id)).maybeSingle());
+    const current = must(await tx.from(t.efRef).select('*').eq('id', Number(req.params.id)).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบรายการ');
-    const { row, error } = await refInput(t, req.body || {});
+    // a form sends only the columns of its table: the others (item_no, formula ...) stay as they are
+    const { row, error } = await refInput(t, { ...current, ...req.body });
     if (error) return fail(res, 400, error);
     if (row.sort_no == null) row.sort_no = current.sort_no;
     if (await codeTaken(t, row.code, current.id)) return fail(res, 400, `id ${row.code} มีอยู่แล้ว`);
     if (!row.code) delete row.code;
     must(await tx.from(t.efRef).update(row).eq('id', current.id));
+    // the Usage (SAP) of the groups on this EF follows a new value at once, not at some later sync
+    if (Number(row.total) !== Number(current.total) || row.unit !== current.unit) {
+      const groups = (await tx.from(t.matGroup).select('id').eq('ef_ref_id', current.id)).data || [];
+      if (groups.length) await resyncSap(t, req, (await fetchIn(() => tx.from(t.material).select('material'), 'group_id', groups.map((g) => g.id))).map((m) => m.material));
+    }
     res.json({ ok: true });
   });
   // Import a reference table from Excel / CSV (ผู้ใช้กำหนด 2026-11-02): a row with id of this table = update, without id = add.
@@ -431,7 +437,7 @@ export function mountCfo(app) {
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
     if (!sheet) return fail(res, 400, 'เลือกตาราง');
     if (!list.length) return fail(res, 400, 'ไฟล์ไม่มีข้อมูล');
-    const all = await fetchAll(() => tx.from(t.efRef).select('id,sheet,code,sort_no'));
+    const all = await fetchAll(() => tx.from(t.efRef).select('*'));
     const have = new Map(all.filter((r) => r.sheet === sheet).map((r) => [r.id, r]));
     const byCode = new Map(all.filter((r) => r.code).map((r) => [r.code, r]));
     let next = Math.max(0, ...[...have.values()].map((r) => r.sort_no || 0));
@@ -444,7 +450,9 @@ export function mountCfo(app) {
     for (const [i, b] of list.entries()) {
       const line = b.line || i + 2;
       group = String(b.grp ?? '').trim() || group; // the TGO file merges กลุ่ม over its rows
-      const { row, error } = await refInput(t, { ...b, grp: group, sheet, ...(sheet === 'ipcc' && !b.unit ? { unit: 'TJ' } : {}) });
+      // a row that updates keeps the columns the file does not have
+      const known = (refCode(b.code) && byCode.get(refCode(b.code))) || (!refCode(b.code) && Number(b.id) && have.get(Number(b.id))) || null;
+      const { row, error } = await refInput(t, { ...(known?.sheet === sheet ? known : {}), ...b, grp: group || known?.grp, sheet, ...(sheet === 'ipcc' && !b.unit ? { unit: 'TJ' } : {}) });
       if (error) { errors.push(`แถว ${line}: ${error}`); continue; }
       if (row.code && seen.has(row.code)) { errors.push(`แถว ${line}: id ${row.code} ซ้ำในไฟล์`); continue; }
       if (row.code) seen.add(row.code);
@@ -462,7 +470,14 @@ export function mountCfo(app) {
   });
   route('delete', '/api/act/:activity/cfo/ref/:id', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
-    must(await tx.from(t.efRef).delete().eq('id', Number(req.params.id)));
+    const id = Number(req.params.id);
+    const current = must(await tx.from(t.efRef).select('id,code,name').eq('id', id).maybeSingle());
+    if (!current) return fail(res, 404, 'ไม่พบรายการ');
+    // the Usage (SAP) is worked out from this row: without it every month of the group would drop out of Scope 3
+    const groups = (await tx.from(t.matGroup).select('name').eq('ef_ref_id', id).limit(3)).data || [];
+    if (groups.length) return fail(res, 400, `กลุ่มวัสดุใช้ EF นี้อยู่ (${groups.map((g) => g.name).join(', ')}) ลบไม่ได้ ให้ตั้งเป็น Inactive`);
+    must(await tx.from(t.efRef).delete().eq('id', id));
+    await logRev(t, req, 'Emission Factor', current.code || current.name, 'ลบรายการ');
     res.json({ ok: true });
   });
 
@@ -498,7 +513,15 @@ export function mountCfo(app) {
   };
   // Work a month out again from the master of now and replace it: its Usage lines (given, or the ones saved) and the
   // months of the SAP activities. A material grouped later, or a group given another EF, counts for the months already pasted.
-  const syncSap = async (t, req, months, given = null) => {
+  // One at a time (two admins opening a page must not double the lines): the process is the only writer.
+  let sapQueue = Promise.resolve();
+  const syncSap = (t, req, months, given = null) => {
+    const run = () => syncSapNow(t, req, months, given);
+    const job = sapQueue.then(run, run);
+    sapQueue = job.catch(() => null);
+    return job;
+  };
+  const syncSapNow = async (t, req, months, given) => {
     const master = await sapMaster(t);
     const acts = await fetchAll(() => tx.from(t.activity).select('*').not('mat_group_id', 'is', null));
     const actOf = new Map(acts.map((a) => [`${a.mat_group_id}|${a.costcenter}`, a]));
@@ -540,15 +563,24 @@ export function mountCfo(app) {
       }
       // a month confirmed before stays confirmed
       const ids = acts.map((a) => a.id);
-      const old = ids.length ? await fetchIn(() => tx.from(t.entry).select('id,status').eq('month', month), 'activity_id', ids) : [];
+      const old = ids.length ? await fetchIn(() => tx.from(t.entry).select('id,status,activity_id').eq('month', month), 'activity_id', ids) : [];
       const status = old.some((x) => x.status === 'CONFIRMED') ? 'CONFIRMED' : 'DRAFT';
-      for (let i = 0; i < old.length; i += 200) must(await tx.from(t.entry).delete().in('id', old.slice(i, i + 200).map((x) => x.id)));
-      must(await tx.from(t.materialUse).delete().eq('month', month));
-      for (let i = 0; i < out.length; i += 500) must(await tx.from(t.materialUse).insert(out.slice(i, i + 500)));
       const byId = new Map(acts.map((a) => [a.id, a]));
       const entries = [...sums].map(([id, qty]) => ({ activity_id: id, month, qty: r6(qty), ef_id: byId.get(id).ef_id, gwp_code: byId.get(id).gwp_code, status, remark: 'Usage (SAP)',
         created_by: req.user.employeeId, updated_by: req.user.employeeId }));
-      for (let i = 0; i < entries.length; i += 500) must(await tx.from(t.entry).insert(entries.slice(i, i + 500)));
+      // new rows first, the old ones go last: a failure on the way leaves the month as it was
+      const oldLines = (await fetchAll(() => tx.from(t.materialUse).select('id').eq('month', month).order('id'))).map((l) => l.id);
+      const fresh = [];
+      try {
+        for (let i = 0; i < out.length; i += 500) fresh.push(...must(await tx.from(t.materialUse).insert(out.slice(i, i + 500)).select('id')).map((l) => l.id));
+        for (let i = 0; i < entries.length; i += 500) must(await tx.from(t.entry).upsert(entries.slice(i, i + 500), { onConflict: 'activity_id,month' }));
+      } catch (err) {
+        for (let i = 0; i < fresh.length; i += 200) await tx.from(t.materialUse).delete().in('id', fresh.slice(i, i + 200));
+        throw err;
+      }
+      const gone = old.filter((x) => !sums.has(x.activity_id)).map((x) => x.id);
+      for (let i = 0; i < gone.length; i += 200) must(await tx.from(t.entry).delete().in('id', gone.slice(i, i + 200)));
+      for (let i = 0; i < oldLines.length; i += 200) must(await tx.from(t.materialUse).delete().in('id', oldLines.slice(i, i + 200)));
     }
     return { tco2e: Math.round(total * 1000) / 1000 };
   };
@@ -563,7 +595,7 @@ export function mountCfo(app) {
     if (!admin || !(await sapReady(t))) return;
     const left = (await tx.from(t.materialUse).select('month').is('group_id', null).limit(1000)).data || [];
     const months = [...new Set(left.map((r) => r.month))].sort();
-    if (months.length) await syncSap(t, req, months).catch(() => null);
+    if (months.length) await syncSap(t, req, months).catch((err) => console.error('autoSyncSap failed', err?.message || err)); // the page still opens
   };
 
   route('get', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
@@ -853,7 +885,7 @@ export function mountCfo(app) {
     }
     const base = `ref:${ref.id}:${scopeCode}${direct ? ':sep' : ''}${factor ? `:x${factor}` : ''}`;
     const copies = must(await tx.from(t.ef).select('id,code,kgco2e,unit,co2_bio').like('code', `${base}*`).order('id', { ascending: false }))
-      .filter((c) => !/^:(sep|x)/.test(c.code.slice(base.length)));
+      .filter((c) => /^(:\d+)?$/.test(c.code.slice(base.length))); // exactly this copy: 3-1 must not take 3-10 … 3-15, or :sep / :x
     const same = copies.find((c) => c.unit === row.unit && Number(c.kgco2e) === row.kgco2e && Number(c.co2_bio ?? 0) === Number(row.co2_bio ?? 0));
     if (same) return { id: same.id };
     row.code = copies.length ? `${base}:${copies.length + 1}` : base;
@@ -895,6 +927,8 @@ export function mountCfo(app) {
         row.ef3_id = up.id;
       } else row.ef3_id = kind === 'ef' && Number(id) ? Number(id) : null;
     }
+    // ef3_off: the admin chose "ไม่คิด 3-3", so fillEf3 leaves this activity alone (sent only when it is or was chosen)
+    if (b.ef3_off !== undefined) row.ef3_off = b.ef3_off === true;
     return { row };
   };
   route('post', '/api/act/:activity/cfo/activities', async (req, res, activity, t) => {
@@ -920,6 +954,8 @@ export function mountCfo(app) {
     must(await tx.from(t.activity).update(row).eq('id', current.id));
     // a 3-3 line added to an activity also counts for the months already recorded without one (ผู้ใช้กำหนด 2026-11-03)
     if (row.ef3_id && row.ef3_id !== current.ef3_id) must(await tx.from(t.entry).update({ ef3_id: row.ef3_id }).eq('activity_id', current.id).is('ef3_id', null));
+    // "ไม่คิด 3-3": the months not confirmed yet stop counting it too
+    if (row.ef3_off) must(await tx.from(t.entry).update({ ef3_id: null }).eq('activity_id', current.id).neq('status', 'CONFIRMED'));
     await logRev(t, req, 'กิจกรรม', `${current.department} · ${current.name}`, changes(current, row, Object.keys(row)));
     res.json({ ok: true });
   });
@@ -958,7 +994,7 @@ export function mountCfo(app) {
     const skipped = [];
     for (const a of acts) {
       const e = efById.get(a.ef_id);
-      if (a.ef3_id || !e || a.calc === 'septic' || e.hfc || e.other) continue;
+      if (a.ef3_id || a.ef3_off || !e || a.calc === 'septic' || e.hfc || e.other) continue;
       if (!(['1-1', '1-2'].includes(e.scope_code) || e.scope_code?.startsWith('2-') || (e.scope_code?.startsWith('3-') && e.scope_code !== '3-3'))) continue;
       const ref = refById.get(e.ref_id);
       // electricity: the grid mix "SCOPE 3" row of the same years (2022-2024: 0.475 → 0.0812), as the activity form picks

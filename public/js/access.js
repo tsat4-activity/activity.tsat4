@@ -72,58 +72,66 @@ async function accessPeople(target) {
   const rerender = () => accessPeople(target).catch(onErr);
   $('acc-year').onchange = () => { a5Year = Number($('acc-year').value); rerender(); };
   $('acc-q').value = accessView.q;
-  const search = () => { accessView.q = $('acc-q').value.trim(); rerender(); };
+  let latest = 0;
+  // searching reloads the table only, so the box keeps its focus · an older answer must not replace a newer one
+  const load = async () => {
+    const ask = (latest += 1);
+    const [d, units] = await Promise.all([api(`/api/access/people?year=${a5Year}&q=${encodeURIComponent(accessView.q)}`), aplUnitsOf('smf').catch(() => ({}))]);
+    if (ask !== latest) return;
+    ['acc-roles', 'acc-login'].forEach((b) => { $(b).disabled = true; });
+    const label = (id) => ACTIVITIES.find(([x]) => x === id)?.[1] || id;
+    const chips = (p, id) => p.roles[id].map((r) => `<span class="acc-chip${r.status === 'Active' ? '' : ' is-muted'}">${esc(accessRoleText(id, r, id === 'smf' ? units : {}))}</span>`).join(' ');
+    fillTable('acc-rows', ['รหัส', 'ชื่อ', 'หน่วยงาน', ...ACTIVITIES.map(([, l]) => l), 'บัญชีเข้าระบบ'], d.people.map((p) => `<tr data-pick="${esc(p.employeeId)}"><td>${esc(p.employeeId)}</td><td>${esc(p.name)}${p.system ? ` <span class="sum-meta">(${p.system === 'creator' ? 'ผู้ดูแลระบบ' : p.system === 'executive' ? 'ผู้บริหาร' : 'ผู้ดูแลระบบบางส่วน'})</span>` : ''}</td><td>${esc(p.department)}</td>
+      ${ACTIVITIES.map(([id]) => `<td>${chips(p, id)}</td>`).join('')}<td>${A5_LOGIN[p.login] || ''}</td></tr>`).join(''), `ไม่มีรายชื่อปี ${a5Year}`);
+    $('acc-note').textContent = `ปี ${a5Year} · ${d.people.filter((p) => Object.values(p.roles).some((l) => l.length)).length} คนที่มีบทบาท · เลือกแถวแล้วกด บทบาท เพื่อเพิ่ม แก้ หรือลบ`;
+    a5Lift(target.querySelector('section'));
+    let picked = null;
+    bindRowSelect($('acc-rows'), (id) => {
+      picked = d.people.find((p) => p.employeeId === id);
+      $('acc-roles').disabled = !picked;
+      $('acc-login').disabled = !picked || !Object.values(picked.roles).some((l) => l.length);
+    });
+    const rowOf = (id, r) => ({ ...r, area_id: r.areaId, employee_id: picked.employeeId, name: picked.name, login: picked.login, activity: id });
+    // every role of the person (edit / delete) + add one in any activity, with the form of Setting > Team
+    $('acc-roles').onclick = () => {
+      if (!picked) return;
+      const list = ACTIVITIES.flatMap(([id]) => picked.roles[id].map((r) => [id, r]));
+      openPopup(`${esc(picked.employeeId)} ${esc(picked.name)} · ปี ${a5Year}`, `
+        <div class="table-wrap"><table class="mo-data-table"><thead><tr><th>กิจกรรม</th><th>บทบาท</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody>${list.map(([id, r], i) => `<tr><td>${esc(label(id))}</td><td>${esc(accessRoleText(id, r, id === 'smf' ? units : {}))}</td><td>${esc(r.status)}</td>
+          <td><button class="apl-link" type="button" data-acc-edit="${i}">แก้ไข</button> · <button class="apl-link" type="button" data-acc-del="${i}">ลบ</button></td></tr>`).join('') || '<tr><td colspan="4" class="empty">ยังไม่มีบทบาทปีนี้</td></tr>'}</tbody></table></div>
+        ${field('เพิ่มบทบาทในกิจกรรม', `<select id="acc-add-act">${options(ACTIVITIES.map(([id]) => id), ACTIVITIES[0][0], label)}</select>`)}`, async () => {
+        const spec = await a5TeamSpec($('acc-add-act').value);
+        a5TeamForm({ ...spec, rerender }, null, { employeeId: picked.employeeId, name: picked.name, department: picked.department });
+      }, 'เพิ่มบทบาท');
+      document.querySelector('#popup .popup')?.classList.add('popup-wide');
+      document.querySelectorAll('[data-acc-edit]').forEach((node) => {
+        node.onclick = async () => {
+          const [id, r] = list[Number(node.dataset.accEdit)];
+          a5TeamForm({ ...(await a5TeamSpec(id)), rerender }, rowOf(id, r));
+        };
+      });
+      document.querySelectorAll('[data-acc-del]').forEach((node) => {
+        node.onclick = () => {
+          const [id, r] = list[Number(node.dataset.accDel)];
+          confirmPopup('ลบบทบาท', `ลบ ${esc(label(id))} · ${esc(accessRoleText(id, r, id === 'smf' ? units : {}))} ของ ${esc(picked.name)} ปี ${a5Year}`, async () => {
+            await a5Api(id, `team/${r.id}`, { method: 'DELETE' });
+            toast('ลบแล้ว');
+            rerender();
+          });
+        };
+      });
+    };
+    // sign-in: through any team row of the person this year (the account is one for every activity)
+    $('acc-login').onclick = () => {
+      const first = picked && ACTIVITIES.map(([id]) => [id, picked.roles[id].find((r) => r.status === 'Active')]).find(([, r]) => r);
+      if (first) a5LoginPopup(first[0], rowOf(first[0], first[1]), rerender);
+    };
+  };
+  const search = () => { accessView.q = $('acc-q').value.trim(); load().catch(onErr); };
   $('acc-search').onclick = search;
   onEnter('acc-q', search);
-  const [d, units] = await Promise.all([api(`/api/access/people?year=${a5Year}&q=${encodeURIComponent(accessView.q)}`), aplUnitsOf('smf').catch(() => ({}))]);
-  const label = (id) => ACTIVITIES.find(([x]) => x === id)?.[1] || id;
-  const chips = (p, id) => p.roles[id].map((r) => `<span class="acc-chip${r.status === 'Active' ? '' : ' is-muted'}">${esc(accessRoleText(id, r, id === 'smf' ? units : {}))}</span>`).join(' ');
-  fillTable('acc-rows', ['รหัส', 'ชื่อ', 'หน่วยงาน', ...ACTIVITIES.map(([, l]) => l), 'บัญชีเข้าระบบ'], d.people.map((p) => `<tr data-pick="${esc(p.employeeId)}"><td>${esc(p.employeeId)}</td><td>${esc(p.name)}${p.system ? ` <span class="sum-meta">(${p.system === 'creator' ? 'ผู้ดูแลระบบ' : p.system === 'executive' ? 'ผู้บริหาร' : 'ผู้ดูแลระบบบางส่วน'})</span>` : ''}</td><td>${esc(p.department)}</td>
-    ${ACTIVITIES.map(([id]) => `<td>${chips(p, id)}</td>`).join('')}<td>${A5_LOGIN[p.login] || ''}</td></tr>`).join(''), `ไม่มีรายชื่อปี ${a5Year}`);
-  $('acc-note').textContent = `ปี ${a5Year} · ${d.people.filter((p) => Object.values(p.roles).some((l) => l.length)).length} คนที่มีบทบาท · เลือกแถวแล้วกด บทบาท เพื่อเพิ่ม แก้ หรือลบ`;
-  a5Lift(target.querySelector('section'));
-  let picked = null;
-  bindRowSelect($('acc-rows'), (id) => {
-    picked = d.people.find((p) => p.employeeId === id);
-    $('acc-roles').disabled = !picked;
-    $('acc-login').disabled = !picked || !Object.values(picked.roles).some((l) => l.length);
-  });
-  const rowOf = (id, r) => ({ ...r, area_id: r.areaId, employee_id: picked.employeeId, name: picked.name, login: picked.login, activity: id });
-  // every role of the person (edit / delete) + add one in any activity, with the form of Setting > Team
-  $('acc-roles').onclick = () => {
-    if (!picked) return;
-    const list = ACTIVITIES.flatMap(([id]) => picked.roles[id].map((r) => [id, r]));
-    openPopup(`${esc(picked.employeeId)} ${esc(picked.name)} · ปี ${a5Year}`, `
-      <div class="table-wrap"><table class="mo-data-table"><thead><tr><th>กิจกรรม</th><th>บทบาท</th><th>สถานะ</th><th></th></tr></thead>
-      <tbody>${list.map(([id, r], i) => `<tr><td>${esc(label(id))}</td><td>${esc(accessRoleText(id, r, id === 'smf' ? units : {}))}</td><td>${esc(r.status)}</td>
-        <td><button class="apl-link" type="button" data-acc-edit="${i}">แก้ไข</button> · <button class="apl-link" type="button" data-acc-del="${i}">ลบ</button></td></tr>`).join('') || '<tr><td colspan="4" class="empty">ยังไม่มีบทบาทปีนี้</td></tr>'}</tbody></table></div>
-      ${field('เพิ่มบทบาทในกิจกรรม', `<select id="acc-add-act">${options(ACTIVITIES.map(([id]) => id), ACTIVITIES[0][0], label)}</select>`)}`, async () => {
-      const spec = await a5TeamSpec($('acc-add-act').value);
-      a5TeamForm({ ...spec, rerender }, null, { employeeId: picked.employeeId, name: picked.name, department: picked.department });
-    }, 'เพิ่มบทบาท');
-    document.querySelector('#popup .popup')?.classList.add('popup-wide');
-    document.querySelectorAll('[data-acc-edit]').forEach((node) => {
-      node.onclick = async () => {
-        const [id, r] = list[Number(node.dataset.accEdit)];
-        a5TeamForm({ ...(await a5TeamSpec(id)), rerender }, rowOf(id, r));
-      };
-    });
-    document.querySelectorAll('[data-acc-del]').forEach((node) => {
-      node.onclick = () => {
-        const [id, r] = list[Number(node.dataset.accDel)];
-        confirmPopup('ลบบทบาท', `ลบ ${esc(label(id))} · ${esc(accessRoleText(id, r, id === 'smf' ? units : {}))} ของ ${esc(picked.name)} ปี ${a5Year}`, async () => {
-          await a5Api(id, `team/${r.id}`, { method: 'DELETE' });
-          toast('ลบแล้ว');
-          rerender();
-        });
-      };
-    });
-  };
-  // sign-in: through any team row of the person this year (the account is one for every activity)
-  $('acc-login').onclick = () => {
-    const first = picked && ACTIVITIES.map(([id]) => [id, picked.roles[id].find((r) => r.status === 'Active')]).find(([, r]) => r);
-    if (first) a5LoginPopup(first[0], rowOf(first[0], first[1]), rerender);
-  };
+  await load();
 }
 
 Object.assign(VIEWS, { access: accessPeople });

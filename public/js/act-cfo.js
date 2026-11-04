@@ -796,7 +796,7 @@ function cfoEntryForm(row, septic, month, reload) {
     show();
   };
   const scoreNote = () => {
-    const points = { X: 6, Y: 3, Z: 1 }[$('cfo-q-act').value] + { C: 4, D: 3, E: 2, F: 1 }[$('cfo-q-ef').value];
+    const points = { X: 6, Y: 3, Z: 1 }[$('cfo-q-act').value] * { C: 4, D: 3, E: 2, F: 1 }[$('cfo-q-ef').value]; // 1 … 24, four equal bands
     const level = points >= 19 ? 4 : points >= 13 ? 3 : points >= 7 ? 2 : points ? 1 : 0;
     const e = row.byMonth[Number($('cfo-e-month').value)] || {};
     $('cfo-e-note').textContent = `${e.id ? `${e.status === 'CONFIRMED' ? 'ยืนยันแล้ว (แก้ได้เฉพาะผู้จัดทำ)' : 'ร่าง'}${e.updated_at ? ` · แก้ล่าสุด ${new Date(e.updated_at).toLocaleString('th-TH')}` : ''}` : 'ยังไม่บันทึกเดือนนี้'}${level ? ` · คุณภาพข้อมูลระดับ ${level} (${points} คะแนน)` : ''}`;
@@ -903,7 +903,8 @@ function cfoSetActivities(body, m, rerender) {
       const f3 = ef3.startsWith('ref:') && !$('cfo-a-f3box').hidden ? $('cfo-a-f3').value : '';
       const body2 = { department: $('cfo-a-dept').value, name: $('cfo-a-name').value, detail: $('cfo-a-detail').value, gwp_code: $('cfo-a-gwp').value, calc: $('cfo-a-calc').value, status: $('cfo-a-status').value,
         type: $('cfo-a-type').value, scope_code: $('cfo-a-scope').value, ...(kind === 'ref' ? { ref_id: id } : kind === 'ef' ? { ef_id: id } : {}),
-        ...(ef3 || a?.ef3_id ? { ef3 } : {}), ...(f3 ? { ef3_factor: f3 } : {}) }; // ef3 only when used, so saving works before db/act/cfo.sql adds the column
+        ...(ef3 || a?.ef3_id ? { ef3 } : {}), ...(f3 ? { ef3_factor: f3 } : {}), // ef3 only when used, so saving works before db/act/cfo.sql adds the column
+        ...(!$('cfo-a-up').hidden && !ef3 ? { ef3_off: true } : a?.ef3_off ? { ef3_off: false } : {}) }; // "ไม่คิด 3-3" sticks (server fillEf3)
       await a5Api(CFO, `cfo/activities${a ? `/${a.id}` : ''}`, { method: a ? 'PATCH' : 'POST', body: body2 });
       toast('บันทึกแล้ว');
       closePopup();
@@ -980,7 +981,7 @@ function cfoSetActivities(body, m, rerender) {
       const groups = unit ? cfoEfGroups((r) => (r.sheet === 'cfp' || r.sheet === 'energy') && !cfoBio(r) && fits(r) && r.id !== Number(id)) : '';
       box.innerHTML = `<option value="">- ไม่คิด 3-3 -</option>${own ? `<optgroup label="EF ที่ใช้อยู่"><option value="ef:${own.id}">${esc(cfoEfLabel(own))}</option></optgroup>` : ''}${groups}`;
       if (keep && box.querySelector(`option[value="${keep}"]`)) box.value = keep;
-      else if (kind === 'ref' || (kind === 'ef' && !a?.ef3_id)) {
+      else if (!a?.ef3_off && (kind === 'ref' || (kind === 'ef' && !a?.ef3_id))) {
         // grid mix "(CFO Scope2)" → its "SCOPE 3" row of the same years (e.g. 2022-2024: 0.475 → 0.0812) · an activity saved
         // before 3-3 existed (EF copy) gets the same pick through its reference row, so opening it and saving adds 3-3
         const main = kind === 'ref' ? m.refs.find((r) => String(r.id) === id) : m.refs.find((r) => r.id === current?.ref_id);
@@ -1324,7 +1325,12 @@ async function cfoSetMaterial(body, m, rerender) {
       closePopup();
       rerender();
     });
-    if (g?.ef_ref_id) $('cfo-g-ef').value = `ref:${g.ef_ref_id}`;
+    if (g?.ef_ref_id) {
+      // the list holds Active rows: an EF made Inactive later stays on the group until another is picked
+      const own = refs.get(g.ef_ref_id);
+      if (own && !$('cfo-g-ef').querySelector(`option[value="ref:${own.id}"]`)) $('cfo-g-ef').insertAdjacentHTML('beforeend', `<optgroup label="EF ที่ใช้อยู่"><option value="ref:${own.id}">${esc(`${own.code ? `[${own.code}] ` : ''}${own.name.replace(/^-\s*/, '')} (${cfoRefNum(own.total)} kgCO₂e/${own.unit})`)}</option></optgroup>`);
+      $('cfo-g-ef').value = `ref:${g.ef_ref_id}`;
+    }
   };
   $('cfo-g-add').onclick = () => groupForm(null);
   $('cfo-g-edit').onclick = () => pickedGroup && groupForm(pickedGroup);

@@ -10,12 +10,14 @@ const CODE = /^[a-z0-9_-]{1,20}$/;
 export function mountSmf(app) {
   const route = actRoute(app, { only: PROJECT_ON });
   const usedBy = async (t, project) => {
-    const [team, task] = await Promise.all([
+    const [team, task, months, ideas] = await Promise.all([
       tx.from(t.team).select('id', { count: 'exact', head: true }).eq('year', project.year).eq('unit', project.code),
-      tx.from(t.task).select('id', { count: 'exact', head: true }).eq('year', project.year).eq('unit', project.code)
+      tx.from(t.task).select('id', { count: 'exact', head: true }).eq('year', project.year).eq('unit', project.code),
+      tx.from(t.projectMonth).select('id', { count: 'exact', head: true }).eq('project_id', project.id),
+      tx.from('automation_ideas').select('id', { count: 'exact', head: true }).eq('project_code', project.code) // no table yet = none
     ]);
-    if (team.error || task.error) throw team.error || task.error;
-    return (team.count || 0) + (task.count || 0);
+    if (team.error || task.error || months.error) throw team.error || task.error || months.error;
+    return (team.count || 0) + (task.count || 0) + (months.count || 0) + (ideas.error ? 0 : ideas.count || 0);
   };
   const input = (body) => {
     const name = String(body?.name || '').trim().slice(0, 120);

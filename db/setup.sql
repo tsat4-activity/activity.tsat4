@@ -628,6 +628,10 @@ on conflict (key) do nothing;
 -- EF การได้มาของเชื้อเพลิง (Scope 3-3, ผู้ใช้กำหนด 2026-11-01): ปริมาณเดียวกันของกิจกรรมคิดอีกบรรทัดใน 3-3
 -- เช่น กระบะ B7 = Scope 1 (Report in Scope 1) + รายงานแยก (co2_bio ของ EF) + 3-3 การได้มาของ B7 · entry เก็บ ef3_id ตอนบันทึก
 alter table public.mt_cfo_activity add column if not exists ef3_id bigint references public.mt_cfo_ef (id);
+-- ef3_off = ผู้ดูแลเลือก "ไม่คิด 3-3" ระบบไม่เติม 3-3 ให้กิจกรรมนี้เอง (2026-11-05)
+alter table public.mt_cfo_activity add column if not exists ef3_off boolean not null default false;
+-- ลำดับ อบก. ที่หายตอนแก้แถว EF CFP (ฟอร์มไม่มีช่องนี้ 2026-11-04): แถวของ อบก. sort_no = ลำดับ · แถวของเรา (≥ 100000) ไม่มีลำดับ
+update public.mt_cfo_ef_ref set item_no = sort_no::text where sheet = 'cfp' and item_no is null and sort_no between 1 and 99999;
 -- EF ของกิจกรรม (สำเนาใน mt_cfo_ef) ผูกกับแถวในตารางอ้างอิงด้วย FK ref_id (ผู้ใช้กำหนด 2026-11-02) · id ที่ผู้ใช้เห็น = mt_cfo_ef_ref.code
 -- กิจกรรมเก่า: จากรหัสสำเนา ref:<id>:<หมวด> หรือชื่อ + หน่วย + ค่า kgCO2e ตรงกับ EF พลังงาน / GWP สารเคมี (EF เดิมจาก Excel)
 alter table public.mt_cfo_ef add column if not exists ref_id bigint references public.mt_cfo_ef_ref (id) on delete set null;
