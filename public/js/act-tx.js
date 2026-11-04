@@ -345,29 +345,29 @@ async function atxForm(activity, me, onDone, editId = 0) {
               </div>
               <div class="field">
                 <label>รายชื่อผู้ตรวจประเมินในทีม (ทำเครื่องหมายผู้ที่เข้าร่วมตรวจจริง)</label>
-                <div class="atx-part-grid">
-                  ${teamMembers().map((m) => `
-                    <label class="atx-part-card${state.participated.has(m.employeeId) ? ' is-checked' : ''}">
-                      <input type="checkbox" data-part="${esc(m.employeeId)}"${state.participated.has(m.employeeId) ? ' checked' : ''}>
-                      <span><strong>${esc(m.employeeId)}</strong> · ${esc(m.name)}</span>
-                    </label>
-                  `).join('') || '<span class="sum-meta">ทีมนี้ยังไม่มีรายชื่อผู้ตรวจ</span>'}
+                <div class="wfa-member-grid">
+                  ${teamMembers().map((m) => {
+                    const isChecked = state.participated.has(m.employeeId);
+                    return `
+                      <label class="wfa-member-card ${isChecked ? 'is-selected' : ''}">
+                        <input type="checkbox" data-part="${esc(m.employeeId)}"${isChecked ? ' checked' : ''}>
+                        <span>${esc(m.name)} <small>(${esc(m.employeeId)})</small></span>
+                      </label>
+                    `;
+                  }).join('') || '<span class="sum-meta">ทีมนี้ยังไม่มีรายชื่อผู้ตรวจ</span>'}
                 </div>
               </div>
             ` : ''}
 
             <div class="field">
               <label>ผู้รับการตรวจ (ตัวแทนพื้นที่)</label>
-              <div style="display:flex;flex-direction:column;gap:6px">
-                <div class="atx-recv-chips">
-                  ${state.receivers.map((p, i) => `
-                    <span class="atx-chip">
-                      ${esc(p.employeeId)} ${esc(p.name)}
-                      <button type="button" data-unrecv="${i}" aria-label="เอาออก">×</button>
-                    </span>
-                  `).join('') || '<span class="sum-meta">ยังไม่ได้ระบุผู้รับตรวจ (ค้นหาเพิ่มด้านล่าง)</span>'}
-                </div>
-                <div class="atx-recv-pick">${a5EmpField('', '')}</div>
+              <div class="atx-recv-chips">
+                ${state.receivers.map((p, i) => `
+                  <span class="atx-chip">
+                    ${esc(p.employeeId)} ${esc(p.name)}
+                    <button type="button" data-unrecv="${i}" aria-label="เอาออก">×</button>
+                  </span>
+                `).join('') || '<span class="sum-meta">ยังไม่ได้ระบุผู้รับตรวจ (เลือกพื้นที่เพื่อดึงข้อมูลตัวแทนพื้นที่อัตโนมัติ)</span>'}
               </div>
             </div>
 
@@ -480,8 +480,13 @@ async function atxForm(activity, me, onDone, editId = 0) {
       }
       container.querySelectorAll('[data-part]').forEach((node) => {
         node.onchange = () => {
-          if (node.checked) state.participated.add(node.dataset.part);
-          else state.participated.delete(node.dataset.part);
+          if (node.checked) {
+            state.participated.add(node.dataset.part);
+            node.closest('.wfa-member-card')?.classList.add('is-selected');
+          } else {
+            state.participated.delete(node.dataset.part);
+            node.closest('.wfa-member-card')?.classList.remove('is-selected');
+          }
         };
       });
       container.querySelectorAll('[data-unrecv]').forEach((node) => {
@@ -490,10 +495,12 @@ async function atxForm(activity, me, onDone, editId = 0) {
           draw(false);
         };
       });
-      a5EmployeeSearch(activity, (p) => {
-        if (!state.receivers.some((r) => r.employeeId === p.employeeId)) state.receivers.push(p);
-        setTimeout(() => draw(false), 0);
-      });
+      if (container.querySelector('.atx-recv-pick')) {
+        a5EmployeeSearch(activity, (p) => {
+          if (!state.receivers.some((r) => r.employeeId === p.employeeId)) state.receivers.push(p);
+          setTimeout(() => draw(false), 0);
+        });
+      }
     } else {
       // Bind Step 2..6 items
       container.querySelectorAll('[data-score]').forEach((node) => {
