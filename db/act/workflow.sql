@@ -49,3 +49,4 @@ create index if not exists idx_automation_ideas_status on public.automation_idea
 create index if not exists idx_automation_ideas_emp on public.automation_ideas(employee_id);
 create index if not exists idx_automation_images_idea on public.automation_images(idea_id);
 create index if not exists idx_automation_eval_idea on public.automation_evaluations(idea_id);
+

@@ -572,7 +572,7 @@ function showShell() {
 
 function zoneOf(name) {
   if (name === 'setup' || name === 'act-plan' || name === 'system') return 'setup';
-  if (name === 'activity') return 'act';
+  if (name === 'activity' || name.startsWith('workflow') || name.startsWith('smf')) return 'act';
   if (typeof plantOf === 'function' && plantOf(name)) return 'act';
   return '';
 }
@@ -587,7 +587,7 @@ function openView(name) {
   const zone = zoneOf(view);
   if (zone) document.body.dataset.zone = zone;
   else delete document.body.dataset.zone;
-  const [title, subtitle] = TITLES[name];
+  const [title, subtitle] = TITLES[name] || [name, ''];
   $('header-page-title').textContent = title;
   $('header-page-subtitle').textContent = subtitle;
   document.querySelectorAll('.nav-btn').forEach((node) => node.classList.toggle('active', node.dataset.view === name && !node.classList.contains('nav-parent')));

@@ -1155,8 +1155,14 @@ async function wfaOpenDetail(id, onRefresh) {
   }
 }
 
-// Register views
+// Register views & titles
+TITLES['workflow'] = ['Work Flow Automation', 'ระบบกิจกรรม > SMF > Work Flow Automation'];
+TITLES['workflow-submit'] = ['ส่งแนวคิดปรับปรุง Workflow', 'ระบบกิจกรรม > SMF > Work Flow Automation'];
+TITLES['workflow-dashboard'] = ['Dashboard โครงการ Workflow', 'ระบบกิจกรรม > SMF > Work Flow Automation'];
+TITLES['smf-workflow'] = ['Work Flow Automation', 'ระบบกิจกรรม > SMF > Work Flow Automation'];
+
 VIEWS['workflow'] = wfaHome;
 VIEWS['workflow-submit'] = wfaSubmit;
 VIEWS['workflow-dashboard'] = wfaDashboard;
 VIEWS['smf-workflow'] = wfaHome;
+

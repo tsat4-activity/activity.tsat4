@@ -55,7 +55,7 @@ function unitNav(rows) {
     <button class="nav-btn nav-parent" type="button" data-view="${id}" title="${label}"><span class="material-symbols-rounded">${icon}</span><span>${label}</span></button>
     <button class="nav-caret-btn" type="button" data-nav-toggle="${id}" aria-expanded="false" aria-label="ย่อ ${label}" title="ย่อ/ขยาย"><span class="material-symbols-rounded nav-caret">expand_more</span></button>
   </div>
-  <div class="nav-sub" data-nav-panel="${id}">${PLANT_PAGES.map(([page, itemIcon, title]) => `<button class="nav-btn" data-view="${id}-${page}" title="${title}"><span class="material-symbols-rounded">${itemIcon}</span><span>${title}</span></button>`).join('')}${id === 'smf' ? `<button class="nav-btn" data-view="workflow" title="Work Flow Automation"><span class="material-symbols-rounded">automation</span><span>Workflow</span></button>` : ''}</div>
+  <div class="nav-sub" data-nav-panel="${id}">${PLANT_PAGES.map(([page, itemIcon, title]) => `<button class="nav-btn" data-view="${id}-${page}" title="${title}"><span class="material-symbols-rounded">${itemIcon}</span><span>${title}</span></button>`).join('')}${id === 'smf' ? `<button class="nav-btn" data-view="workflow" title="Work Flow Automation"><span class="material-symbols-rounded">bolt</span><span>Workflow</span></button>` : ''}</div>
 </div>`).join('');
 }
 
