@@ -44,9 +44,14 @@ create table if not exists public.automation_evaluations (
   created_at timestamptz not null default now()
 );
 
+alter table public.automation_ideas add column if not exists project_code text not null default 'workflow';
+alter table public.automation_ideas add column if not exists team_name text;
+alter table public.automation_ideas add column if not exists team_members jsonb default '[]'::jsonb;
+
 create index if not exists idx_automation_ideas_dept on public.automation_ideas(department);
 create index if not exists idx_automation_ideas_status on public.automation_ideas(project_status);
 create index if not exists idx_automation_ideas_emp on public.automation_ideas(employee_id);
+create index if not exists idx_automation_ideas_proj on public.automation_ideas(project_code);
 create index if not exists idx_automation_images_idea on public.automation_images(idea_id);
 create index if not exists idx_automation_eval_idea on public.automation_evaluations(idea_id);
 

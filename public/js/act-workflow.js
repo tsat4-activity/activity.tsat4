@@ -63,7 +63,8 @@ function wfaProposalCardHtml(item, { showActions = true } = {}) {
         <div>
           <h3 class="wfa-prop-heading">Improvement Proposal</h3>
           <div class="wfa-prop-submeta">
-            ผู้เสนอ: ${esc(item.full_name || '-')}${item.employee_id ? ` (${esc(item.employee_id)})` : ''} · แผนก: ${esc(item.department || '-')}${dateText ? ` · วันที่ส่ง: ${esc(dateText)}` : ''}
+            ${item.team_name ? `กลุ่ม: <b>${esc(item.team_name)}</b> · ` : ''}ผู้เสนอ: ${esc(item.full_name || '-')}${item.employee_id ? ` (${esc(item.employee_id)})` : ''} · แผนก: ${esc(item.department || '-')}${dateText ? ` · วันที่ส่ง: ${esc(dateText)}` : ''}
+            ${Array.isArray(item.team_members) && item.team_members.length ? `<br><small class="sum-meta">สมาชิกในกลุ่ม: ${item.team_members.map((m) => esc(typeof m === 'object' ? (m.name || m.employee_id) : m)).join(', ')}</small>` : ''}
           </div>
         </div>
         <div class="wfa-prop-top-actions">
@@ -207,10 +208,15 @@ function wfaBindProposalThumbs(root) {
   });
 }
 
-// SMF: Transaction - Work Flow Automation Project View
-async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmData, byMonth, projTabs) {
+// SMF: Transaction - Unified Project View (Smart OEE, Vision Camera, Work Flow Automation)
+async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmData, byMonth, projTabs, allProjects = []) {
   // Merge global logged-in user `me` (from core.js) with activity access `actMe`
   const userMe = { ...(typeof me === 'object' && me ? me : {}), ...(actMe || {}) };
+  const isTeam = currentProj.team_type === 'team' || (currentProj.code && currentProj.code !== 'workflow');
+  const projList = Array.isArray(allProjects) && allProjects.length
+    ? allProjects
+    : (pmData?.projects || []).filter((p) => p.status === 'Active');
+
   let ideas = [];
   let stats = {};
   let depts = [];
@@ -242,6 +248,7 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 
   const loadData = async () => {
     const qParams = new URLSearchParams();
+    qParams.set('project_code', currentProj.code || 'workflow');
     if (filter.q) qParams.set('q', filter.q);
     if (filter.department) qParams.set('department', filter.department);
     if (filter.status) qParams.set('status', filter.status);
@@ -249,7 +256,7 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 
     const [iData, sData] = await Promise.all([
       api(`/api/workflow/ideas?${qParams.toString()}`).catch(() => ({ ideas: [] })),
-      api('/api/workflow/stats').catch(() => ({}))
+      api(`/api/workflow/stats?project_code=${encodeURIComponent(currentProj.code || 'workflow')}`).catch(() => ({}))
     ]);
     ideas = iData.ideas || [];
     stats = sData || {};
@@ -263,20 +270,19 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
     const totalSubmitted = ideas.length;
 
     const contentHtml = !ideas.length
-      ? '<div class="card"><p class="empty">ยังไม่มีการส่งข้อมูลโปรเจค Work Flow Automation หรือไม่พบข้อมูลตามตัวกรอง · คลิก "+ ส่งข้อมูลโปรเจค" เพื่อส่งแนวคิดแรก</p></div>'
+      ? `<div class="card"><p class="empty">ยังไม่มีการส่งข้อมูลโปรเจค ${esc(currentProj.name)} หรือไม่พบข้อมูลตามตัวกรอง · คลิก "+ ส่งข้อมูลโปรเจค" เพื่อส่งแนวคิดแรก</p></div>`
       : `
         <div class="table-wrap sheet">
           <table class="mo-data-table">
             <thead>
               <tr>
-                <th style="width:45px">#</th>
+                <th style="width:45px">no</th>
                 <th style="width:90px">วันที่ส่ง</th>
                 <th>ชื่อโปรเจค (AFTER)</th>
                 <th>กระบวนการเดิม (BEFORE)</th>
-                <th>ผู้เสนอ / แผนก</th>
+                <th>ผู้เสนอ / ทีม / แผนก</th>
                 <th>เทคโนโลยี</th>
-                <th style="width:105px">รูปภาพ (16:9)</th>
-                <th>ผลประหยัด</th>
+                <th>ผลประหยัด / KPI</th>
                 <th style="width:115px">สถานะ</th>
                 <th style="width:120px;text-align:center">การจัดการ</th>
               </tr>
@@ -286,26 +292,21 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
                 const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
                 const tPct = item.time_saving_pct != null ? `${item.time_saving_pct}%` : null;
                 const pPct = item.paper_reduction_pct != null ? `${item.paper_reduction_pct}%` : null;
-                const imgs = Array.isArray(item.images) ? item.images : [];
-                const bCount = imgs.filter((i) => i.image_type === 'BEFORE').length;
-                const aCount = imgs.filter((i) => i.image_type === 'AFTER').length;
-                const imgLabel = (bCount || aCount)
-                  ? `<span class="sum-meta" style="font-weight:600">B:${bCount} · A:${aCount}</span>`
-                  : `<span class="sum-meta">-</span>`;
+                const memberNames = Array.isArray(item.team_members) && item.team_members.length
+                  ? item.team_members.map((m) => (typeof m === 'object' ? (m.name || m.employee_id) : m)).filter(Boolean).join(', ')
+                  : '';
+                const presenterHtml = item.team_name
+                  ? `<div class="wfa-col-emp"><strong>${esc(item.team_name)}</strong><small class="sum-meta">${esc(memberNames || item.full_name)} · ${esc(item.department || '-')}</small></div>`
+                  : `<div class="wfa-col-emp"><span>${esc(item.full_name)}</span><small class="sum-meta">${esc(item.department || '-')}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</small></div>`;
+
                 return `
                   <tr data-pick-id="${item.id}" style="cursor:pointer">
                     <td>${idx + 1}</td>
                     <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
                     <td><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
                     <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
-                    <td>
-                      <div class="wfa-col-emp">
-                        <span>${esc(item.full_name)}</span>
-                        <small class="sum-meta">${esc(item.department || '-')}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</small>
-                      </div>
-                    </td>
+                    <td>${presenterHtml}</td>
                     <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
-                    <td>${imgLabel}</td>
                     <td>
                       <div class="wfa-col-savings">
                         ${tPct ? `<span class="wfa-saving-mini" title="ลดเวลาทำงาน"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
@@ -334,22 +335,45 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
         </div>
       `;
 
-    setHeaderMeta(`<span class="sum-meta">Less Paper. Less Time. More Efficiency.</span> <strong>เป้าหมาย ${targetCount} โครงการ</strong>`);
+    setHeaderMeta(`<span class="sum-meta">${esc(currentProj.name)}</span> <strong>${currentProj.target_count ? `เป้าหมาย ${currentProj.target_count} ${esc(currentProj.unit || 'โครงการ')}` : 'วัดตามแผนงาน'}</strong>`);
+
+    const leftBar = `
+      <div class="field" style="margin:0;min-width:170px">
+        <select id="smf-proj-select" style="font-weight:700;font-size:13px;padding:4px 8px;border-radius:var(--mo-radius);background:var(--mo-surface);color:var(--mo-text);border:1px solid var(--mo-border);cursor:pointer">
+          ${projList.map((p) => `<option value="${p.id}" ${p.id === currentProj.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+        </select>
+      </div>
+    `;
 
     const rightBar = `
-      <div class="a5-year">${a5YearSelect(userMe.years)}</div>
-      <div class="action-bar" style="margin:0;gap:4px">
-        <button class="btn btn-primary small" type="button" id="wfa-btn-add">
-          <span class="material-symbols-rounded">add_circle</span> ส่งข้อมูลโปรเจค (6 ขั้นตอน)
-        </button>
-        <button class="btn btn-secondary small" type="button" id="wfa-btn-export">
-          <span class="material-symbols-rounded">download</span> Export รายงาน (CSV)
+      <div class="toolbar a5-filters" style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <div class="a5-year">${a5YearSelect(userMe.years)}</div>
+        <div class="field" style="width:190px">
+          <input id="wfa-flt-q" placeholder="ค้นหาโปรเจค, ปัญหา, พนักงาน" value="${esc(filter.q)}" style="padding:4px 8px;font-size:12px">
+        </div>
+        <div class="field" style="width:115px">
+          <select id="wfa-flt-dept" style="padding:4px 6px;font-size:12px">
+            <option value="">ทุกแผนก</option>
+            ${options(depts, filter.department)}
+          </select>
+        </div>
+        <div class="field" style="width:115px">
+          <select id="wfa-flt-status" style="padding:4px 6px;font-size:12px">
+            <option value="">ทุกสถานะ</option>
+            ${options(['Idea', 'Prototype', 'Testing', 'Implemented'], filter.status, (v) => WFA_STATUS_BADGES[v]?.label || v)}
+          </select>
+        </div>
+        <label class="wfa-check-label" style="align-self:center;font-size:11.5px;margin:0;white-space:nowrap">
+          <input type="checkbox" id="wfa-flt-my" ${filter.myOnly ? 'checked' : ''}> เฉพาะของฉัน
+        </label>
+        <button class="btn btn-primary small" type="button" id="wfa-btn-add" style="white-space:nowrap">
+          <span class="material-symbols-rounded" style="font-size:16px">add_circle</span> ${isTeam ? 'ส่งข้อมูลโปรเจค (แบบกลุ่ม)' : 'ส่งข้อมูลโปรเจค (6 ขั้นตอน)'}
         </button>
       </div>
     `;
 
     const kpis = [
-      chartKpi({ label: `เป้าหมายปี ${a5Year}`, value: targetCount, unit: 'โครงการ', icon: 'flag', note: 'เป้าหมายประจำปี', color: CHART.series[0] }),
+      chartKpi({ label: `เป้าหมายปี ${a5Year}`, value: targetCount, unit: currentProj.unit || 'โครงการ', icon: 'flag', note: currentProj.target_name || 'เป้าหมายประจำปี', color: CHART.series[0] }),
       chartKpi({ label: 'สมาชิกส่งข้อมูลแล้ว', value: totalSubmitted, unit: 'เรื่อง', icon: 'send', note: 'ข้อเสนอทั้งหมด', color: CHART.series[1] }),
       chartKpi({ label: 'ดำเนินการสำเร็จ', value: implementedCount, unit: 'เรื่อง', icon: 'task_alt', note: 'Implemented', color: CHART.series[2] }),
       chartKpi({ label: 'ลดเวลาทำงานเฉลี่ย', value: stats.avgTimeSaving || 0, unit: '%', icon: 'timer', note: 'Time Saving', color: CHART.series[3] }),
@@ -358,37 +382,13 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 
     target.innerHTML = `
       <div class="view-body"><section class="card">
-        ${pageBar(a5Seg('data-smfproj', projTabs, currentProj.id), rightBar, 'smf')}
+        ${pageBar(leftBar, rightBar, 'smf')}
         <div id="smf-body" style="padding-top:10px;display:flex;flex-direction:column;gap:10px">
-          
           <!-- Standard KPI Strip -->
           <div class="ch-kpis">${kpis}</div>
 
-          <!-- Standard Filter Toolbar -->
-          <div class="toolbar a5-filters" style="margin:2px 0 8px">
-            <div class="field grow">
-              <input id="wfa-flt-q" placeholder="ค้นหาชื่อโปรเจค, ปัญหา, พนักงาน, แผนก" value="${esc(filter.q)}">
-            </div>
-            <div class="field" style="width:140px">
-              <select id="wfa-flt-dept">
-                <option value="">ทุกแผนก</option>
-                ${options(depts, filter.department)}
-              </select>
-            </div>
-            <div class="field" style="width:140px">
-              <select id="wfa-flt-status">
-                <option value="">ทุกสถานะ</option>
-                ${options(['Idea', 'Prototype', 'Testing', 'Implemented'], filter.status, (v) => WFA_STATUS_BADGES[v]?.label || v)}
-              </select>
-            </div>
-            <label class="wfa-check-label" style="align-self:center;font-size:12px">
-              <input type="checkbox" id="wfa-flt-my" ${filter.myOnly ? 'checked' : ''}> เฉพาะของฉัน
-            </label>
-          </div>
-
           <!-- Project Submissions Table -->
           ${contentHtml}
-
         </div>
       </section></div>
     `;
@@ -397,13 +397,12 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
   }
 
   function bindTxEvents() {
-    // Project tab switching
-    target.querySelectorAll('[data-smfproj]').forEach((btn) => {
-      btn.onclick = () => {
-        smfPickedProj['smf'] = Number(btn.dataset.smfproj);
+    if ($('smf-proj-select')) {
+      $('smf-proj-select').onchange = () => {
+        smfPickedProj['smf'] = Number($('smf-proj-select').value);
         rerender();
       };
-    });
+    }
 
     if ($('a5-year')) {
       $('a5-year').onchange = () => {
@@ -412,8 +411,7 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
       };
     }
 
-    $('wfa-btn-add').onclick = () => wfaOpenSubmitWizard(userMe, loadData, teamMembers);
-    $('wfa-btn-export').onclick = () => window.open('/api/workflow/export', '_blank');
+    $('wfa-btn-add').onclick = () => wfaOpenSubmitWizard(userMe, loadData, teamMembers, currentProj);
 
     $('wfa-flt-q').onchange = () => { filter.q = $('wfa-flt-q').value.trim(); loadData(); };
     $('wfa-flt-dept').onchange = () => { filter.department = $('wfa-flt-dept').value; loadData(); };
@@ -449,15 +447,48 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 }
 
 // 6-Step Submission Wizard in Modal Popup
-function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
+function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = {}) {
   let step = 1;
   const beforeImages = [];
   const afterImages = [];
+
+  const isTeam = currentProj.team_type === 'team' || (currentProj.code && currentProj.code !== 'workflow');
+  const projTitle = currentProj.name || 'Work Flow Automation';
+  const projCode = currentProj.code || 'workflow';
+
+  let techOptions = WFA_TECH_OPTIONS;
+  if (projCode === 'oee') {
+    techOptions = [
+      'Smart OEE System',
+      'IoT Sensors & Gateway',
+      'PLC / Machine Data Logging',
+      'Real-time OEE Dashboard',
+      'Auto Downtime Alert / Line Notify',
+      'Digital Checklist & Maintenance Form',
+      'Web Application',
+      'Mobile Application',
+      'Other'
+    ];
+  } else if (projCode === 'vision') {
+    techOptions = [
+      'Vision Inspection Camera',
+      'AI / Deep Learning Object Detection',
+      'OCR / Barcode / 2D DataMatrix Scanner',
+      'Defect Sorting & Auto Reject System',
+      'Edge Computing Box',
+      'Real-time Inspection Dashboard',
+      'Web Application',
+      'Other'
+    ];
+  }
 
   const myEmpId = String(userMe?.employeeId || '').trim();
   const matchedMember = teamMembers.find((m) => m.employee_id === myEmpId);
 
   const state = {
+    project_code: projCode,
+    team_name: '',
+    team_members: [],
     employee_id: myEmpId,
     full_name: String(userMe?.name || matchedMember?.name || '').trim(),
     department: String(userMe?.department || matchedMember?.department || '').trim(),
@@ -467,7 +498,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
     frequency: 'ทุกวัน (Daily)',
     project_name: '',
     improvement_description: '',
-    proposed_technology: WFA_TECH_OPTIONS[0],
+    proposed_technology: techOptions[0],
     improvement_benefits: [],
     time_before: 0,
     time_after: 0,
@@ -524,6 +555,15 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
       if ($('wfa-empid')) state.employee_id = $('wfa-empid').value.trim();
       if ($('wfa-name')) state.full_name = $('wfa-name').value.trim();
       if ($('wfa-dept')) state.department = $('wfa-dept').value.trim();
+      if ($('wfa-team-name')) state.team_name = $('wfa-team-name').value.trim();
+      const chkMembers = document.querySelectorAll('[name="wfa-team-member"]:checked');
+      if (chkMembers.length || document.querySelector('[name="wfa-team-member"]')) {
+        state.team_members = Array.from(chkMembers).map((el) => ({
+          employee_id: el.value,
+          name: el.dataset.name || '',
+          department: el.dataset.dept || ''
+        }));
+      }
     } else if (step === 2) {
       if ($('wfa-proc-name')) state.process_name = $('wfa-proc-name').value.trim();
       if ($('wfa-proc-desc')) state.current_description = $('wfa-proc-desc').value.trim();
@@ -554,11 +594,17 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
   async function handleFinalSave() {
     saveCurrentStep();
 
+    if (isTeam && !state.team_name) {
+      step = 1;
+      renderStep();
+      $('wfa-team-name')?.focus();
+      throw new Error('กรุณาระบุชื่อกลุ่ม / ชื่อทีม (ขั้นตอนที่ 1)');
+    }
     if (!state.full_name) {
       step = 1;
       renderStep();
       $('wfa-name')?.focus();
-      throw new Error('กรุณาระบุชื่อ-นามสกุลผู้ส่ง (ขั้นตอนที่ 1)');
+      throw new Error(`กรุณาระบุชื่อ-นามสกุล${isTeam ? 'ผู้ส่ง/หัวหน้ากลุ่ม' : 'ผู้ส่ง'} (ขั้นตอนที่ 1)`);
     }
     if (!state.process_name) {
       step = 2;
@@ -597,12 +643,12 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
     };
 
     await api('/api/workflow/ideas', { method: 'POST', body: payload });
-    toast('บันทึกข้อมูลโปรเจค Work Flow Automation สำเร็จแล้ว');
+    toast(`บันทึกข้อมูลโปรเจค ${projTitle} สำเร็จแล้ว`);
     closePopup();
     if (onSuccess) onSuccess();
   }
 
-  openPopup('ส่งข้อมูลโปรเจค Work Flow Automation', modalHtml, handleFinalSave, 'บันทึก');
+  openPopup(`ส่งข้อมูลโปรเจค ${projTitle}`, modalHtml, handleFinalSave, 'บันทึก');
   const popupEl = $('popup')?.querySelector('.popup');
   if (popupEl) {
     popupEl.style.width = 'min(920px, 96vw)';
@@ -632,26 +678,66 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
         return `<option value="${esc(m.employee_id)}" data-name="${esc(m.name)}" data-dept="${esc(m.department || '')}"${sel}>${esc(m.employee_id)} · ${esc(m.name)}${m.department ? ` (${esc(m.department)})` : ''}</option>`;
       }).join('');
 
+      const teamSectionHtml = isTeam ? `
+        <div class="field" style="margin-bottom:12px">
+          <label class="required">ชื่อกลุ่ม / ชื่อทีม (Team Name) *</label>
+          <input id="wfa-team-name" maxlength="200" value="${esc(state.team_name)}" placeholder="เช่น กลุ่ม AI Vision Line 1, กลุ่ม Smart OEE Press">
+        </div>
+      ` : '';
+
+      const teamMembersPickerHtml = isTeam && teamMembers.length ? `
+        <div class="field" style="margin-top:12px">
+          <label>เลือกสมาชิกในกลุ่มที่ร่วมทำโปรเจค (เลือกได้หลายคน):</label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;max-height:160px;overflow-y:auto;border:1px solid var(--mo-line);border-radius:6px;padding:8px;background:var(--mo-surface)">
+            ${teamMembers.map((m) => {
+              const isChecked = state.team_members.some((tm) => tm.employee_id === m.employee_id || tm.name === m.name);
+              return `
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:4px" class="hover-surface">
+                  <input type="checkbox" name="wfa-team-member" value="${esc(m.employee_id)}" data-name="${esc(m.name)}" data-dept="${esc(m.department || '')}" ${isChecked ? 'checked' : ''}>
+                  <span>${esc(m.name)} <small style="color:var(--mo-text-muted)">(${esc(m.department || '-')})</small></span>
+                </label>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : '';
+
       body.innerHTML = `
         <div class="wfa-step-section">
           <div class="wfa-sec-badge">Section 01</div>
-          <h3 style="margin:4px 0">ข้อมูลสมาชิกผู้ส่ง (Member Information)</h3>
+          <h3 style="margin:4px 0">${isTeam ? 'ข้อมูลกลุ่มและผู้ส่ง (Team & Submitter)' : 'ข้อมูลสมาชิกผู้ส่ง (Member Information)'}</h3>
+          ${teamSectionHtml}
           ${memberOptions ? `
           <div class="field" style="margin-bottom:12px">
-            <label>เลือกสมาชิกในทีม SMF (เชื่อมโยงรหัส ชื่อ และแผนกอัตโนมัติ)</label>
+            <label>${isTeam ? 'เลือกหัวหน้ากลุ่ม / ผู้ส่งหลัก (เชื่อมโยงรหัส ชื่อ และแผนกอัตโนมัติ)' : 'เลือกสมาชิกในทีม SMF (เชื่อมโยงรหัส ชื่อ และแผนกอัตโนมัติ)'}</label>
             <select id="wfa-pick-member">
-              <option value="">-- เลือกสมาชิกในทีม หรือกรอกเองด้านล่าง --</option>
+              <option value="">-- เลือกจากรายชื่อ หรือกรอกเองด้านล่าง --</option>
               ${memberOptions}
             </select>
           </div>` : ''}
           <div class="wfa-form-grid">
-            ${field('รหัสพนักงาน', `<input id="wfa-empid" value="${esc(state.employee_id)}" placeholder="เช่น 2101999" autocomplete="off">`)}
-            ${field('ชื่อ-นามสกุล *', `<input id="wfa-name" value="${esc(state.full_name)}" placeholder="เช่น นางสาว อัจฉรา โสกาบุญ" autocomplete="off">`)}
+            ${field(isTeam ? 'รหัสพนักงานผู้ส่ง' : 'รหัสพนักงาน', `<input id="wfa-empid" value="${esc(state.employee_id)}" placeholder="เช่น 2101999" autocomplete="off">`)}
+            ${field(isTeam ? 'ชื่อ-นามสกุลผู้ส่ง *' : 'ชื่อ-นามสกุล *', `<input id="wfa-name" value="${esc(state.full_name)}" placeholder="เช่น นางสาว อัจฉรา โสกาบุญ" autocomplete="off">`)}
             ${field('แผนก / หน่วยงาน', `<input id="wfa-dept" value="${esc(state.department)}" placeholder="เช่น PLN & STO" autocomplete="off">`)}
             ${field('วันที่ส่ง', `<input value="${new Date().toLocaleDateString('th-TH')}" readonly class="is-locked">`)}
           </div>
+          ${teamMembersPickerHtml}
         </div>
       `;
+
+      if ($('wfa-team-name')) {
+        $('wfa-team-name').oninput = () => { state.team_name = $('wfa-team-name').value.trim(); };
+      }
+
+      body.querySelectorAll('[name="wfa-team-member"]').forEach((chk) => {
+        chk.onchange = () => {
+          state.team_members = Array.from(body.querySelectorAll('[name="wfa-team-member"]:checked')).map((el) => ({
+            employee_id: el.value,
+            name: el.dataset.name || '',
+            department: el.dataset.dept || ''
+          }));
+        };
+      });
 
       const applyPerson = (empId, name, dept) => {
         state.employee_id = String(empId || '').trim();
@@ -789,7 +875,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
           <div class="field">
             <label>เครื่องมือ / เทคโนโลยีที่ต้องการใช้</label>
             <select id="wfa-proj-tech">
-              ${options(WFA_TECH_OPTIONS, state.proposed_technology)}
+              ${options(techOptions, state.proposed_technology)}
             </select>
           </div>
 
@@ -962,7 +1048,9 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
 
           <div class="wfa-summary-box">
             <div class="wfa-sum-title">สรุปข้อมูลก่อนกดปุ่ม "บันทึก":</div>
-            <div class="wfa-sum-row"><span>ผู้ส่ง:</span><b>${esc(state.full_name || '-')} (${esc(state.department || '-')})</b></div>
+            ${isTeam && state.team_name ? `<div class="wfa-sum-row"><span>ชื่อกลุ่ม:</span><b>${esc(state.team_name)}</b></div>` : ''}
+            <div class="wfa-sum-row"><span>${isTeam ? 'ผู้ส่งหลัก / หัวหน้ากลุ่ม:' : 'ผู้ส่ง:'}</span><b>${esc(state.full_name || '-')} (${esc(state.department || '-')})</b></div>
+            ${isTeam && state.team_members.length ? `<div class="wfa-sum-row"><span>สมาชิกในกลุ่ม:</span><b>${state.team_members.map((m) => esc(m.name || m.employee_id)).join(', ')}</b></div>` : ''}
             <div class="wfa-sum-row"><span>ชื่อโปรเจค (After):</span><b>${esc(state.project_name || '-')}</b></div>
             <div class="wfa-sum-row"><span>กระบวนการเดิม (Before):</span><b>${esc(state.process_name || '-')}</b></div>
             <div class="wfa-sum-row"><span>เทคโนโลยี:</span><b>${esc(state.proposed_technology)}</b></div>

@@ -30,6 +30,7 @@ export function mountWorkflow(app) {
   // 1. List ideas
   app.get('/api/workflow/ideas', wrap(requireUser), wrap(async (req, res) => {
     const admin = isAdmin(req.user);
+    const projCode = String(req.query.project_code || '').trim();
     const q = String(req.query.q || '').trim().toLowerCase();
     const dept = String(req.query.department || '').trim();
     const status = String(req.query.status || '').trim();
@@ -41,10 +42,23 @@ export function mountWorkflow(app) {
     if (tx) {
       try {
         let query = tx.from(T_IDEAS).select('*').order('created_at', { ascending: false });
+        if (projCode) query = query.eq('project_code', projCode);
         if (dept) query = query.eq('department', dept);
         if (status) query = query.eq('project_status', status);
         if (myOnly) query = query.eq('employee_id', req.user.employeeId);
-        const { data, error } = await query;
+        let { data, error } = await query;
+        if (error && error.code === '42703') {
+          // If project_code column not in DB yet, query without it
+          let retry = tx.from(T_IDEAS).select('*').order('created_at', { ascending: false });
+          if (dept) retry = retry.eq('department', dept);
+          if (status) retry = retry.eq('project_status', status);
+          if (myOnly) retry = retry.eq('employee_id', req.user.employeeId);
+          const r = await retry;
+          if (!r.error) {
+            data = r.data || [];
+            error = null;
+          }
+        }
         if (error) {
           if (error.code === 'PGRST205' || error.code === '42P01') useMem = true;
           else throw error;
@@ -60,6 +74,7 @@ export function mountWorkflow(app) {
 
     if (useMem) {
       ideas = [...mem.ideas];
+      if (projCode) ideas = ideas.filter((i) => (i.project_code || 'workflow') === projCode);
       if (dept) ideas = ideas.filter((i) => i.department === dept);
       if (status) ideas = ideas.filter((i) => i.project_status === status);
       if (myOnly) ideas = ideas.filter((i) => i.employee_id === req.user.employeeId);
@@ -72,7 +87,8 @@ export function mountWorkflow(app) {
         (i.process_name || '').toLowerCase().includes(q) ||
         (i.full_name || '').toLowerCase().includes(q) ||
         (i.department || '').toLowerCase().includes(q) ||
-        (i.employee_id || '').toLowerCase().includes(q)
+        (i.employee_id || '').toLowerCase().includes(q) ||
+        (i.team_name || '').toLowerCase().includes(q)
       );
     }
 
@@ -174,8 +190,14 @@ export function mountWorkflow(app) {
     const empId = String(b.employee_id || req.user.employeeId || '').trim();
     const fullName = String(b.full_name || req.user.name || '').trim();
     const dept = String(b.department || req.user.department || '').trim();
+    const projCode = String(b.project_code || 'workflow').trim();
+    const teamName = String(b.team_name || '').trim().slice(0, 200);
+    const teamMembers = Array.isArray(b.team_members) ? b.team_members : [];
 
     const row = {
+      project_code: projCode,
+      team_name: teamName,
+      team_members: teamMembers,
       employee_id: empId,
       full_name: fullName,
       department: dept,
@@ -206,7 +228,16 @@ export function mountWorkflow(app) {
 
     if (tx) {
       try {
-        const { data, error } = await tx.from(T_IDEAS).insert([row]).select().maybeSingle();
+        let { data, error } = await tx.from(T_IDEAS).insert([row]).select().maybeSingle();
+        if (error && error.code === '42703') {
+          // If extra columns not yet in DB, retry without them so DB insert still succeeds
+          const { project_code, team_name, team_members, ...baseRow } = row;
+          const retry = await tx.from(T_IDEAS).insert([baseRow]).select().maybeSingle();
+          if (!retry.error && retry.data) {
+            data = { ...retry.data, project_code, team_name, team_members };
+            error = null;
+          }
+        }
         if (error) {
           console.warn('workflow ideas insert failed, using fallback:', error.message || error);
           useMem = true;
@@ -516,14 +547,17 @@ export function mountWorkflow(app) {
 
   // 9. Dashboard stats
   app.get('/api/workflow/stats', wrap(requireUser), wrap(async (req, res) => {
+    const projCode = String(req.query.project_code || '').trim();
     let ideas = [];
     let useMem = false;
 
     if (tx) {
       try {
-        const { data, error } = await tx.from(T_IDEAS).select('*');
+        let query = tx.from(T_IDEAS).select('*');
+        if (projCode) query = query.eq('project_code', projCode);
+        const { data, error } = await query;
         if (error) {
-          if (error.code === 'PGRST205' || error.code === '42P01') useMem = true;
+          if (error.code === 'PGRST205' || error.code === '42P01' || error.code === '42703') useMem = true;
           else throw error;
         } else {
           ideas = data || [];
@@ -537,6 +571,7 @@ export function mountWorkflow(app) {
 
     if (useMem) {
       ideas = [...mem.ideas];
+      if (projCode) ideas = ideas.filter((i) => (i.project_code || 'workflow') === projCode);
     }
 
     const totalProjects = ideas.length;

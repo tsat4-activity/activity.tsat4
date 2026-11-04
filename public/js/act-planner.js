@@ -805,8 +805,8 @@ async function smfTransaction(target, activity = 'smf') {
   const currentProj = projects.find((p) => p.id === smfPickedProj[activity]) || projects[0];
   const byMonth = Object.fromEntries((pmData.months || []).filter((m) => m.project_id === currentProj.id).map((m) => [m.month, m]));
   const projTabs = Object.fromEntries(projects.map((p) => [p.id, p.name]));
-  if ((currentProj.code === 'workflow' || (currentProj.name && currentProj.name.toLowerCase().includes('flow automation'))) && typeof wfaRenderSmfTransaction === 'function') {
-    return wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData, byMonth, projTabs);
+  if (typeof wfaRenderSmfTransaction === 'function') {
+    return wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData, byMonth, projTabs, projects);
   }
   const kpiLabel = currentProj.target_name || 'เป้าหมาย';
   const unitLabel = currentProj.unit ? ` (${currentProj.unit})` : '';
