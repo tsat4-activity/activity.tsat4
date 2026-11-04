@@ -164,7 +164,7 @@ async function atxAuditDetail(activity, id) {
     </div>`, () => closePopup(), 'ปิด');
 }
 
-// New audit, or edit one (editId): type and area are fixed when editing. Standard modal popup.
+// New audit, or edit one (editId): type and area are fixed when editing. Standard Stepper Wizard modal popup.
 async function atxForm(activity, me, onDone, editId = 0) {
   const isCurYear = a5Year === new Date().getFullYear();
   const defaultDate = isCurYear ? actIso(new Date()) : `${a5Year}-01-15`;
@@ -196,10 +196,23 @@ async function atxForm(activity, me, onDone, editId = 0) {
   const openBy = () => new Map(form.openIssues.map((i) => [i.checklist_id, i]));
   const forcedZero = (issue) => issue && !(String(issue.action_description || '').trim() && issue.after_photos > 0);
 
+  const groups = [...new Set(form.items.map((i) => i.s_group))].sort((x, y) => x - y);
+  const groupIcons = ['delete_sweep', 'grid_view', 'sparkles', 'health_and_safety', 'military_tech'];
+  const STEPS = [
+    { step: 1, label: 'ข้อมูลทั่วไป', icon: 'fact_check', group: 0 },
+    ...groups.map((g, idx) => ({
+      step: idx + 2,
+      label: a5GroupName(activity, g),
+      icon: groupIcons[idx] || 'checklist',
+      group: g
+    }))
+  ];
+  let step = 1;
+
   const title = state.editId ? `แก้ไขผลตรวจ ${esc(state.auditNo)}` : 'บันทึกผลตรวจ 5S';
   const saveLabel = state.editId ? 'บันทึกการแก้ไข' : 'บันทึกผลตรวจ';
-  openPopup(title, '<div class="atx-modal"><div class="atx-modal-body" id="atx-modal-body"></div></div>', async () => {
-    await atxSave(activity, state, form, openBy(), onDone);
+  openPopup(title, '<div class="wfa-wizard-modal atx-modal" id="atx-wizard-container"></div>', async () => {
+    await atxSave(activity, state, form, openBy(), onDone, groups, (newStep) => { step = newStep; draw(true); });
   }, saveLabel);
 
   const popupEl = $('popup');
@@ -211,42 +224,15 @@ async function atxForm(activity, me, onDone, editId = 0) {
     actionsEl.prepend(sumEl);
   }
 
-  const draw = () => {
-    const modalBody = $('atx-modal-body');
-    if (!modalBody) return;
+  const draw = (resetScroll = false) => {
+    const container = $('atx-wizard-container');
+    if (!container) return;
     const open = state.type === 'COMMITTEE' ? openBy() : new Map();
-    const groups = [...new Set(form.items.map((i) => i.s_group))].sort((x, y) => x - y);
     const scoreOf = (item) => (forcedZero(open.get(item.id)) ? 0 : state.scores[item.id]);
     const max = form.items.reduce((s, i) => s + i.score_max, 0);
     const total = form.items.reduce((s, i) => s + (Number(scoreOf(i)) || 0), 0);
     const done = form.items.filter((i) => scoreOf(i) != null).length;
     const percent = max ? (total / max) * 100 : 0;
-    const itemRow = (item) => {
-      const issue = open.get(item.id);
-      const locked = forcedZero(issue);
-      const value = scoreOf(item);
-      const needIssue = state.type === 'COMMITTEE' && !issue && !state.ownItems.has(item.id) && value != null && value <= form.settings.issue_score;
-      return `<div class="atx-item${value == null ? '' : ' is-scored'}">
-        <div class="atx-item-title"><span>${item.item_no}.</span> ${esc(actNoLead(item.title))}${issue ? `<div class="atx-carry">Issue เดิม ${esc(issue.issue_no)}: ${esc(issue.description)} · ${locked ? '<b>ยังไม่มี Action → ข้อนี้ได้ 0</b>' : 'มี Action แล้ว ให้ ≥ 4 เพื่อปิด Issue'}</div>` : ''}</div>
-        <div class="atx-scores">${locked ? '<span class="atx-zero">0</span>' : Array.from({ length: item.score_max }, (_, i) => i + 1).map((n) => `<button type="button" class="atx-score${value === n ? ' is-on' : ''}${n <= form.settings.issue_score ? ' is-low' : ''}" data-score="${item.id}:${n}">${n}</button>`).join('')}</div>
-        ${needIssue ? `<div class="atx-issue">
-          ${field(`เปิด Issue (ได้ ${form.settings.issue_score} หรือต่ำกว่า) รายละเอียดปัญหา`, `<textarea id="atx-text-${item.id}" rows="2" maxlength="2000" data-text="${item.id}">${esc(state.text[item.id] || '')}</textarea>`)}
-          ${field('รูปปัญหา 16:9', `<input id="atx-photo-${item.id}" type="file" accept="image/*"><img id="atx-photo-${item.id}-preview" class="atx-photo${state.photo[item.id] ? '' : ' d-none'}" src="${state.photo[item.id] || ''}" alt="">`)}
-        </div>` : ''}
-      </div>`;
-    };
-    modalBody.innerHTML = `
-      ${state.editId ? `<p class="atx-note">แก้ไข ${esc(state.auditNo)} · ประเภทและพื้นที่เปลี่ยนไม่ได้ · ข้อที่ Issue เดิมไม่มี Action ยังเป็น 0</p>` : ''}
-      <div class="toolbar atx-head">
-        ${state.editId ? `<span class="badge badge-primary">${esc(ATX_TYPES[state.type])}</span>` : a5Seg('data-atype', Object.fromEntries(form.types.map((t) => [t, ATX_TYPES[t]])), state.type)}
-        ${field('พื้นที่', `<select id="atx-area"${state.editId ? ' disabled' : ''}><option value="">เลือกพื้นที่</option>${areasFor().map((a) => `<option value="${a.id}"${String(a.id) === String(state.areaId) ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)}</option>`).join('')}</select>`, 'grow')}
-        ${field('วันที่ตรวจ', `<input id="atx-date" type="date" min="${a5Year}-01-01" max="${isCurYear ? actIso(new Date()) : `${a5Year}-12-31`}" value="${state.date}">`)}
-        ${state.type === 'COMMITTEE' ? field('ทีม', `<select id="atx-team">${options(form.teams.map((t) => t.team), state.team, (t) => `ทีม ${t}`)}</select>`) : ''}
-      </div>
-      ${state.type === 'COMMITTEE' ? `<div class="atx-people"><span class="sum-meta">ผู้ตรวจ:</span>${teamMembers().map((m) => `<label class="atx-check"><input type="checkbox" data-part="${esc(m.employeeId)}"${state.participated.has(m.employeeId) ? ' checked' : ''}> ${esc(m.employeeId)} ${esc(m.name)}</label>`).join('') || '<span class="sum-meta">ทีมนี้ยังไม่มีรายชื่อ</span>'}</div>` : ''}
-      <div class="atx-people"><span class="sum-meta">ผู้รับตรวจ:</span>${state.receivers.map((p, i) => `<span class="atx-chip">${esc(p.employeeId)} ${esc(p.name)} <button type="button" data-unrecv="${i}" aria-label="เอาออก">×</button></span>`).join('')}<span class="atx-recv-pick">${a5EmpField('', '')}</span></div>
-      ${state.type === 'COMMITTEE' && state.areaId && form.openIssues.length ? `<p class="atx-note">พื้นที่นี้มี Issue ค้าง ${form.openIssues.length} รายการ จะถูกยืนยันในการตรวจครั้งนี้ (ไม่มี Action = ข้อนั้นได้ 0 · มี Action และให้ ≥ 4 = ปิด)</p>` : ''}
-      ${state.areaId ? groups.map((g) => `<section class="atx-group"><div class="card-title">${esc(a5GroupName(activity, g))}</div>${form.items.filter((i) => i.s_group === g).map(itemRow).join('')}</section>`).join('') : '<p class="empty">เลือกพื้นที่เพื่อเริ่มให้คะแนน</p>'}`;
 
     const sumEl = $('atx-pop-summary');
     if (sumEl) {
@@ -255,52 +241,299 @@ async function atxForm(activity, me, onDone, editId = 0) {
     const saveBtn = $('popup-save');
     if (saveBtn) saveBtn.disabled = !state.areaId;
 
-    modalBody.querySelectorAll('[data-atype]').forEach((node) => { node.onclick = async () => { state.type = node.dataset.atype; state.areaId = ''; form.openIssues = []; draw(); }; });
-    $('atx-area').onchange = async () => {
-      state.areaId = $('atx-area').value;
-      form = { ...form, openIssues: state.areaId && state.type === 'COMMITTEE' ? (await a5Api(activity, `audit-form?year=${a5Year}&area=${state.areaId}`)).openIssues : [] };
-      draw();
+    const isStepDone = (sNum) => {
+      if (sNum === 1) return Boolean(state.areaId && (state.type !== 'COMMITTEE' || state.participated.size > 0));
+      const grpObj = STEPS.find((s) => s.step === sNum);
+      if (!grpObj || !grpObj.group) return false;
+      const gItems = form.items.filter((i) => i.s_group === grpObj.group);
+      return gItems.length > 0 && gItems.every((i) => forcedZero(open.get(i.id)) || state.scores[i.id] != null);
     };
-    $('atx-date').onchange = () => { state.date = $('atx-date').value; };
-    if ($('atx-team')) $('atx-team').onchange = () => { state.team = $('atx-team').value; resetParticipants(); draw(); };
-    modalBody.querySelectorAll('[data-part]').forEach((node) => { node.onchange = () => { if (node.checked) state.participated.add(node.dataset.part); else state.participated.delete(node.dataset.part); }; });
-    modalBody.querySelectorAll('[data-unrecv]').forEach((node) => { node.onclick = () => { state.receivers.splice(Number(node.dataset.unrecv), 1); draw(); }; });
-    a5EmployeeSearch(activity, (p) => {
-      if (!state.receivers.some((r) => r.employeeId === p.employeeId)) state.receivers.push(p);
-      setTimeout(draw, 0);
-    });
-    modalBody.querySelectorAll('[data-score]').forEach((node) => {
+
+    const stepperHtml = `
+      <div class="wfa-stepper">
+        ${STEPS.map((s) => {
+          const isDone = isStepDone(s.step);
+          const isCur = s.step === step;
+          const cls = isCur ? 'is-current' : isDone ? 'is-done' : '';
+          return `
+            <div class="wfa-step-item ${cls}" data-atx-step="${s.step}" title="ไปยังขั้นตอนที่ ${s.step}: ${s.label}">
+              <div class="wfa-step-circle">
+                <span class="material-symbols-rounded">${s.icon}</span>
+              </div>
+              <div class="wfa-step-lbl">${s.label}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    const itemRow = (item) => {
+      const issue = open.get(item.id);
+      const locked = forcedZero(issue);
+      const value = scoreOf(item);
+      const needIssue = state.type === 'COMMITTEE' && !issue && !state.ownItems.has(item.id) && value != null && value <= form.settings.issue_score;
+      return `<div class="atx-item${value == null ? '' : ' is-scored'}">
+        <div class="atx-item-header">
+          <div class="atx-item-title">
+            <span style="font-weight:700;color:var(--mo-primary)">${item.item_no}.</span> ${esc(actNoLead(item.title))}
+            ${issue ? `<div class="atx-carry" style="margin-top:6px;padding:6px 10px;background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;border-radius:4px">
+              Issue เดิม <strong>${esc(issue.issue_no)}</strong>: ${esc(issue.description)} · ${locked ? '<b style="color:#dc2626">ยังไม่มี Action → ข้อนี้ได้ 0 คะแนน</b>' : '<span style="color:#059669">มี Action แล้ว ให้คะแนน ≥ 4 เพื่อปิด Issue</span>'}
+            </div>` : ''}
+          </div>
+          <div class="atx-scores">
+            ${locked ? '<span class="atx-zero" style="display:grid;place-items:center;width:36px;height:36px;font-weight:bold;background:#fee2e2;color:#dc2626;border-radius:50%">0</span>' : Array.from({ length: item.score_max }, (_, i) => i + 1).map((n) => `
+              <button type="button" class="atx-score${value === n ? ' is-on' : ''}${n <= form.settings.issue_score ? ' is-low' : ''}" data-score="${item.id}:${n}">${n}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        ${needIssue ? `
+          <div class="atx-issue">
+            <div style="font-size:12px;font-weight:600;color:#dc2626">⚠️ ได้คะแนน ${value} (≤ ${form.settings.issue_score}) กรุณาระบุปัญหาและแนบรูปภาพเพื่อเปิด Issue</div>
+            ${field(`รายละเอียดปัญหา (ข้อที่ ${item.item_no})`, `<textarea id="atx-text-${item.id}" rows="2" maxlength="2000" placeholder="ระบุสิ่งที่พบเห็น ปัญหา หรือจุดที่ไม่เป็นไปตามมาตรฐาน..." data-text="${item.id}">${esc(state.text[item.id] || '')}</textarea>`, 'required')}
+            ${field('รูปปัญหา (อัตราส่วน 16:9)', `<input id="atx-photo-${item.id}" type="file" accept="image/*"><img id="atx-photo-${item.id}-preview" class="atx-photo${state.photo[item.id] ? '' : ' d-none'}" src="${state.photo[item.id] || ''}" alt="" style="max-height:180px;width:auto;object-fit:cover;border-radius:6px;margin-top:6px">`, 'required')}
+          </div>
+        ` : ''}
+      </div>`;
+    };
+
+    let contentHtml = '';
+    let currentGroupItems = [];
+    const curStepObj = STEPS.find((s) => s.step === step);
+
+    if (step === 1) {
+      contentHtml = `
+        <div class="wfa-step-section" style="max-width:760px;margin:0 auto;width:100%">
+          <div class="wfa-sec-badge">Section 01 · ข้อมูลทั่วไป</div>
+          <h3 style="margin:4px 0 12px">ข้อมูลการตรวจประเมินและพื้นที่</h3>
+          ${state.editId ? `<p class="atx-note">แก้ไข ${esc(state.auditNo)} · ประเภทและพื้นที่เปลี่ยนไม่ได้ · ข้อที่ Issue เดิมไม่มี Action ยังเป็น 0</p>` : ''}
+
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="field">
+              <label>ประเภทการตรวจประเมิน</label>
+              ${state.editId ? `<span class="badge badge-primary" style="display:inline-block;padding:6px 14px;font-size:13px">${esc(ATX_TYPES[state.type])}</span>` : a5Seg('data-atype', Object.fromEntries(form.types.map((t) => [t, ATX_TYPES[t]])), state.type)}
+            </div>
+
+            <div class="field">
+              <label class="required">พื้นที่ตรวจประเมิน (Area)</label>
+              <select id="atx-area"${state.editId ? ' disabled' : ''}>
+                <option value="">-- เลือกพื้นที่เพื่อเริ่มทำการตรวจ --</option>
+                ${areasFor().map((a) => `<option value="${a.id}"${String(a.id) === String(state.areaId) ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)} (${esc(a.areaType || '')})</option>`).join('')}
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="required">วันที่ตรวจประเมิน</label>
+              <input id="atx-date" type="date" min="${a5Year}-01-01" max="${isCurYear ? actIso(new Date()) : `${a5Year}-12-31`}" value="${state.date}">
+            </div>
+
+            ${state.type === 'COMMITTEE' ? `
+              <div class="field">
+                <label class="required">ทีมตรวจประเมิน</label>
+                <select id="atx-team">${options(form.teams.map((t) => t.team), state.team, (t) => `ทีม ${t}`)}</select>
+              </div>
+              <div class="field">
+                <label>รายชื่อผู้ตรวจประเมินในทีม (ทำเครื่องหมายผู้ที่เข้าร่วมตรวจจริง)</label>
+                <div class="atx-people-box" style="display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--mo-surface-2);border:1px solid var(--mo-line);border-radius:8px">
+                  ${teamMembers().map((m) => `
+                    <label class="atx-check" style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px">
+                      <input type="checkbox" data-part="${esc(m.employeeId)}"${state.participated.has(m.employeeId) ? ' checked' : ''}>
+                      <span><strong>${esc(m.employeeId)}</strong> · ${esc(m.name)}</span>
+                    </label>
+                  `).join('') || '<span class="sum-meta">ทีมนี้ยังไม่มีรายชื่อผู้ตรวจ</span>'}
+                </div>
+              </div>
+            ` : ''}
+
+            <div class="field">
+              <label>ผู้รับการตรวจ (ตัวแทนพื้นที่)</label>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div class="atx-recv-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px">
+                  ${state.receivers.map((p, i) => `
+                    <span class="atx-chip" style="font-size:12px;padding:4px 10px">
+                      ${esc(p.employeeId)} ${esc(p.name)}
+                      <button type="button" data-unrecv="${i}" aria-label="เอาออก" style="margin-left:4px;font-weight:bold;cursor:pointer">×</button>
+                    </span>
+                  `).join('') || '<span class="sum-meta" style="align-self:center">ยังไม่ได้ระบุผู้รับตรวจ (ค้นหาเพิ่มด้านล่าง)</span>'}
+                </div>
+                <div class="atx-recv-pick">${a5EmpField('', '')}</div>
+              </div>
+            </div>
+
+            ${state.type === 'COMMITTEE' && state.areaId && form.openIssues.length ? `
+              <div class="atx-note" style="margin-top:6px;border-left:4px solid var(--mo-warning,#f59e0b);padding:10px 14px;border-radius:6px">
+                <strong>⚠️ แจ้งเตือน Issue ค้างของพื้นที่:</strong>
+                <p style="margin:4px 0 0;font-size:12.5px">พื้นที่นี้มี Issue ค้าง <strong>${form.openIssues.length} รายการ</strong> ซึ่งจะถูกตรวจสอบยืนยันในการตรวจครั้งนี้โดยอัตโนมัติ (หากไม่มี Action จะได้ 0 คะแนน · หากมี Action และให้คะแนน ≥ 4 จะเป็นการปิด Issue)</p>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    } else {
+      const curGroup = curStepObj.group;
+      currentGroupItems = form.items.filter((i) => i.s_group === curGroup);
+      const groupDone = currentGroupItems.filter((i) => scoreOf(i) != null).length;
+      const groupMax = currentGroupItems.reduce((s, i) => s + i.score_max, 0);
+      const groupScore = currentGroupItems.reduce((s, i) => s + (Number(scoreOf(i)) || 0), 0);
+
+      contentHtml = `
+        <div class="wfa-step-section" style="max-width:820px;margin:0 auto;width:100%">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div class="wfa-sec-badge is-green">Section 0${step} · ${esc(a5GroupName(activity, curGroup))}</div>
+            <div class="sum-meta" style="font-size:12.5px">
+              ให้คะแนนแล้ว <strong>${groupDone}/${currentGroupItems.length} ข้อ</strong> · รวม <strong>${groupScore}/${groupMax} คะแนน</strong>
+            </div>
+          </div>
+          <h3 style="margin:4px 0 4px">${esc(a5GroupName(activity, curGroup))}</h3>
+          ${!state.areaId ? '<div class="atx-note" style="margin-bottom:8px">⚠️ กรุณากลับไปเลือกพื้นที่ใน <strong>ขั้นตอนที่ 1 (ข้อมูลทั่วไป)</strong> ก่อนทำการบันทึกคะแนน</div>' : ''}
+
+          <div class="atx-items-list" style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+            ${currentGroupItems.map(itemRow).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    const navHtml = `
+      <div class="wfa-wizard-nav">
+        <button class="btn btn-secondary" type="button" id="atx-wiz-prev"${step === 1 ? ' disabled' : ''}>
+          <span class="material-symbols-rounded">chevron_left</span> ย้อนกลับ
+        </button>
+        <div style="text-align:center;font-size:12px;color:var(--mo-text-muted)" id="atx-wiz-step-indicator">
+          ขั้นตอนที่ ${step} / ${STEPS.length} · ${esc(curStepObj?.label || '')}
+        </div>
+        <button class="btn btn-secondary" type="button" id="atx-wiz-next"${step === STEPS.length ? ' disabled' : ''}>
+          ถัดไป <span class="material-symbols-rounded">chevron_right</span>
+        </button>
+      </div>
+    `;
+
+    const scroller = $('atx-step-body');
+    const oldY = resetScroll ? 0 : (scroller ? scroller.scrollTop : 0);
+    container.innerHTML = `
+      ${stepperHtml}
+      <div class="wfa-step-body" id="atx-step-body">${contentHtml}</div>
+      ${navHtml}
+    `;
+    const newScroller = $('atx-step-body');
+    if (newScroller) newScroller.scrollTop = oldY;
+
+    // Bind navigation
+    container.querySelectorAll('[data-atx-step]').forEach((node) => {
       node.onclick = () => {
-        const [id, n] = node.dataset.score.split(':').map(Number);
-        state.scores[id] = n;
-        const scroller = $('atx-modal-body');
-        const y = scroller ? scroller.scrollTop : 0;
-        draw();
-        if (scroller) scroller.scrollTop = y;
+        step = Number(node.dataset.atxStep) || 1;
+        draw(true);
       };
     });
-    modalBody.querySelectorAll('[data-text]').forEach((node) => { node.oninput = () => { state.text[node.dataset.text] = node.value; }; });
-    form.items.forEach((item) => atxPhotoInput(`atx-photo-${item.id}`, (data) => { state.photo[item.id] = data; }));
+    if ($('atx-wiz-prev')) {
+      $('atx-wiz-prev').onclick = () => {
+        if (step > 1) {
+          step--;
+          draw(true);
+        }
+      };
+    }
+    if ($('atx-wiz-next')) {
+      $('atx-wiz-next').onclick = () => {
+        if (step < STEPS.length) {
+          step++;
+          draw(true);
+        }
+      };
+    }
+
+    // Bind Step 1 fields
+    if (step === 1) {
+      container.querySelectorAll('[data-atype]').forEach((node) => {
+        node.onclick = async () => {
+          state.type = node.dataset.atype;
+          state.areaId = '';
+          form.openIssues = [];
+          draw(false);
+        };
+      });
+      if ($('atx-area')) {
+        $('atx-area').onchange = async () => {
+          state.areaId = $('atx-area').value;
+          form = { ...form, openIssues: state.areaId && state.type === 'COMMITTEE' ? (await a5Api(activity, `audit-form?year=${a5Year}&area=${state.areaId}`)).openIssues : [] };
+          draw(false);
+        };
+      }
+      if ($('atx-date')) $('atx-date').onchange = () => { state.date = $('atx-date').value; };
+      if ($('atx-team')) {
+        $('atx-team').onchange = () => {
+          state.team = $('atx-team').value;
+          resetParticipants();
+          draw(false);
+        };
+      }
+      container.querySelectorAll('[data-part]').forEach((node) => {
+        node.onchange = () => {
+          if (node.checked) state.participated.add(node.dataset.part);
+          else state.participated.delete(node.dataset.part);
+        };
+      });
+      container.querySelectorAll('[data-unrecv]').forEach((node) => {
+        node.onclick = () => {
+          state.receivers.splice(Number(node.dataset.unrecv), 1);
+          draw(false);
+        };
+      });
+      a5EmployeeSearch(activity, (p) => {
+        if (!state.receivers.some((r) => r.employeeId === p.employeeId)) state.receivers.push(p);
+        setTimeout(() => draw(false), 0);
+      });
+    } else {
+      // Bind Step 2..6 items
+      container.querySelectorAll('[data-score]').forEach((node) => {
+        node.onclick = () => {
+          const [id, n] = node.dataset.score.split(':').map(Number);
+          state.scores[id] = n;
+          draw(false);
+        };
+      });
+      container.querySelectorAll('[data-text]').forEach((node) => {
+        node.oninput = () => { state.text[node.dataset.text] = node.value; };
+      });
+      currentGroupItems.forEach((item) => atxPhotoInput(`atx-photo-${item.id}`, (data) => { state.photo[item.id] = data; }));
+    }
   };
-  draw();
+  draw(true);
 }
 
-async function atxSave(activity, state, form, open, onDone) {
-  const missing = form.items.filter((i) => state.scores[i.id] == null && !(open.get(i.id) && !(String(open.get(i.id).action_description || '').trim() && open.get(i.id).after_photos > 0))).map((i) => i.item_no);
+async function atxSave(activity, state, form, open, onDone, groups, setStepAndDraw) {
+  if (!state.areaId) {
+    setStepAndDraw(1);
+    toast('กรุณาเลือกพื้นที่ในขั้นตอนที่ 1 (ข้อมูลทั่วไป)', 'error');
+    $('atx-area')?.focus();
+    throw new Error('กรุณาเลือกพื้นที่');
+  }
+
+  const missing = form.items.filter((i) => state.scores[i.id] == null && !(open.get(i.id) && !(String(open.get(i.id).action_description || '').trim() && open.get(i.id).after_photos > 0)));
   if (missing.length) {
-    toast(`ให้คะแนนให้ครบ (ข้อที่ ${missing.join(', ')})`, 'error');
-    throw new Error(`ให้คะแนนให้ครบ (ข้อที่ ${missing.join(', ')})`);
+    const firstMissing = missing[0];
+    const stepIdx = groups.indexOf(firstMissing.s_group);
+    if (stepIdx >= 0) setStepAndDraw(stepIdx + 2);
+    toast(`กรุณาให้คะแนนให้ครบ (ข้อที่ ${missing.map(i => i.item_no).join(', ')})`, 'error');
+    throw new Error(`ให้คะแนนให้ครบ (ข้อที่ ${missing.map(i => i.item_no).join(', ')})`);
   }
+
   const need = state.type === 'COMMITTEE' ? form.items.filter((i) => !open.get(i.id) && !state.ownItems.has(i.id) && state.scores[i.id] <= form.settings.issue_score) : [];
-  const noText = need.filter((i) => !String(state.text[i.id] || '').trim()).map((i) => i.item_no);
+  const noText = need.filter((i) => !String(state.text[i.id] || '').trim());
   if (noText.length) {
-    toast(`ใส่รายละเอียด Issue (ข้อที่ ${noText.join(', ')})`, 'error');
-    throw new Error(`ใส่รายละเอียด Issue (ข้อที่ ${noText.join(', ')})`);
+    const stepIdx = groups.indexOf(noText[0].s_group);
+    if (stepIdx >= 0) setStepAndDraw(stepIdx + 2);
+    toast(`กรุณาใส่รายละเอียด Issue (ข้อที่ ${noText.map(i => i.item_no).join(', ')})`, 'error');
+    $('atx-text-' + noText[0].id)?.focus();
+    throw new Error(`ใส่รายละเอียด Issue`);
   }
-  const noPhoto = need.filter((i) => !state.photo[i.id]).map((i) => i.item_no);
+
+  const noPhoto = need.filter((i) => !state.photo[i.id]);
   if (noPhoto.length) {
-    toast(`แนบรูปปัญหา (ข้อที่ ${noPhoto.join(', ')})`, 'error');
-    throw new Error(`แนบรูปปัญหา (ข้อที่ ${noPhoto.join(', ')})`);
+    const stepIdx = groups.indexOf(noPhoto[0].s_group);
+    if (stepIdx >= 0) setStepAndDraw(stepIdx + 2);
+    toast(`กรุณาแนบรูปปัญหา 16:9 (ข้อที่ ${noPhoto.map(i => i.item_no).join(', ')})`, 'error');
+    throw new Error(`แนบรูปปัญหา`);
   }
 
   const result = await a5Api(activity, state.editId ? `audits/${state.editId}` : 'audits', {

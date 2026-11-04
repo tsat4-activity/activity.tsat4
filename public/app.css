@@ -129,6 +129,15 @@ input:disabled,select:disabled,textarea:disabled{opacity:.55;cursor:not-allowed}
 .atx-modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:6px}
 .atx-modal .btn{width:auto}
 .atx-pop-summary{margin-right:auto;font-size:12.5px;color:var(--mo-text)}
+.atx-modal .atx-item{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--mo-line);border-radius:8px;background:var(--mo-surface);margin-top:0}
+.atx-modal .atx-item-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.atx-modal .atx-item-title{font-size:13.5px;font-weight:500;line-height:1.5;flex:1 1 auto}
+.atx-modal .atx-scores{display:flex;gap:6px;flex-shrink:0}
+.atx-modal .atx-score{width:36px;height:36px;border-radius:50%;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--mo-line);background:var(--mo-surface);color:var(--mo-text);transition:all .15s ease}
+.atx-modal .atx-score:hover{border-color:var(--mo-primary)}
+.atx-modal .atx-score.is-on{background:var(--mo-primary);border-color:var(--mo-primary);color:#fff}
+.atx-modal .atx-score.is-low.is-on{background:#ef4444;border-color:#ef4444;color:#fff}
+.atx-modal .atx-issue{margin-top:4px;padding:12px;background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.2);border-radius:6px;display:flex;flex-direction:column;gap:10px}
 .grid-edit .table-wrap{max-height:52vh;overflow:auto}
 .grid-edit td{padding:2px 4px}.grid-edit td input,.grid-edit td select{width:100%;min-height:30px;padding:4px 6px;border:1px solid transparent;border-radius:4px;background:transparent;font:inherit}
 .grid-edit td input:focus,.grid-edit td select:focus{border-color:var(--mo-primary);background:var(--mo-surface);outline:none}
