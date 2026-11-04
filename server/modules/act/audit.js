@@ -1,7 +1,7 @@
 import { mx, tx } from '../../core/db.js';
 import { fail, cleanTerm } from '../../core/http.js';
 import { nameOf } from '../../core/users.js';
-import { ACT_UNITS, AUDIT_UNIT, unitsOf, accessOf, actRoute, fetchAll, fetchIn, namesOf, requireAdmin, roundTo, tablesOf, throwIf, yearOf } from './common.js';
+import { ACT_UNITS, AUDIT_UNIT, unitsOf, accessOf, actRoute, fetchAll, fetchIn, grantsAdmin, namesOf, requireAdmin, roundTo, tablesOf, throwIf, viewerOf, yearOf } from './common.js';
 import { seed5sMockAudits } from './audit-mock.js';
 
 // Checklist audits (5S and similar): Dashboard reads for everyone, Setting writes for the year's admins.
@@ -230,7 +230,7 @@ export function mountAudit(app) {
     // plus the currently requested year and any years with historical data in the database.
     const windowYears = [now - 2, now - 1, now, now + 1];
     const years = [...new Set([...windowYears, year, ...dbYears].map(Number))].filter((y) => y >= 2000 && y <= 2100).sort();
-    res.json({ year, years, access });
+    res.json({ year, years, access: { ...access, viewer: await viewerOf(req, year, access) } });
   });
 
   route('get', '/api/act/:activity/dashboard/summary', async (req, res, activity) => {
@@ -665,6 +665,7 @@ export function mountAudit(app) {
     if (!employeeId) return fail(res, 400, 'เลือกพนักงาน');
     const place = placementOf(activity, req.body, await unitsOf(activity, year, true));
     if (place.error) return fail(res, 400, place.error);
+    if (grantsAdmin(activity, place) && !req.user.creator) return fail(res, 403, 'ผู้ดูแลกิจกรรมเพิ่มได้เฉพาะผู้ดูแลระบบ');
     const member = place.role === 'member';
     const targetCount = member && req.body?.targetCount != null && req.body.targetCount !== '' ? Math.max(0, Math.floor(Number(req.body.targetCount) || 0)) : undefined;
     const managerId = member && req.body?.managerId ? String(req.body.managerId).trim().slice(0, 20) || null : undefined;
@@ -684,6 +685,7 @@ export function mountAudit(app) {
     throwIf(error);
     if (!row) return fail(res, 404, 'ไม่พบรายชื่อ');
     if (!(await requireAdmin(req, res, activity, row.year))) return;
+    if (grantsAdmin(activity, row) && !req.user.creator) return fail(res, 403, 'ผู้ดูแลกิจกรรมแก้ได้เฉพาะผู้ดูแลระบบ');
     const patch = {};
     if (req.body?.status) patch.status = req.body.status === 'Inactive' ? 'Inactive' : 'Active';
     if (req.body?.role !== undefined) {
@@ -691,6 +693,7 @@ export function mountAudit(app) {
       const units = await unitsOf(activity, row.year, true);
       const place = placementOf(activity, req.body, row.unit && !units.includes(row.unit) ? [...units, row.unit] : units);
       if (place.error) return fail(res, 400, place.error);
+      if (grantsAdmin(activity, place) && !req.user.creator) return fail(res, 403, 'ผู้ดูแลกิจกรรมเพิ่มได้เฉพาะผู้ดูแลระบบ');
       const self = String(row.employee_id) === req.user.employeeId && !req.user.creator;
       if (self && row.role === 'admin' && !row.unit && (place.role !== 'admin' || place.unit || patch.status === 'Inactive')) return fail(res, 400, 'นำสิทธิ์ผู้ประสานงานของตัวเองออกไม่ได้');
       Object.assign(patch, place);
@@ -715,10 +718,11 @@ export function mountAudit(app) {
   });
 
   route('delete', '/api/act/:activity/team/:id', async (req, res, activity) => {
-    const { data: row, error } = await tx.from(tablesOf(activity).team).select('id,year,employee_id,role').eq('id', Number(req.params.id)).maybeSingle();
+    const { data: row, error } = await tx.from(tablesOf(activity).team).select('id,year,employee_id,role,unit').eq('id', Number(req.params.id)).maybeSingle();
     throwIf(error);
     if (!row) return fail(res, 404, 'ไม่พบรายชื่อ');
     if (!(await requireAdmin(req, res, activity, row.year))) return;
+    if (grantsAdmin(activity, row) && !req.user.creator) return fail(res, 403, 'ผู้ดูแลกิจกรรมลบได้เฉพาะผู้ดูแลระบบ');
     if (row.role === 'admin' && String(row.employee_id) === req.user.employeeId && !req.user.creator) return fail(res, 400, 'นำสิทธิ์ admin ของตัวเองออกไม่ได้');
     const del = await tx.from(tablesOf(activity).team).delete().eq('id', row.id);
     throwIf(del.error);
@@ -732,7 +736,8 @@ export function mountAudit(app) {
     const to = yearOf(req.body?.to);
     if (!from || !to || from === to) return fail(res, 400, 'เลือกปีต้นทางและปลายทาง');
     if (!(await requireAdmin(req, res, activity, to))) return;
-    const rows = await fetchAll(() => tx.from(table).select('*').eq('year', from).order('id'));
+    // the ผู้ดูแล of the new year copies the members only: who leads a year is set by the creator (teams take turns)
+    const rows = (await fetchAll(() => tx.from(table).select('*').eq('year', from).order('id'))).filter((r) => key !== 'team' || req.user.creator || !grantsAdmin(activity, r));
     if (!rows.length) return fail(res, 400, `ปี ${from} ไม่มีข้อมูลให้คัดลอก`);
     const results = await Promise.all(rows.map(async ({ id, ...row }) => {
       const { error } = await tx.from(table).insert({ ...row, year: to });

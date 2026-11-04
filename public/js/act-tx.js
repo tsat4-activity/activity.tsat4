@@ -71,7 +71,8 @@ async function atxPage(target, activity) {
   target.querySelectorAll('[data-atx]').forEach((node) => { node.onclick = () => { atxTab = node.dataset.atx; rerender(); }; });
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('atx-body');
-  if (!me.access.member) { body.innerHTML = `<p class="empty">เข้าได้เฉพาะทีมของกิจกรรมปี ${a5Year} (admin เพิ่มรายชื่อที่ Setting > ทีม)</p>`; return; }
+  // members of any activity that year may read the others (ผู้ใช้กำหนด 2026-11-04) · writing stays with this activity's team
+  if (!me.access.member && !me.access.viewer) { body.innerHTML = `<p class="empty">เข้าได้เฉพาะทีมของกิจกรรมปี ${a5Year} (ผู้ดูแลเพิ่มรายชื่อที่ Setting > Team)</p>`; return; }
   if (atxTab === 'issues') return atxIssues(body, activity);
   return atxAudits(body, activity, me);
 }

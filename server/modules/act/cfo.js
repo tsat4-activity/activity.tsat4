@@ -1,6 +1,6 @@
 import { mx, tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
-import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, requireAdmin, yearOf } from './common.js';
+import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, requireAdmin, tablesOf, yearOf } from './common.js';
 
 // CFO (Carbon Footprint for Organization): Dashboard totals, monthly entry, and master data (EF, activities, company).
 // Tables: db/act/cfo.sql (scripts/act-sql.js cfoSql) · spec: docs/specs/act-cfo.md
@@ -125,7 +125,8 @@ export function mountCfo(app) {
   const requireAdminNow = async (req, res, activity) => {
     const now = thisYear();
     if ((await accessOf(req, activity, now)).admin) return true;
-    if ((await accessOf(req, activity, now - 1)).admin) return true;
+    const thisTeam = must(await tx.from(tablesOf(activity).team).select('id').eq('year', now).eq('role', 'admin').eq('status', 'Active').limit(1));
+    if (!thisTeam.length && (await accessOf(req, activity, now - 1)).admin) return true;
     fail(res, 403, `แก้ได้เฉพาะ admin ของกิจกรรมนี้ปี ${now}`);
     return null;
   };

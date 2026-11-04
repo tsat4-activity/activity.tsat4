@@ -1,7 +1,7 @@
 import { tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
 import { ensure5sMaster } from './audit.js';
-import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, roundTo, tablesOf, yearOf } from './common.js';
+import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, roundTo, tablesOf, viewerOf, yearOf } from './common.js';
 
 // Checklist audits — transaction: record Self / Committee audits and follow Issues to closure.
 // Rules: docs/specs/act-5s.md ("transaction", "Issue"). Pure rule functions are exported for scripts/test-act-audit.js.
@@ -289,7 +289,7 @@ export function mountTransaction(app) {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const access = await accessOf(req, activity, year);
-    if (!access.member) return fail(res, 403, `ดูได้เฉพาะทีมของกิจกรรมนี้ปี ${year}`);
+    if (!(await viewerOf(req, year, access))) return fail(res, 403, `ดูได้เฉพาะทีมของกิจกรรมปี ${year}`);
     const [audits, areas] = await Promise.all([
       fetchAll(() => tx.from(t.audit).select('id,audit_no,audit_type,area_id,team,audited_at,total_score,percent_score,result,status,created_by').eq('year', year).order('audited_at', { ascending: false })),
       fetchAll(() => tx.from(t.area).select('id,code,name,area_type,status').order('code'))
@@ -317,7 +317,7 @@ export function mountTransaction(app) {
   route('get', '/api/act/:activity/audits/:id', async (req, res, activity, t) => {
     const audit = must(await tx.from(t.audit).select('*').eq('id', Number(req.params.id)).maybeSingle());
     if (!audit) return fail(res, 404, 'ไม่พบใบตรวจ');
-    if (!(await accessOf(req, activity, audit.year)).member) return fail(res, 403, 'ดูได้เฉพาะทีมของกิจกรรมนี้');
+    if (!(await viewerOf(req, audit.year, await accessOf(req, activity, audit.year)))) return fail(res, 403, 'ดูได้เฉพาะทีมของกิจกรรม');
     const people = (audit.auditors || []).map((id) => ({ employee_id: id, kind: 'participated' })).concat((audit.receivers || []).map((id) => ({ employee_id: id, kind: 'receiver' })));
     const [scores, issues, area, names] = await Promise.all([
       fetchAll(() => tx.from(t.score).select('checklist_id,score').eq('audit_id', audit.id)),
@@ -354,7 +354,7 @@ export function mountTransaction(app) {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const access = await accessOf(req, activity, year);
-    if (!access.member) return fail(res, 403, `ดูได้เฉพาะทีมของกิจกรรมนี้ปี ${year}`);
+    if (!(await viewerOf(req, year, access))) return fail(res, 403, `ดูได้เฉพาะทีมของกิจกรรมปี ${year}`);
     const [audits, areas] = await Promise.all([
       fetchAll(() => tx.from(t.audit).select('id,audit_no,year').eq('year', year)),
       fetchAll(() => tx.from(t.area).select('id,code,name'))

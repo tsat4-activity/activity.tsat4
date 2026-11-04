@@ -676,7 +676,9 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
     const unit0 = m ? unitOf(m) : teamKeys[0];
     // 5S: a5RolesOf · project teams (SMF): the four leads + สมาชิก · the committee: every role of the activity
     const rolesFor = (unit) => (!units ? keys : A5_UNITS_OF[activity] ? a5RolesOf(unit) : unit ? ['chairman', 'vice', 'advisor', 'admin', 'member'] : keys.filter((r) => !['owner', 'auditor'].includes(r)));
-    const roleOptions = (unit, current) => options(rolesFor(unit).filter((r) => keys.includes(r)), current || '', (v) => roleLabel(v, unit));
+    // ผู้ดูแล (admin, SMF smart) of a year are added by the creator only; the ผู้ดูแล add their members (server grantsAdmin)
+    const lead = (r, unit) => r === 'smart' || (r === 'admin' && !(activity === 'smf' && unit));
+    const roleOptions = (unit, current) => options(rolesFor(unit).filter((r) => keys.includes(r) && (me?.creator || r === current || !lead(r, unit))), current || '', (v) => roleLabel(v, unit));
     const who = m ? field('พนักงาน', `<input value="${esc(`${m.employee_id} · ${m.name || ''}`)}" disabled>`) : a5EmpField('พนักงาน');
     openPopup(m ? `แก้ไขรายชื่อปี ${a5Year}` : `เพิ่มรายชื่อปี ${a5Year}`, `${who}
       ${units ? field('ทีม', `<select id="a5-unit">${options(teamKeys, unit0, (v) => units[v])}</select>`) : ''}
@@ -720,7 +722,7 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
     toast('ลบแล้ว');
     rerender();
   });
-  $('a5-copy').onclick = () => confirmPopup('คัดลอกทีม', `คัดลอกรายชื่อทีมปี ${a5Year - 1} มาเป็นปี ${a5Year} (รายชื่อที่มีอยู่แล้วจะไม่ซ้ำ)`, async () => {
+  $('a5-copy').onclick = () => confirmPopup('คัดลอกทีม', `คัดลอกรายชื่อทีมปี ${a5Year - 1} มาเป็นปี ${a5Year}${me?.creator ? '' : ' (ไม่รวมผู้ดูแล: ผู้ดูแลระบบเป็นผู้กำหนด)'} (รายชื่อที่มีอยู่แล้วจะไม่ซ้ำ)`, async () => {
     const r = await a5Api(activity, 'team/copy', { method: 'POST', body: { from: a5Year - 1, to: a5Year } });
     toast(`คัดลอก ${r.copied} รายชื่อ`);
     rerender();

@@ -668,7 +668,8 @@ async function cfoEntries(target) {
   const { me, body } = await cfoFrame(target, null, '', '');
   const rerender = () => cfoEntries(target).catch(onErr);
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
-  if (!me.access.member) { body.innerHTML = `<p class="empty">เข้าได้เฉพาะทีม CFO ปี ${a5Year} (ตัวแทนหน่วยงาน / ผู้จัดทำ / ประธาน)</p>`; return; }
+  // members of any activity that year may read it (ผู้ใช้กำหนด 2026-11-04) · recording stays with the CFO team (canEdit)
+  if (!me.access.member && !me.access.viewer) { body.innerHTML = `<p class="empty">เข้าได้เฉพาะทีมของกิจกรรมปี ${a5Year} (ตัวแทนหน่วยงาน / ผู้จัดทำ / ประธาน)</p>`; return; }
   const d = await a5Api(CFO, `cfo/progress?year=${a5Year}`);
   const scope = Number(cfoTx.scope) || 1;
   const all = d.rows.filter((r) => String(r.scope_code || '').startsWith(`${scope}-`));

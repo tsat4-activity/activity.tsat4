@@ -180,6 +180,17 @@ export async function accessOf(req, activity, year) {
   return access;
 }
 
+// Who runs each activity each year (ผู้ใช้กำหนด 2026-11-04): the creator adds the ผู้ดูแล (Setting admins) of a year,
+// the ผู้ดูแล add their own members, and the next year may have another team (departments take turns). A team row that
+// gives Setting rights: admin (not an SMF project lead) or SMF smart · only the creator adds, changes or removes it.
+export const grantsAdmin = (activity, row) => row?.role === 'smart' || (row?.role === 'admin' && (!row.unit || !PROJECT_ON.includes(activity)));
+// Members and ผู้ดูแล of any activity that year may read the Dashboard and Transaction of the others (no writing).
+export async function viewerOf(req, year, access) {
+  if (access.member) return true;
+  const found = await Promise.all(ACTIVITIES.map((a) => tx.from(tablesOf(a).team).select('id').eq('year', year).eq('employee_id', req.user.employeeId).eq('status', 'Active').limit(1)));
+  return found.some((r) => !r.error && r.data?.length > 0);
+}
+
 // Sheets the owner may still edit (Kaizen, QCC): once sent they are locked until decided; admins edit any time.
 export const SHEET_OPEN = ['DRAFT', 'REJECTED'];
 export const sheetEditable = (status, { owner, admin }) => admin || (owner && SHEET_OPEN.includes(status));
