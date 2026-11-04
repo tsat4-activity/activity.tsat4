@@ -1,14 +1,14 @@
 import { tx } from '../../core/db.js';
 import { fail, wrap } from '../../core/http.js';
 import { requireUser } from '../../core/users.js';
+import { accessOf } from './common.js';
 
 const T_IDEAS = 'automation_ideas';
 const T_IMAGES = 'automation_images';
 const T_EVALS = 'automation_evaluations';
 
-function isAdmin(user) {
-  return Boolean(user?.creator || (user?.adminOf || []).includes('smf') || (user?.adminOf || []).includes('5s') || user?.executive);
-}
+// Work Flow belongs to SMF: its ผู้ดูแล of this year (Smart Team, ผู้ประสานงาน), or the ผู้ดูแลระบบ. A ผู้บริหาร reads only.
+const isAdmin = async (req) => (await accessOf(req, 'smf', new Date().getFullYear())).admin;
 
 export function calcReduction(before, after) {
   const b = Number(before);
@@ -35,7 +35,7 @@ const mem = {
 export function mountWorkflow(app) {
   // Who the idea is under: yourself, or (Team Submission) someone else of the SMF team when you are in that team too. Admin: anyone.
   const ownerAllowed = async (req, employeeId) => {
-    if (employeeId === req.user.employeeId || isAdmin(req.user) || !tx) return true;
+    if (employeeId === req.user.employeeId || (await isAdmin(req)) || !tx) return true;
     const year = new Date().getFullYear();
     const { data, error } = await tx.from('mt_smf_team').select('employee_id').in('employee_id', [employeeId, req.user.employeeId]).eq('status', 'Active').gte('year', year - 1);
     if (error) throw error;
@@ -49,12 +49,12 @@ export function mountWorkflow(app) {
       if (error && !tableMissing(error)) throw error;
       idea = data || null;
     }
-    return Boolean(idea && (isAdmin(req.user) || idea.employee_id === req.user.employeeId));
+    return Boolean(idea && ((await isAdmin(req)) || idea.employee_id === req.user.employeeId));
   };
 
   // 1. List ideas
   app.get('/api/workflow/ideas', wrap(requireUser), wrap(async (req, res) => {
-    const admin = isAdmin(req.user);
+    const admin = await isAdmin(req);
     const projCode = String(req.query.project_code || '').trim();
     const q = String(req.query.q || '').trim().toLowerCase();
     const dept = String(req.query.department || '').trim();
@@ -190,7 +190,7 @@ export function mountWorkflow(app) {
 
     if (!idea) return fail(res, 404, 'ไม่พบโครงการ');
 
-    const admin = isAdmin(req.user);
+    const admin = await isAdmin(req);
     res.json({
       idea: {
         ...idea,
@@ -346,7 +346,7 @@ export function mountWorkflow(app) {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
 
-    const admin = isAdmin(req.user);
+    const admin = await isAdmin(req);
     const b = req.body || {};
 
     const updates = {
@@ -418,7 +418,7 @@ export function mountWorkflow(app) {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
 
-    const admin = isAdmin(req.user);
+    const admin = await isAdmin(req);
     let useMem = false;
 
     if (tx) {
@@ -556,7 +556,7 @@ export function mountWorkflow(app) {
 
   // 8. Admin evaluation & status update
   app.post('/api/workflow/ideas/:id/evaluate', wrap(requireUser), wrap(async (req, res) => {
-    if (!isAdmin(req.user)) return fail(res, 403, 'เฉพาะ Admin เท่านั้นที่สามารถประเมินโครงการได้');
+    if (!(await isAdmin(req))) return fail(res, 403, 'เฉพาะ Admin เท่านั้นที่สามารถประเมินโครงการได้');
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
 
