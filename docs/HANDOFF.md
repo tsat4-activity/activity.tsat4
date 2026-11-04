@@ -38,14 +38,11 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
-- 2026-11-04 · Antigravity [SMF / Work Flow Automation] · พัฒนาระบบเว็บแอปพลิเคชัน Work Flow Automation (Industrial Digital Transformation) สำหรับเปลี่ยนผ่านกระบวนการทำงานสู่ดิจิทัลและลดความสูญเปล่าตามแนวคิด "Less Paper. Less Time. More Efficiency.":
-  - **ฐานข้อมูล (`db/act/workflow.sql`)**: ตาราง `automation_ideas`, `automation_images`, `automation_evaluations` พร้อม Indexes และระบบ Auto-fallback เพื่อความต่อเนื่อง
-  - **Backend API (`server/modules/act/workflow.js`)**: ให้บริการ API จัดการแนวคิด (CRUD), อัปโหลดรูป Before/After หลายรูปพร้อมบีบอัดภาพ, ประเมินโครงการโดย Admin พร้อมประวัติ, สรุปสถิติภาพรวม และส่งออกข้อมูลเป็น CSV/Excel (UTF-8 BOM ภาษาไทย)
-  - **Frontend UI (`public/js/act-workflow.js`, `public/app.css`)**:
-    - หน้าแรก (Landing Page) ธีม Industrial Digital Transformation พร้อมสถิติหลักและเป้าหมาย 6 ด้าน
-    - ฟอร์ม 6 ขั้นตอน (Step Form Wizard) พร้อม Progress Bar, ตรวจสอบ Required fields, แนบภาพ Before/After พร้อมพรีวิวและลบได้, ตัวเลือกเทคโนโลยีและประโยชน์, คำนวณผลประหยัด % เวลา/กระดาษ/ขั้นตอน แบบ Real-time พร้อมป้องกันการหารด้วยศูนย์
-    - แดชบอร์ดโครงการ (Admin & Member Dashboard) พร้อมตัวกรองค้นหา/แผนก/สถานะ/โครงการของฉัน, หน้าต่างเปรียบเทียบ Before vs After คู่ขนาน และฟอร์มประเมินสถานะสำหรับ Admin
-    - เชื่อมโยงเข้าสู่เมนู SMF > Workflow ในแถบเมนูข้าง และปุ่ม "เปิดระบบ Work Flow Automation" บนการ์ดโครงการใน SMF Dashboard (`server/modules/act/index.js`, `public/index.html`, `public/js/units.js`, `public/js/act-planner.js`, `scripts/routes.snapshot.txt`, `scripts/test-workflow.js`)
+- 2026-11-04 · Antigravity [SMF / Work Flow Automation in SMF Transaction] · รวมระบบ Work Flow Automation เข้าเป็นแท็บโครงการใน SMF: Transaction (`smf-edit`) โดยตรงตามความต้องการของผู้ใช้ (ไม่เพิ่มเมนูแยกในแถบข้าง):
+  - **การเข้าใช้งาน**: เมื่อคลิกเลือกโครงการ "Work Flow Automation" ใน SMF > Transaction (หรือคลิกปุ่ม "ส่งข้อมูล / จัดการ Work Flow Automation" จากการ์ดใน SMF Dashboard) ระบบจะแสดงหน้าจอโครงการ Work Flow Automation ทันที
+  - **การส่งผลงานโครงการ (6 ขั้นตอนตามเกณฑ์)**: สมาชิกในทีม SMF สามารถกดส่งแบบเสนอโครงการ (6 ขั้นตอน) โดยมีตัวเลือกให้เลือกสมาชิกจากทำเนียบทีม SMF (Setting > Team) เพื่อกรอกรหัสพนักงาน ชื่อ และแผนกอัตโนมัติ หรือกรอกข้อมูลเองได้อย่างยืดหยุ่น
+  - **การติดตามผลงานและสถิติ**: แสดงสถิติจำนวนโครงการที่ส่งจริงเทียบกับเป้าหมาย (เช่น สำเร็จกี่เรื่องจากเป้าหมาย 10–12 โครงการ), อัตราการลดเวลา กระดาษ และขั้นตอน พร้อมตัวกรองค้นหา/แผนก/สถานะ/โครงการของฉัน และตาราง Target/Actual รายเดือนแบบเปิด-ปิดได้
+  - **ฐานข้อมูลและ API**: รองรับการจัดเก็บใน `automation_ideas`, `automation_images`, `automation_evaluations` พร้อมการประเมินโดย Admin และการส่งออก CSV/Excel (`server/modules/act/workflow.js`, `public/js/act-workflow.js`, `public/js/act-planner.js`, `public/js/units.js`)
 
 - 2026-11-03 · Antigravity [SMF / Dashboard & Planner] · ปรับปรุงการออกแบบการ์ดภาพรวม (Overview Cards Redesign) และส่วนสรุป (Summary) ของ SMF Dashboard ให้สวยงาม ทันสมัย สไตล์ Dashboard ผู้บริหาร: เปลี่ยนส่วนสรุปจากรายการข้อความบรรทัดยาวเป็น Metric Boxes Grid 4 ช่อง (`.ov-stat-grid`) แสดงตัวเลขสถิติอย่างกระชับ (หัวข้อหลัก, ความคืบหน้า/โครงการสำเร็จ, เลยกำหนด, จำนวนคน), ออกแบบส่วนหัวการ์ด (`.ov-head`) ด้วยชื่อโครงการเด่นชัดพร้อม Pill Badges แสดงรูปแบบ (`ทีม`/`เดี่ยว`) และการวัดเป้าหมายอย่างลงตัว, ปรับการแสดงผล KPI กรณีที่ยังไม่มีผลงานบันทึกให้เป็นกล่องกะทัดรัด, และกำหนดเงื่อนไขในหน้าแผนงาน (Plan) ให้โครงการรูปแบบทีมเท่านั้นที่สามารถแตกข้อรองหรือเพิ่มข้อย่อยได้ หากเป็นโครงการรูปแบบเดี่ยวจะป้องกันการแตกข้อรองเพื่อให้สอดคล้องกับงานเดี่ยว (`public/js/act-planner.js`, `public/app.css`)
 

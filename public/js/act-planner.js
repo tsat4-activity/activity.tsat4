@@ -805,6 +805,9 @@ async function smfTransaction(target, activity = 'smf') {
   const currentProj = projects.find((p) => p.id === smfPickedProj[activity]) || projects[0];
   const byMonth = Object.fromEntries((pmData.months || []).filter((m) => m.project_id === currentProj.id).map((m) => [m.month, m]));
   const projTabs = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  if ((currentProj.code === 'workflow' || (currentProj.name && currentProj.name.toLowerCase().includes('flow automation'))) && typeof wfaRenderSmfTransaction === 'function') {
+    return wfaRenderSmfTransaction(target, currentProj, me, rerender, pmData, byMonth, projTabs);
+  }
   const kpiLabel = currentProj.target_name || 'เป้าหมาย';
   const unitLabel = currentProj.unit ? ` (${currentProj.unit})` : '';
   const lock = canEdit ? '' : 'disabled';
@@ -1033,13 +1036,19 @@ async function aplDrawSmfOverview(body, activity) {
       ${progressSec}
       ${kpiSection(u)}
       ${summarySec}
-      ${u.code === 'workflow' ? `<div style="margin-top:4px">${button('', 'เปิดระบบ Work Flow Automation', 'primary small', 'data-ov-go="workflow"')}</div>` : ''}
+      ${u.code === 'workflow' ? `<div style="margin-top:4px">${button('', 'ส่งข้อมูล / จัดการ Work Flow Automation', 'primary small', `data-ov-proj="${u.id}"`)}</div>` : ''}
     </article>`;
   };
   body.innerHTML = `<div class="ch-kpis">${kpis}</div>
     <div class="ov-grid">${projects.map(card).join('') || `<p class="empty">ยังไม่มีโครงการปี ${a5Year} · เพิ่มที่ Setting > โครงการ</p>`}</div>
     <p class="sum-meta">${unassigned > 0 ? `หัวข้อที่ยังไม่ระบุโครงการ ${unassigned} หัวข้อ · ` : ''}ข้อมูล ณ ${actShort(data.today)} ${data.year} · ภาพรวมทุกกิจกรรม (5S · CFO · SMF) อยู่ที่หน้าหลัก</p>`;
   body.querySelectorAll('[data-ov-go]').forEach((node) => { node.onclick = () => openView(node.dataset.ovGo); });
+  body.querySelectorAll('[data-ov-proj]').forEach((node) => {
+    node.onclick = () => {
+      smfPickedProj['smf'] = Number(node.dataset.ovProj);
+      openView('smf-edit');
+    };
+  });
   a5Lift(body);
 }
 
