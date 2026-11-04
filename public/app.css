@@ -179,6 +179,7 @@ table.mo-data-table thead th.has-menu{height:38px}
    (core.js OVERFLOW_TIP) · group / band rows (colspan) keep the full width · a page may set its own column widths */
 table.mo-data-table td{max-width:320px}table.mo-data-table td[colspan]{max-width:none}
 .table-wrap.sheet{--table-head:38px}
+.table-wrap.sheet:not(:has(th.has-menu)){--table-head:34px}
 tbody tr:hover{background:var(--drive-hover)}
 table.mo-data-table tbody tr.row-pick{cursor:pointer}
 table.mo-data-table tbody tr.row-pick.is-selected,

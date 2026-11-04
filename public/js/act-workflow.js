@@ -265,68 +265,65 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
   };
 
   function render() {
-    const targetCount = currentProj.target_count || 10;
-    const implementedCount = stats.byStatus?.Implemented || 0;
-    const totalSubmitted = ideas.length;
+    const rowsHtml = ideas.map((item, idx) => {
+      const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
+      const tPct = item.time_saving_pct != null ? `${item.time_saving_pct}%` : null;
+      const pPct = item.paper_reduction_pct != null ? `${item.paper_reduction_pct}%` : null;
+      const memberNames = Array.isArray(item.team_members) && item.team_members.length
+        ? item.team_members.map((m) => (typeof m === 'object' ? (m.name || m.employee_id) : m)).filter(Boolean).join(', ')
+        : '';
+      const presenterHtml = item.team_name
+        ? `<div class="wfa-col-emp"><strong>${esc(item.team_name)}</strong><small class="sum-meta">${esc(memberNames || item.full_name)} · ${esc(item.department || '-')}</small></div>`
+        : `<div class="wfa-col-emp"><span>${esc(item.full_name)}</span><small class="sum-meta">${esc(item.department || '-')}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</small></div>`;
 
-    const contentHtml = !ideas.length
-      ? `<div class="card"><p class="empty">ยังไม่มีการส่งข้อมูลโปรเจค ${esc(currentProj.name)} หรือไม่พบข้อมูลตามตัวกรอง · คลิก "+ ส่งข้อมูลโปรเจค" เพื่อส่งแนวคิดแรก</p></div>`
-      : `
-        <div class="table-wrap sheet">
-          <table class="mo-data-table">
-            <thead>
-              <tr>
-                <th style="width:45px">no</th>
-                <th style="width:90px">วันที่ส่ง</th>
-                <th>ชื่อโปรเจค (AFTER)</th>
-                <th>กระบวนการเดิม (BEFORE)</th>
-                <th>ผู้เสนอ / ทีม / แผนก</th>
-                <th>เทคโนโลยี</th>
-                <th>ผลประหยัด / KPI</th>
-                <th style="width:115px">สถานะ</th>
-                <th style="width:120px;text-align:center">การจัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${ideas.map((item, idx) => {
-                const status = WFA_STATUS_BADGES[item.project_status] || WFA_STATUS_BADGES.Idea;
-                const tPct = item.time_saving_pct != null ? `${item.time_saving_pct}%` : null;
-                const pPct = item.paper_reduction_pct != null ? `${item.paper_reduction_pct}%` : null;
-                const memberNames = Array.isArray(item.team_members) && item.team_members.length
-                  ? item.team_members.map((m) => (typeof m === 'object' ? (m.name || m.employee_id) : m)).filter(Boolean).join(', ')
-                  : '';
-                const presenterHtml = item.team_name
-                  ? `<div class="wfa-col-emp"><strong>${esc(item.team_name)}</strong><small class="sum-meta">${esc(memberNames || item.full_name)} · ${esc(item.department || '-')}</small></div>`
-                  : `<div class="wfa-col-emp"><span>${esc(item.full_name)}</span><small class="sum-meta">${esc(item.department || '-')}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</small></div>`;
-
-                return `
-                  <tr data-pick-id="${item.id}" style="cursor:pointer">
-                    <td>${idx + 1}</td>
-                    <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
-                    <td><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
-                    <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
-                    <td>${presenterHtml}</td>
-                    <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
-                    <td>
-                      <div class="wfa-col-savings">
-                        ${tPct ? `<span class="wfa-saving-mini" title="ลดเวลาทำงาน"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
-                        ${pPct ? `<span class="wfa-saving-mini is-paper" title="ลดการใช้กระดาษ"><span class="material-symbols-rounded">description</span>${pPct}</span>` : ''}
-                        ${!tPct && !pPct ? '<span class="sum-meta">-</span>' : ''}
-                      </div>
-                    </td>
-                    <td><span class="badge ${status.class}">${status.label}</span></td>
-                    <td style="text-align:center" onclick="event.stopPropagation()">
-                      <button class="btn btn-secondary small" type="button" data-act-view="${item.id}" style="padding:2px 8px;min-height:22px;font-size:11px" title="กดแสดงผล Improvement Proposal">
-                        <span class="material-symbols-rounded" style="font-size:13px">visibility</span> แสดงผล
-                      </button>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
+      return `
+        <tr data-pick-id="${item.id}" class="row-pick">
+          <td>${idx + 1}</td>
+          <td><small class="sum-meta">${item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH') : ''}</small></td>
+          <td><div class="wfa-col-title"><strong>${esc(item.project_name)}</strong></div></td>
+          <td><span class="wfa-text-muted">${esc(item.process_name)}</span></td>
+          <td>${presenterHtml}</td>
+          <td><span class="wfa-tech-badge">${esc(item.proposed_technology || '-')}</span></td>
+          <td>
+            <div class="wfa-col-savings">
+              ${tPct ? `<span class="wfa-saving-mini" title="ลดเวลาทำงาน"><span class="material-symbols-rounded">timer</span>${tPct}</span>` : ''}
+              ${pPct ? `<span class="wfa-saving-mini is-paper" title="ลดการใช้กระดาษ"><span class="material-symbols-rounded">description</span>${pPct}</span>` : ''}
+              ${!tPct && !pPct ? '<span class="sum-meta">-</span>' : ''}
+            </div>
+          </td>
+          <td><span class="badge ${status.class}">${status.label}</span></td>
+          <td style="text-align:center" onclick="event.stopPropagation()">
+            <button class="btn btn-secondary small" type="button" data-act-view="${item.id}" style="padding:2px 8px;min-height:22px;font-size:11px" title="กดแสดงผล Improvement Proposal">
+              <span class="material-symbols-rounded" style="font-size:13px">visibility</span> แสดงผล
+            </button>
+          </td>
+        </tr>
       `;
+    }).join('');
+
+    const contentHtml = `
+      <div class="table-wrap sheet" id="wfa-table-wrap">
+        <table class="mo-data-table">
+          <thead>
+            <tr>
+              <th style="width:45px">no</th>
+              <th style="width:90px">วันที่ส่ง</th>
+              <th>ชื่อโปรเจค (AFTER)</th>
+              <th>กระบวนการเดิม (BEFORE)</th>
+              <th>ผู้เสนอ / ทีม / แผนก</th>
+              <th>เทคโนโลยี</th>
+              <th>ผลประหยัด / KPI</th>
+              <th style="width:115px">สถานะ</th>
+              <th style="width:120px;text-align:center">การจัดการ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml || `<tr><td colspan="9" class="empty">ยังไม่มีการส่งข้อมูลโปรเจค ${esc(currentProj.name)} หรือไม่พบข้อมูลตามตัวกรอง · คลิก "เพิ่ม" เพื่อส่งโครงการแรก</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      <p class="sum-meta">${ideas.length} รายการ · ดับเบิลคลิกแถวเพื่อดูรายละเอียด</p>
+    `;
 
     setHeaderMeta(`<span class="sum-meta">${esc(currentProj.name)}</span> <strong>${currentProj.target_count ? `เป้าหมาย ${currentProj.target_count} ${esc(currentProj.unit || 'โครงการ')}` : 'วัดตามแผนงาน'}</strong>`);
 
@@ -367,24 +364,10 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
       </div>
     `;
 
-    const kpis = [
-      chartKpi({ label: `เป้าหมายปี ${a5Year}`, value: targetCount, unit: currentProj.unit || 'โครงการ', icon: 'flag', note: currentProj.target_name || 'เป้าหมายประจำปี', color: CHART.series[0] }),
-      chartKpi({ label: 'สมาชิกส่งข้อมูลแล้ว', value: totalSubmitted, unit: 'เรื่อง', icon: 'send', note: 'ข้อเสนอทั้งหมด', color: CHART.series[1] }),
-      chartKpi({ label: 'ดำเนินการสำเร็จ', value: implementedCount, unit: 'เรื่อง', icon: 'task_alt', note: 'Implemented', color: CHART.series[2] }),
-      chartKpi({ label: 'ลดเวลาทำงานเฉลี่ย', value: stats.avgTimeSaving || 0, unit: '%', icon: 'timer', note: 'Time Saving', color: CHART.series[3] }),
-      chartKpi({ label: 'ลดการใช้กระดาษเฉลี่ย', value: stats.avgPaperReduction || 0, unit: '%', icon: 'description', note: 'Paper Reduction', color: CHART.series[4] })
-    ].join('');
-
     target.innerHTML = `
       <div class="view-body"><section class="card">
         ${pageBar(leftBar, rightBar, 'smf')}
-        <div id="smf-body" style="padding-top:10px;display:flex;flex-direction:column;gap:10px">
-          <!-- Standard KPI Strip -->
-          <div class="ch-kpis">${kpis}</div>
-
-          <!-- Project Submissions Table -->
-          ${contentHtml}
-        </div>
+        ${contentHtml}
       </section></div>
     `;
 
