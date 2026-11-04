@@ -527,7 +527,7 @@ const APL_DASH_TABS = { schedule: 'Schedule', team: 'Team' };
 const APL_DASH_TABS_OF = { smf: { intro: 'Introduction', overview: 'ภาพรวม', ...APL_DASH_TABS } };
 const APL_SET_TABS = { team: 'Team', plan: 'Plan' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 // SMF: its projects of the year come between ทีม and แผนงาน (ผู้ใช้กำหนด 2026-11-01)
-const APL_SET_TABS_OF = { smf: { team: 'Team', project: 'Project', plan: 'Plan' } };
+const APL_SET_TABS_OF = { smf: { team: 'Team', project: 'Project', plan: 'Plan', intro: 'Introduction' } };
 const APL_PROJECTS_ON = ['smf'];
 const APL_ROLE_LABEL = { ...ACT_TEAM_ROLES, auditor: 'ผู้ตรวจประเมิน' };
 // Team per activity (ผู้ใช้กำหนด 2026-10-29, docs/specs/act-teams.md); others use APL_ROLE_LABEL.
@@ -557,10 +557,12 @@ async function aplDashboard(target, activity) {
   return aplRender(body, activity, { inPage: true, readOnly: true });
 }
 
-// Dashboard > Introduction (ผู้ใช้กำหนด 2026-11-04): the SMF introduction (public/docs, TSAT4-SMF 2569-001) read like a
-// book — one page at a time, turned from the left edge · buttons, ← → keys, a click on the right / left half, or a swipe.
-// PDF.js from cdnjs renders the pages (loaded the first time); its worker is cross-origin, so it runs from a blob.
+// Dashboard > Introduction (ผู้ใช้กำหนด 2026-11-04): the introduction of the year read like a book — one page at a time,
+// turned from the left edge · buttons, ← → keys, a click on the right / left half, or a swipe. The pages are uploaded in
+// Setting > Introduction (images, or a PDF the browser turns into images; server smf.js intro) · a year without pages shows
+// the latest year before it, and with none at all the PDF that came with the app (TSAT4-SMF 2569-001, rendered by PDF.js).
 const APL_INTRO = { smf: { file: 'docs/smf-intro-2569-001.pdf', title: 'TSAT4-SMF 2569-001' } };
+// PDF.js from cdnjs (loaded the first time); its worker is cross-origin, so it runs from a blob
 let aplPdf = null;
 const aplLoadPdf = () => aplPdf || (aplPdf = new Promise((resolve, reject) => {
   const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -576,8 +578,25 @@ const aplLoadPdf = () => aplPdf || (aplPdf = new Promise((resolve, reject) => {
   tag.onerror = () => { aplPdf = null; reject(new Error('โหลดตัวอ่าน PDF ไม่ได้ ลองใหม่อีกครั้ง')); };
   document.head.append(tag);
 }));
+// each page of a PDF (File or URL) drawn on a canvas `width` px wide
+async function aplPdfPages(source, width) {
+  const pdfjs = await aplLoadPdf();
+  const pdf = await pdfjs.getDocument(typeof source === 'string' ? source : { data: await source.arrayBuffer() }).promise;
+  const out = [];
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const page = await pdf.getPage(i);
+    const view = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(view.width);
+    canvas.height = Math.round(view.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: view }).promise;
+    out.push(canvas);
+  }
+  return out;
+}
 let aplBookKeys = null;
 async function aplDrawIntro(body, activity) {
+  const d = await a5Api(activity, `intro?year=${a5Year}`);
   const doc = APL_INTRO[activity];
   body.innerHTML = `<div class="apl-book">
     <div class="apl-book-stage" id="apl-book"><div class="empty">กำลังเปิดเอกสาร...</div></div>
@@ -585,26 +604,29 @@ async function aplDrawIntro(body, activity) {
       <button class="icon-btn" type="button" id="apl-book-prev" aria-label="หน้าก่อน" title="หน้าก่อน"><span class="material-symbols-rounded">chevron_left</span></button>
       <span id="apl-book-no" class="sum-meta"></span>
       <button class="icon-btn" type="button" id="apl-book-next" aria-label="หน้าถัดไป" title="หน้าถัดไป"><span class="material-symbols-rounded">chevron_right</span></button>
-      <a class="apl-link" href="${doc.file}" target="_blank" rel="noopener">เปิด PDF</a>
+      ${d.pages.length ? (d.shown !== a5Year ? `<span class="sum-meta">ฉบับปี ${d.shown}</span>` : '') : doc ? `<a class="apl-link" href="${doc.file}" target="_blank" rel="noopener">เปิด PDF</a>` : ''}
     </div></div>`;
-  const pdfjs = await aplLoadPdf();
-  const pdf = await pdfjs.getDocument(doc.file).promise;
   const stage = $('apl-book');
-  if (!stage) return;
-  const first = await pdf.getPage(1);
-  const ratio = first.getViewport({ scale: 1 }).width / first.getViewport({ scale: 1 }).height;
-  stage.style.setProperty('--ratio', ratio);
-  stage.innerHTML = Array.from({ length: pdf.numPages }, (_, i) => `<canvas class="apl-page" data-page="${i + 1}" aria-label="หน้า ${i + 1}"></canvas>`).join('');
-  const pages = [...stage.querySelectorAll('canvas')];
-  // sharp at the width shown (× screen density), drawn once
-  const width = Math.min(2400, stage.clientWidth * (window.devicePixelRatio || 1));
-  await Promise.all(pages.map(async (canvas, i) => {
-    const page = i ? await pdf.getPage(i + 1) : first;
-    const view = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
-    canvas.width = view.width;
-    canvas.height = view.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: view }).promise;
-  }));
+  let pages;
+  if (d.pages.length) {
+    pages = await Promise.all(d.pages.map((url, i) => new Promise((resolve) => {
+      const img = new Image();
+      img.alt = `หน้า ${i + 1}`;
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(img);
+      img.src = url;
+    })));
+  } else if (doc) {
+    pages = await aplPdfPages(doc.file, Math.min(2400, stage.clientWidth * (window.devicePixelRatio || 1)));
+  } else {
+    stage.innerHTML = '<div class="empty">ยังไม่มีเอกสาร · ผู้ดูแลอัปโหลดได้ที่ Setting > Introduction</div>';
+    return;
+  }
+  if (!document.body.contains(stage)) return;
+  const first = pages[0];
+  stage.style.setProperty('--ratio', (first.naturalWidth || first.width) / (first.naturalHeight || first.height) || 16 / 9);
+  stage.innerHTML = '';
+  pages.forEach((p) => { p.classList.add('apl-page'); stage.append(p); });
   let at = 0;
   let busy = false;
   const show = () => {
@@ -643,6 +665,79 @@ async function aplDrawIntro(body, activity) {
     if (e.key === 'ArrowLeft') turn(-1);
   };
   document.addEventListener('keydown', aplBookKeys);
+}
+
+// Setting > Introduction: upload the pages of a year — images (in the order chosen) or a PDF (each page becomes an image)
+// · JPEG 1600 px wide, smaller quality until ≤ 680 KB · sent 4 pages a request (first replaces the year, then appends)
+const APL_INTRO_W = 1600;
+const aplJpeg = (canvas) => {
+  for (const q of [0.85, 0.75, 0.65, 0.55, 0.45]) {
+    const url = canvas.toDataURL('image/jpeg', q);
+    if (url.length * 0.75 < 680000) return url;
+  }
+  throw new Error('หน้าเอกสารใหญ่เกินไป');
+};
+const aplImageCanvas = (file) => new Promise((resolve, reject) => {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const scale = Math.min(1, APL_INTRO_W / img.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    resolve(canvas);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`เปิดรูป ${file.name} ไม่ได้`)); };
+  img.src = url;
+});
+async function aplSetIntro(body, activity, admin, rerender) {
+  const d = await a5Api(activity, `intro?year=${a5Year}`);
+  const own = d.shown === a5Year;
+  body.innerHTML = `
+    ${admin ? `<div class="toolbar a5-filters">
+      ${field(`ไฟล์ปี ${a5Year} (PDF หรือรูปหลายรูปตามลำดับหน้า)`, '<input id="apl-intro-file" type="file" accept="application/pdf,image/*" multiple>')}
+      <div class="action-bar">${button('apl-intro-up', 'อัปโหลด', 'primary', 'disabled')}${own ? button('apl-intro-del', `ลบฉบับปี ${a5Year}`, 'danger') : ''}</div>
+    </div>` : ''}
+    <p class="sum-meta" id="apl-intro-note">${own ? `ปี ${a5Year} มี ${d.pages.length} หน้า · อัปโหลดใหม่ = แทนที่ทั้งชุด` : d.shown ? `ปี ${a5Year} ยังไม่มี Dashboard แสดงฉบับปี ${d.shown} (${d.pages.length} หน้า)` : `ยังไม่มีเอกสารที่อัปโหลด Dashboard แสดง PDF ที่มากับระบบ`}</p>
+    <div class="apl-intro-thumbs">${d.pages.map((url, i) => `<figure><img src="${esc(url)}" alt="หน้า ${i + 1}" loading="lazy"><figcaption>${i + 1}</figcaption></figure>`).join('')}</div>`;
+  if (!admin) return;
+  const pick = $('apl-intro-file');
+  pick.onchange = () => { $('apl-intro-up').disabled = !pick.files.length; };
+  $('apl-intro-up').onclick = async () => {
+    const files = [...pick.files];
+    const btn = $('apl-intro-up');
+    btn.disabled = true;
+    try {
+      const note = (text) => { $('apl-intro-note').textContent = text; };
+      // a PDF gives its pages; images are pages in the order of their file names
+      const canvases = [];
+      const pdfs = files.filter((f) => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+      for (const f of pdfs) { note(`กำลังแปลง ${f.name} เป็นรูป...`); canvases.push(...await aplPdfPages(f, APL_INTRO_W)); }
+      for (const f of files.filter((x) => !pdfs.includes(x)).sort((a, b) => a.name.localeCompare(b.name, 'th', { numeric: true }))) canvases.push(await aplImageCanvas(f));
+      if (!canvases.length) throw new Error('เลือกไฟล์ PDF หรือรูปก่อน');
+      if (canvases.length > 60) throw new Error('ไม่เกิน 60 หน้า');
+      const pages = canvases.map(aplJpeg);
+      for (let i = 0; i < pages.length; i += 4) {
+        note(`กำลังอัปโหลดหน้า ${i + 1}–${Math.min(pages.length, i + 4)} จาก ${pages.length}...`);
+        await a5Api(activity, 'intro', { method: 'POST', body: { year: a5Year, pages: pages.slice(i, i + 4), mode: i ? 'append' : 'replace' } });
+      }
+      toast(`อัปโหลด ${pages.length} หน้าแล้ว`);
+      rerender();
+    } catch (err) {
+      btn.disabled = false;
+      onErr(err);
+    }
+  };
+  if ($('apl-intro-del')) $('apl-intro-del').onclick = () => confirmPopup('ลบเอกสาร', `ลบเอกสาร Introduction ปี ${a5Year} ทั้ง ${d.pages.length} หน้า`, async () => {
+    await a5Api(activity, `intro/${a5Year}`, { method: 'DELETE' });
+    toast('ลบแล้ว');
+    rerender();
+  });
 }
 
 // หน้าหลัก = ภาพรวมกิจกรรมในโรงงาน (server: server/modules/act/overview.js): KPIs of every activity, then one card per
@@ -846,6 +941,7 @@ async function aplSetting(target, activity) {
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
   const body = $('a5-body');
   if (tab === 'project') return aplSetProjects(body, activity, admin, rerender);
+  if (tab === 'intro') return aplSetIntro(body, activity, admin, rerender);
   if (tab === 'team') {
     try {
       return await a5SetTeam(body, activity, admin, rerender, aplRolesOf(activity), await aplUnitsOf(activity));

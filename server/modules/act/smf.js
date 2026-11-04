@@ -1,6 +1,6 @@
 import { tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
-import { PROJECT_ON, accessOf, actRoute, must, projectsOf, requireAdmin, tablesOf, yearOf } from './common.js';
+import { PROJECT_ON, accessOf, actRoute, imageBytes, must, projectsOf, requireAdmin, tablesOf, yearOf } from './common.js';
 
 // SMF (Smart Factory) projects of a year (ผู้ใช้กำหนด 2026-11-01: 2026 = Smart OEE, Vision Camera, Work Flow Automation).
 // Setting > โครงการ: admins add / edit / delete; a project already used by the team or the plan becomes Inactive instead.
@@ -163,5 +163,54 @@ export function mountSmf(app) {
     const done = await tx.from(t.projectMonth).upsert(rows, { onConflict: 'project_id,month' });
     must(done);
     res.json({ ok: true, saved: rows.length });
+  });
+
+  // Dashboard > Introduction (ผู้ใช้กำหนด 2026-11-04): the pages of a year, uploaded by the ผู้ดูแล in Setting > Introduction as
+  // images or a PDF (the browser turns each PDF page into a JPEG) · JPEG ≤ 700 KB in the activity bucket intro/<year>/ ·
+  // the list is mt_<act>_setting intro_<year> = JSON [{ url, path }] · a year without pages shows the latest year before it
+  const introKey = (year) => `intro_${year}`;
+  const introOf = async (t) => {
+    const rows = must(await tx.from(t.setting).select('key,value')).filter((r) => /^intro_\d{4}$/.test(r.key));
+    return new Map(rows.map((r) => {
+      try { return [Number(r.key.slice(6)), JSON.parse(r.value)]; } catch { return [Number(r.key.slice(6)), []]; }
+    }).filter(([y, pages]) => y && Array.isArray(pages) && pages.length));
+  };
+  route('get', '/api/act/:activity/intro', async (req, res, activity, t) => {
+    const year = yearOf(req.query.year);
+    if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
+    const all = await introOf(t);
+    const shown = [...all.keys()].filter((y) => y <= year).sort((a, b) => b - a)[0] || null;
+    res.json({ year, shown, years: [...all.keys()].sort(), pages: shown ? all.get(shown).map((p) => p.url) : [] });
+  });
+  // pages: [data:image/jpeg;base64,...] in order · mode replace (the first batch) or append (the next batches)
+  route('post', '/api/act/:activity/intro', async (req, res, activity, t) => {
+    const year = yearOf(req.body?.year);
+    if (!year || !(await requireAdmin(req, res, activity, year))) return;
+    const images = Array.isArray(req.body?.pages) ? req.body.pages.slice(0, 10) : [];
+    if (!images.length) return fail(res, 400, 'ยังไม่มีหน้าเอกสาร');
+    const bytes = images.map(imageBytes);
+    if (bytes.some((b) => !b)) return fail(res, 400, 'แต่ละหน้าต้องเป็น JPEG ไม่เกิน 700 KB');
+    const old = (await introOf(t)).get(year) || [];
+    const replace = req.body?.mode !== 'append';
+    const stamp = Date.now();
+    const added = [];
+    for (const [i, b] of bytes.entries()) {
+      const path = `intro/${year}/${stamp}_${String(i).padStart(3, '0')}.jpg`;
+      const up = await tx.storage.from(t.bucket).upload(path, new Uint8Array(b), { contentType: 'image/jpeg', upsert: false });
+      if (up.error) return fail(res, 400, /bucket/i.test(String(up.error.message)) ? `ยังไม่ได้สร้างที่เก็บรูป ${t.bucket} ใน Tx Data` : 'อัปโหลดหน้าเอกสารไม่ได้');
+      added.push({ path, url: tx.storage.from(t.bucket).getPublicUrl(path).data.publicUrl });
+    }
+    const pages = replace ? added : [...old, ...added];
+    must(await tx.from(t.setting).upsert({ key: introKey(year), value: JSON.stringify(pages) }, { onConflict: 'key' }));
+    if (replace && old.length) await tx.storage.from(t.bucket).remove(old.map((p) => p.path));
+    res.json({ ok: true, pages: pages.length });
+  });
+  route('delete', '/api/act/:activity/intro/:year', async (req, res, activity, t) => {
+    const year = yearOf(req.params.year);
+    if (!year || !(await requireAdmin(req, res, activity, year))) return;
+    const old = (await introOf(t)).get(year) || [];
+    must(await tx.from(t.setting).delete().eq('key', introKey(year)));
+    if (old.length) await tx.storage.from(t.bucket).remove(old.map((p) => p.path));
+    res.json({ ok: true });
   });
 }

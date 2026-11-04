@@ -39,6 +39,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-04 · Claude [5S] · SMF Introduction อัปโหลดเองได้: Setting > Introduction เลือก PDF (เบราว์เซอร์แปลงเป็นรูปหน้าละ JPEG 1600 px) หรือรูปหลายรูป → bucket img_smf intro/<ปี>/ + mt_smf_setting intro_<ปี> (GET/POST/DELETE intro) · Dashboard แสดงฉบับของปีนั้น ไม่มี = ปีล่าสุดก่อนหน้า ไม่มีเลย = PDF ที่มากับระบบ · ไม่ต้องรัน SQL (ใช้ bucket img_smf + mt_smf_setting เดิม)
 - 2026-11-04 · Claude [5S] · SMF Dashboard แท็บ Introduction (แท็บแรก): PDF TSAT4-SMF 2569-001 (public/docs/smf-intro-2569-001.pdf) เปิดแบบพลิกหน้าหนังสือ · PDF.js 3.11.174 จาก cdnjs (worker ผ่าน blob) · ปุ่ม / ลูกศรซ้ายขวา / คลิกครึ่งซ้ายขวา / ปัด · เอกสารใหม่ = เปลี่ยนไฟล์แล้วแก้ APL_INTRO ใน act-planner.js
 - 2026-11-04 · Antigravity [SMF / Popup Top Position Pinning & Stable Wizard Height] · ตรึงตำแหน่งส่วนบนของหน้าต่าง Popup ให้อยู่ระดับเดียวกัน ไม่ขยับขึ้นลงตามความสูงของเนื้อหา:
   - กำหนดตำแหน่งของ `.popup` ให้จัดชิดด้านบน (`align-self: start; margin-top: max(16px, min(4vh, 28px))`) แทนการอยู่กึ่งกลางแนวตั้ง เพื่อล็อกขอบบนของ Popup ให้อยู่ในระนาบเดิมเสมอ ไม่เลื่อนขึ้นลงเวลากดเปลี่ยนขั้นตอน (Step)
