@@ -319,6 +319,11 @@ export function mountWorkflow(app) {
     const updates = {
       updated_at: new Date().toISOString()
     };
+    if (b.team_name !== undefined) updates.team_name = String(b.team_name).trim().slice(0, 200);
+    if (Array.isArray(b.team_members)) updates.team_members = b.team_members;
+    if (b.employee_id) updates.employee_id = String(b.employee_id).trim();
+    if (b.full_name) updates.full_name = String(b.full_name).trim();
+    if (b.department) updates.department = String(b.department).trim();
     if (b.process_name) updates.process_name = String(b.process_name).trim().slice(0, 200);
     if (b.project_name) updates.project_name = String(b.project_name).trim().slice(0, 200);
     if (b.current_description !== undefined) updates.current_description = String(b.current_description).trim().slice(0, 2000);

@@ -316,16 +316,9 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
                     </td>
                     <td><span class="badge ${status.class}">${status.label}</span></td>
                     <td style="text-align:center" onclick="event.stopPropagation()">
-                      <div class="action-bar" style="justify-content:center;margin:0;gap:4px">
-                        <button class="btn btn-primary small" type="button" data-act-view="${item.id}" title="กดแสดงผล Improvement Proposal">
-                          <span class="material-symbols-rounded" style="font-size:15px">visibility</span> แสดงผล
-                        </button>
-                        ${item.can_edit ? `
-                          <button class="icon-btn" type="button" data-act-del="${item.id}" title="ลบโครงการ" style="color:var(--mo-danger);width:26px;height:26px">
-                            <span class="material-symbols-rounded" style="font-size:16px">delete</span>
-                          </button>
-                        ` : ''}
-                      </div>
+                      <button class="btn btn-secondary small" type="button" data-act-view="${item.id}" style="padding:2px 8px;min-height:22px;font-size:11px" title="กดแสดงผล Improvement Proposal">
+                        <span class="material-symbols-rounded" style="font-size:13px">visibility</span> แสดงผล
+                      </button>
                     </td>
                   </tr>
                 `;
@@ -347,17 +340,16 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 
     const rightBar = `
       <div class="toolbar a5-filters" style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <div class="a5-year">${a5YearSelect(userMe.years)}</div>
-        <div class="field" style="width:190px">
+        <div class="field" style="width:160px">
           <input id="wfa-flt-q" placeholder="ค้นหาโปรเจค, ปัญหา, พนักงาน" value="${esc(filter.q)}" style="padding:4px 8px;font-size:12px">
         </div>
-        <div class="field" style="width:115px">
+        <div class="field" style="width:110px">
           <select id="wfa-flt-dept" style="padding:4px 6px;font-size:12px">
             <option value="">ทุกแผนก</option>
             ${options(depts, filter.department)}
           </select>
         </div>
-        <div class="field" style="width:115px">
+        <div class="field" style="width:110px">
           <select id="wfa-flt-status" style="padding:4px 6px;font-size:12px">
             <option value="">ทุกสถานะ</option>
             ${options(['Idea', 'Prototype', 'Testing', 'Implemented'], filter.status, (v) => WFA_STATUS_BADGES[v]?.label || v)}
@@ -366,9 +358,13 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
         <label class="wfa-check-label" style="align-self:center;font-size:11.5px;margin:0;white-space:nowrap">
           <input type="checkbox" id="wfa-flt-my" ${filter.myOnly ? 'checked' : ''}> เฉพาะของฉัน
         </label>
-        <button class="btn btn-primary small" type="button" id="wfa-btn-add" style="white-space:nowrap">
-          <span class="material-symbols-rounded" style="font-size:16px">add_circle</span> ${isTeam ? 'ส่งข้อมูลโปรเจค (แบบกลุ่ม)' : 'ส่งข้อมูลโปรเจค (6 ขั้นตอน)'}
-        </button>
+        <div class="a5-year">${a5YearSelect(userMe.years)}</div>
+        ${button('wfa-btn-view', 'แสดงผล', 'secondary', 'disabled')}
+        <div class="action-bar a5-actions" style="margin:0">
+          ${button('wfa-btn-add', 'เพิ่ม', 'primary')}
+          ${button('wfa-btn-edit', 'แก้ไข', 'secondary', 'disabled')}
+          ${button('wfa-btn-del', 'ลบ', 'danger', 'disabled')}
+        </div>
       </div>
     `;
 
@@ -397,6 +393,13 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
   }
 
   function bindTxEvents() {
+    let picked = null;
+    const updateActions = () => {
+      if ($('wfa-btn-view')) $('wfa-btn-view').disabled = !picked;
+      if ($('wfa-btn-edit')) $('wfa-btn-edit').disabled = !picked || !picked.can_edit;
+      if ($('wfa-btn-del')) $('wfa-btn-del').disabled = !picked || !picked.can_edit;
+    };
+
     if ($('smf-proj-select')) {
       $('smf-proj-select').onchange = () => {
         smfPickedProj['smf'] = Number($('smf-proj-select').value);
@@ -411,7 +414,34 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
       };
     }
 
-    $('wfa-btn-add').onclick = () => wfaOpenSubmitWizard(userMe, loadData, teamMembers, currentProj);
+    if ($('wfa-btn-view')) {
+      $('wfa-btn-view').onclick = () => {
+        if (picked) wfaOpenDetail(picked.id, loadData);
+      };
+    }
+
+    if ($('wfa-btn-add')) {
+      $('wfa-btn-add').onclick = () => wfaOpenSubmitWizard(userMe, loadData, teamMembers, currentProj);
+    }
+
+    if ($('wfa-btn-edit')) {
+      $('wfa-btn-edit').onclick = () => {
+        if (picked) wfaOpenSubmitWizard(userMe, loadData, teamMembers, currentProj, picked);
+      };
+    }
+
+    if ($('wfa-btn-del')) {
+      $('wfa-btn-del').onclick = () => {
+        if (!picked) return;
+        confirmPopup('ลบโครงการ', `ต้องการลบโครงการ "${esc(picked.project_name)}" หรือไม่?`, async () => {
+          await api(`/api/workflow/ideas/${picked.id}`, { method: 'DELETE' });
+          toast('ลบเรียบร้อยแล้ว');
+          picked = null;
+          updateActions();
+          loadData();
+        });
+      };
+    }
 
     $('wfa-flt-q').onchange = () => { filter.q = $('wfa-flt-q').value.trim(); loadData(); };
     $('wfa-flt-dept').onchange = () => { filter.department = $('wfa-flt-dept').value; loadData(); };
@@ -425,21 +455,21 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
       };
     });
 
-    target.querySelectorAll('[data-act-del]').forEach((node) => {
-      node.onclick = (e) => {
-        e.stopPropagation();
-        const id = Number(node.dataset.actDel);
-        const item = ideas.find((i) => i.id === id);
-        confirmPopup('ลบโครงการ', `ต้องการลบโครงการ "${esc(item?.project_name)}" หรือไม่?`, async () => {
-          await api(`/api/workflow/ideas/${id}`, { method: 'DELETE' });
-          toast('ลบเรียบร้อยแล้ว');
-          loadData();
-        });
-      };
-    });
-
     target.querySelectorAll('tr[data-pick-id]').forEach((node) => {
-      node.onclick = () => wfaOpenDetail(Number(node.dataset.pickId), loadData);
+      node.onclick = () => {
+        const id = Number(node.dataset.pickId);
+        if (picked?.id === id) {
+          picked = null;
+          node.classList.remove('is-selected');
+        } else {
+          target.querySelectorAll('tr[data-pick-id]').forEach((r) => r.classList.toggle('is-selected', r === node));
+          picked = ideas.find((i) => i.id === id) || null;
+        }
+        updateActions();
+      };
+      node.ondblclick = () => {
+        wfaOpenDetail(Number(node.dataset.pickId), loadData);
+      };
     });
   }
 
@@ -447,10 +477,11 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 }
 
 // 6-Step Submission Wizard in Modal Popup
-function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = {}) {
+function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = {}, editIdea = null) {
   let step = 1;
-  const beforeImages = [];
-  const afterImages = [];
+  const isEdit = Boolean(editIdea && editIdea.id);
+  const beforeImages = Array.isArray(editIdea?.images) ? editIdea.images.filter((img) => img.image_type === 'BEFORE') : [];
+  const afterImages = Array.isArray(editIdea?.images) ? editIdea.images.filter((img) => img.image_type === 'AFTER') : [];
 
   const isTeam = currentProj.team_type === 'team' || (currentProj.code && currentProj.code !== 'workflow');
   const projTitle = currentProj.name || 'Work Flow Automation';
@@ -486,30 +517,30 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
   const matchedMember = teamMembers.find((m) => m.employee_id === myEmpId);
 
   const state = {
-    project_code: projCode,
-    team_name: '',
-    team_members: [],
-    employee_id: myEmpId,
-    full_name: String(userMe?.name || matchedMember?.name || '').trim(),
-    department: String(userMe?.department || matchedMember?.department || '').trim(),
-    process_name: '',
-    current_description: '',
-    current_problem: '',
-    frequency: 'ทุกวัน (Daily)',
-    project_name: '',
-    improvement_description: '',
-    proposed_technology: techOptions[0],
-    improvement_benefits: [],
-    time_before: 0,
-    time_after: 0,
-    paper_before: 0,
-    paper_after: 0,
-    steps_before: 0,
-    steps_after: 0,
-    difficulty: 'Medium',
-    budget: 'Free',
-    project_status: 'Idea',
-    admin_note: ''
+    project_code: editIdea?.project_code || projCode,
+    team_name: editIdea?.team_name || '',
+    team_members: Array.isArray(editIdea?.team_members) ? editIdea.team_members : [],
+    employee_id: editIdea ? String(editIdea.employee_id || '') : myEmpId,
+    full_name: editIdea ? String(editIdea.full_name || '') : String(userMe?.name || matchedMember?.name || '').trim(),
+    department: editIdea ? String(editIdea.department || '') : String(userMe?.department || matchedMember?.department || '').trim(),
+    process_name: editIdea?.process_name || '',
+    current_description: editIdea?.current_description || '',
+    current_problem: editIdea?.current_problem || '',
+    frequency: editIdea?.frequency || 'ทุกวัน (Daily)',
+    project_name: editIdea?.project_name || '',
+    improvement_description: editIdea?.improvement_description || '',
+    proposed_technology: editIdea?.proposed_technology || techOptions[0],
+    improvement_benefits: Array.isArray(editIdea?.improvement_benefits) ? editIdea.improvement_benefits : [],
+    time_before: editIdea ? Number(editIdea.time_before) || 0 : 0,
+    time_after: editIdea ? Number(editIdea.time_after) || 0 : 0,
+    paper_before: editIdea ? Number(editIdea.paper_before) || 0 : 0,
+    paper_after: editIdea ? Number(editIdea.paper_after) || 0 : 0,
+    steps_before: editIdea ? Number(editIdea.steps_before) || 0 : 0,
+    steps_after: editIdea ? Number(editIdea.steps_after) || 0 : 0,
+    difficulty: editIdea?.difficulty || 'Medium',
+    budget: editIdea?.budget || 'Free',
+    project_status: editIdea?.project_status || 'Idea',
+    admin_note: editIdea?.admin_note || ''
   };
 
   const modalHtml = `
@@ -642,13 +673,18 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
       images: [...beforeImages, ...afterImages]
     };
 
-    await api('/api/workflow/ideas', { method: 'POST', body: payload });
-    toast(`บันทึกข้อมูลโปรเจค ${projTitle} สำเร็จแล้ว`);
+    if (isEdit) {
+      await api(`/api/workflow/ideas/${editIdea.id}`, { method: 'PATCH', body: payload });
+      toast(`แก้ไขข้อมูลโปรเจค ${projTitle} เรียบร้อยแล้ว`);
+    } else {
+      await api('/api/workflow/ideas', { method: 'POST', body: payload });
+      toast(`บันทึกข้อมูลโปรเจค ${projTitle} สำเร็จแล้ว`);
+    }
     closePopup();
     if (onSuccess) onSuccess();
   }
 
-  openPopup(`ส่งข้อมูลโปรเจค ${projTitle}`, modalHtml, handleFinalSave, 'บันทึก');
+  openPopup(isEdit ? `แก้ไขข้อมูลโปรเจค ${projTitle}` : `ส่งข้อมูลโปรเจค ${projTitle}`, modalHtml, handleFinalSave, 'บันทึก');
   const popupEl = $('popup')?.querySelector('.popup');
   if (popupEl) {
     popupEl.style.width = 'min(920px, 96vw)';
