@@ -188,7 +188,7 @@ function wfaProposalCardHtml(item, { showActions = true } = {}) {
       <div class="wfa-prop-foot">
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
           <span class="wfa-prop-chip"><span class="material-symbols-rounded" style="font-size:14px">memory</span> ${esc(item.proposed_technology || '-')}</span>
-          ${(item.improvement_benefits || []).map((b) => `<span class="wfa-prop-chip">${esc(b)}</span>`).join('')}
+          ${(Array.isArray(item.improvement_benefits) ? item.improvement_benefits : []).map((b) => `<span class="wfa-prop-chip">${esc(b)}</span>`).join('')}
         </div>
         <div>
           ความยาก: <b>${esc(item.difficulty || '-')}</b> · งบประมาณ: <b>${esc(item.budget || '-')}</b>${item.frequency ? ` · ความถี่: <b>${esc(item.frequency)}</b>` : ''}
@@ -1256,7 +1256,7 @@ async function wfaOpenDetail(id, onRefresh) {
     if (p) {
       p.style.alignSelf = 'start';
       p.style.marginTop = 'max(16px, min(4vh, 28px))';
-      p.style.width = 'min(620px, 95vw)';
+      p.style.width = 'min(880px, 95vw)';
       p.style.height = 'min(88vh, 740px)';
       p.style.maxHeight = 'min(92vh, 860px)';
     }

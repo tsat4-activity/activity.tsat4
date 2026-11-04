@@ -63,6 +63,53 @@ export function mountWorkflow(app) {
     return Boolean(idea && ((await isAdmin(req)) || idea.employee_id === req.user.employeeId));
   };
 
+  // Store pictures of an idea: base64 goes to Storage when it can, the row points at it
+  const savePictures = async (ideaId, list, useMem = false) => {
+    for (const img of list) {
+      let finalUrl = imageUrl(img.image_url);
+
+      // Try uploading base64 to Supabase Storage if available
+      if (tx && finalUrl.startsWith('data:image/')) {
+        try {
+          const matches = finalUrl.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
+          if (matches) {
+            const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+            const buffer = Buffer.from(matches[2], 'base64');
+            const fileName = `workflow/${ideaId}_${(img.image_type === 'AFTER' ? 'after' : 'before').toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+            const bucket = 'img_smf';
+            const up = await tx.storage.from(bucket).upload(fileName, buffer, { contentType: `image/${matches[1]}`, upsert: true });
+            if (!up.error) {
+              finalUrl = tx.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
+            }
+          }
+        } catch (_) {
+          // Keep base64 dataUrl if storage upload is not configured
+        }
+      }
+
+      const imgRow = {
+        idea_id: ideaId,
+        image_type: ['BEFORE', 'AFTER'].includes(img.image_type) ? img.image_type : 'BEFORE',
+        image_url: finalUrl,
+        image_description: String(img.image_description || '').trim().slice(0, 500),
+        created_at: new Date().toISOString()
+      };
+
+      if (!useMem && tx) {
+        try {
+          const { error: imgErr } = await tx.from(T_IMAGES).insert([imgRow]);
+          if (imgErr && !tableMissing(imgErr)) throw imgErr;
+          if (imgErr) mem.images.push({ id: mem.nextId++, ...imgRow });
+        } catch (err) {
+          if (!tableMissing(err)) throw err;
+          mem.images.push({ id: mem.nextId++, ...imgRow });
+        }
+      } else {
+        mem.images.push({ id: mem.nextId++, ...imgRow });
+      }
+    }
+  };
+
   // 1. List ideas
   app.get('/api/workflow/ideas', wrap(requireUser), wf(async (req, res) => {
     const admin = await isAdmin(req);
@@ -294,51 +341,7 @@ export function mountWorkflow(app) {
     }
 
     // Process images if provided in payload
-    if (pictures.length && inserted?.id) {
-      for (const img of pictures) {
-        let finalUrl = imageUrl(img.image_url);
-
-        // Try uploading base64 to Supabase Storage if available
-        if (tx && finalUrl.startsWith('data:image/')) {
-          try {
-            const matches = finalUrl.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
-            if (matches) {
-              const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
-              const buffer = Buffer.from(matches[2], 'base64');
-              const fileName = `workflow/${inserted.id}_${(img.image_type || 'img').toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-              const bucket = 'img_smf';
-              const up = await tx.storage.from(bucket).upload(fileName, buffer, { contentType: `image/${matches[1]}`, upsert: true });
-              if (!up.error) {
-                finalUrl = tx.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
-              }
-            }
-          } catch (_) {
-            // Keep base64 dataUrl if storage upload is not configured
-          }
-        }
-
-        const imgRow = {
-          idea_id: inserted.id,
-          image_type: ['BEFORE', 'AFTER'].includes(img.image_type) ? img.image_type : 'BEFORE',
-          image_url: finalUrl,
-          image_description: String(img.image_description || '').trim().slice(0, 500),
-          created_at: new Date().toISOString()
-        };
-
-        if (!useMem && tx) {
-          try {
-            const { error: imgErr } = await tx.from(T_IMAGES).insert([imgRow]);
-            if (imgErr && !tableMissing(imgErr)) throw imgErr;
-            if (imgErr) mem.images.push({ id: mem.nextId++, ...imgRow });
-          } catch (err) {
-            if (!tableMissing(err)) throw err;
-            mem.images.push({ id: mem.nextId++, ...imgRow });
-          }
-        } else {
-          mem.images.push({ id: mem.nextId++, ...imgRow });
-        }
-      }
-    }
+    if (pictures.length && inserted?.id) await savePictures(inserted.id, pictures, useMem);
 
     res.status(201).json({ ok: true, id: inserted.id, idea: inserted });
   }));
@@ -412,6 +415,20 @@ export function mountWorkflow(app) {
     }
 
     if (!updated) return fail(res, 404, 'ไม่พบโครงการ หรือไม่มีสิทธิ์แก้ไข');
+    // the form sends the whole list: new ones (no id) are added, the ones taken out go
+    if (Array.isArray(b.images)) {
+      const fresh = b.images.filter((img) => img?.image_url && !img.id);
+      if (fresh.some((img) => !imageUrl(img.image_url))) return fail(res, 400, 'รูปภาพไม่ถูกต้อง');
+      const kept = new Set(b.images.filter((img) => img?.id).map((img) => Number(img.id)));
+      const table = tx ? await tx.from(T_IMAGES).select('id').eq('idea_id', id) : { data: [] };
+      if (table.error && !tableMissing(table.error)) throw table.error;
+      const gone = (table.data || []).map((img) => img.id).filter((x) => !kept.has(x));
+      if (gone.length) {
+        const removed = await tx.from(T_IMAGES).delete().in('id', gone);
+        if (removed.error) throw removed.error;
+      }
+      await savePictures(id, fresh, useMem || !tx);
+    }
     res.json({ ok: true, idea: updated });
   }));
 

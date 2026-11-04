@@ -1065,3 +1065,6 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 .wfa-list-table :is(.wfa-col-title,.wfa-col-title strong,.wfa-col-emp,.wfa-col-emp>*,.wfa-text-muted,.wfa-tech-badge,.badge){display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wfa-list-table .wfa-tech-badge,.wfa-list-table .badge{width:fit-content}
 .wfa-list-table .wfa-col-savings{display:flex;flex-wrap:nowrap;gap:4px;overflow:hidden}
+/* Improvement Proposal: the whole card scrolls, from its top (Before / After are the first thing), and the two pictures have room */
+.popup:has(.wfa-modal-detail){width:min(880px,95vw)}
+.popup:has(.wfa-modal-detail) .popup-fields{display:block;overflow-y:auto}

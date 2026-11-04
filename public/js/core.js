@@ -444,7 +444,7 @@ function openPopup(title, body, onSave, saveLabel = 'บันทึก') {
     save.disabled = true;
     try { await onSave(); } catch (err) { onErr(err); } finally { if (save.isConnected) save.disabled = false; }
   };
-  node.querySelector('input:not([readonly]):not([disabled]),select,textarea')?.focus();
+  node.querySelector('input:not([readonly]):not([disabled]),select,textarea')?.focus({ preventScroll: true }); // a form at the bottom must not scroll the top away
 }
 
 function confirmPopup(title, text, onYes, saveLabel = 'ลบ') {
