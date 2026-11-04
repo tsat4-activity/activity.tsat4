@@ -197,7 +197,7 @@ async function atxForm(activity, me, onDone, editId = 0) {
   const forcedZero = (issue) => issue && !(String(issue.action_description || '').trim() && issue.after_photos > 0);
 
   const groups = [...new Set(form.items.map((i) => i.s_group))].sort((x, y) => x - y);
-  const groupIcons = ['delete_sweep', 'grid_view', 'sparkles', 'health_and_safety', 'military_tech'];
+  const groupIcons = ['delete_sweep', 'grid_view', 'cleaning_services', 'health_and_safety', 'military_tech'];
   const STEPS = [
     { step: 1, label: 'ข้อมูลทั่วไป', icon: 'fact_check', group: 0 },
     ...groups.map((g, idx) => ({
@@ -215,7 +215,10 @@ async function atxForm(activity, me, onDone, editId = 0) {
     await atxSave(activity, state, form, openBy(), onDone, groups, (newStep) => { step = newStep; draw(true); });
   }, saveLabel);
 
-  const popupEl = $('popup');
+  const popupEl = $('popup')?.querySelector('.popup');
+  if (popupEl) {
+    popupEl.style.width = 'min(760px, 95vw)';
+  }
   const actionsEl = popupEl?.querySelector('.popup-actions');
   if (actionsEl && !$('atx-pop-summary')) {
     const sumEl = document.createElement('div');
@@ -271,25 +274,33 @@ async function atxForm(activity, me, onDone, editId = 0) {
       const issue = open.get(item.id);
       const locked = forcedZero(issue);
       const value = scoreOf(item);
-      const needIssue = state.type === 'COMMITTEE' && !issue && !state.ownItems.has(item.id) && value != null && value <= form.settings.issue_score;
-      return `<div class="atx-item${value == null ? '' : ' is-scored'}">
+      const isScored = value != null;
+      const isLow = value != null && value <= form.settings.issue_score;
+      const needIssue = state.type === 'COMMITTEE' && !issue && !state.ownItems.has(item.id) && isLow;
+      return `<div class="atx-item${isScored ? (isLow ? ' is-low' : ' is-good') : ''}">
         <div class="atx-item-header">
           <div class="atx-item-title">
-            <span style="font-weight:700;color:var(--mo-primary)">${item.item_no}.</span> ${esc(actNoLead(item.title))}
-            ${issue ? `<div class="atx-carry" style="margin-top:6px;padding:6px 10px;background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;border-radius:4px">
-              Issue เดิม <strong>${esc(issue.issue_no)}</strong>: ${esc(issue.description)} · ${locked ? '<b style="color:#dc2626">ยังไม่มี Action → ข้อนี้ได้ 0 คะแนน</b>' : '<span style="color:#059669">มี Action แล้ว ให้คะแนน ≥ 4 เพื่อปิด Issue</span>'}
+            <div>
+              <span class="atx-no-pill">${item.item_no}</span>
+              <span class="atx-title-text">${esc(actNoLead(item.title))}</span>
+            </div>
+            ${issue ? `<div class="atx-carry">
+              Issue เดิม <strong>${esc(issue.issue_no)}</strong>: ${esc(issue.description)} · ${locked ? '<b style="color:var(--mo-danger)">ยังไม่มี Action → ข้อนี้ได้ 0 คะแนน</b>' : '<span style="color:var(--mo-success)">มี Action แล้ว ให้คะแนน ≥ 4 เพื่อปิด Issue</span>'}
             </div>` : ''}
           </div>
           <div class="atx-scores">
-            ${locked ? '<span class="atx-zero" style="display:grid;place-items:center;width:36px;height:36px;font-weight:bold;background:#fee2e2;color:#dc2626;border-radius:50%">0</span>' : Array.from({ length: item.score_max }, (_, i) => i + 1).map((n) => `
-              <button type="button" class="atx-score${value === n ? ' is-on' : ''}${n <= form.settings.issue_score ? ' is-low' : ''}" data-score="${item.id}:${n}">${n}</button>
+            ${locked ? '<span class="atx-zero">0</span>' : Array.from({ length: item.score_max }, (_, i) => i + 1).map((n) => `
+              <button type="button" class="atx-score${value === n ? ' is-on' : ''}${n <= form.settings.issue_score ? ' is-low-btn' : ''}" data-score="${item.id}:${n}">${n}</button>
             `).join('')}
           </div>
         </div>
 
         ${needIssue ? `
           <div class="atx-issue">
-            <div style="font-size:12px;font-weight:600;color:#dc2626">⚠️ ได้คะแนน ${value} (≤ ${form.settings.issue_score}) กรุณาระบุปัญหาและแนบรูปภาพเพื่อเปิด Issue</div>
+            <div class="atx-issue-head">
+              <span class="material-symbols-rounded" style="font-size:16px">warning</span>
+              <span>ได้คะแนน ${value} (≤ ${form.settings.issue_score}) กรุณาระบุรายละเอียดปัญหาและแนบรูปภาพ</span>
+            </div>
             ${field(`รายละเอียดปัญหา (ข้อที่ ${item.item_no})`, `<textarea id="atx-text-${item.id}" rows="2" maxlength="2000" placeholder="ระบุสิ่งที่พบเห็น ปัญหา หรือจุดที่ไม่เป็นไปตามมาตรฐาน..." data-text="${item.id}">${esc(state.text[item.id] || '')}</textarea>`, 'required')}
             ${field('รูปปัญหา (อัตราส่วน 16:9)', `<input id="atx-photo-${item.id}" type="file" accept="image/*"><img id="atx-photo-${item.id}-preview" class="atx-photo${state.photo[item.id] ? '' : ' d-none'}" src="${state.photo[item.id] || ''}" alt="" style="max-height:180px;width:auto;object-fit:cover;border-radius:6px;margin-top:6px">`, 'required')}
           </div>
@@ -303,15 +314,15 @@ async function atxForm(activity, me, onDone, editId = 0) {
 
     if (step === 1) {
       contentHtml = `
-        <div class="wfa-step-section" style="max-width:760px;margin:0 auto;width:100%">
+        <div class="wfa-step-section" style="width:100%">
           <div class="wfa-sec-badge">Section 01 · ข้อมูลทั่วไป</div>
-          <h3 style="margin:4px 0 12px">ข้อมูลการตรวจประเมินและพื้นที่</h3>
+          <h3 style="margin:4px 0 12px;font-size:16px;font-weight:700">ข้อมูลการตรวจประเมินและพื้นที่</h3>
           ${state.editId ? `<p class="atx-note">แก้ไข ${esc(state.auditNo)} · ประเภทและพื้นที่เปลี่ยนไม่ได้ · ข้อที่ Issue เดิมไม่มี Action ยังเป็น 0</p>` : ''}
 
           <div style="display:flex;flex-direction:column;gap:12px">
             <div class="field">
               <label>ประเภทการตรวจประเมิน</label>
-              ${state.editId ? `<span class="badge badge-primary" style="display:inline-block;padding:6px 14px;font-size:13px">${esc(ATX_TYPES[state.type])}</span>` : a5Seg('data-atype', Object.fromEntries(form.types.map((t) => [t, ATX_TYPES[t]])), state.type)}
+              ${state.editId ? `<span class="badge badge-primary" style="display:inline-block;padding:6px 14px;font-size:12.5px">${esc(ATX_TYPES[state.type])}</span>` : a5Seg('data-atype', Object.fromEntries(form.types.map((t) => [t, ATX_TYPES[t]])), state.type)}
             </div>
 
             <div class="field">
@@ -334,9 +345,9 @@ async function atxForm(activity, me, onDone, editId = 0) {
               </div>
               <div class="field">
                 <label>รายชื่อผู้ตรวจประเมินในทีม (ทำเครื่องหมายผู้ที่เข้าร่วมตรวจจริง)</label>
-                <div class="atx-people-box" style="display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--mo-surface-2);border:1px solid var(--mo-line);border-radius:8px">
+                <div class="atx-part-grid">
                   ${teamMembers().map((m) => `
-                    <label class="atx-check" style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px">
+                    <label class="atx-part-card${state.participated.has(m.employeeId) ? ' is-checked' : ''}">
                       <input type="checkbox" data-part="${esc(m.employeeId)}"${state.participated.has(m.employeeId) ? ' checked' : ''}>
                       <span><strong>${esc(m.employeeId)}</strong> · ${esc(m.name)}</span>
                     </label>
@@ -347,14 +358,14 @@ async function atxForm(activity, me, onDone, editId = 0) {
 
             <div class="field">
               <label>ผู้รับการตรวจ (ตัวแทนพื้นที่)</label>
-              <div style="display:flex;flex-direction:column;gap:8px">
-                <div class="atx-recv-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div class="atx-recv-chips">
                   ${state.receivers.map((p, i) => `
-                    <span class="atx-chip" style="font-size:12px;padding:4px 10px">
+                    <span class="atx-chip">
                       ${esc(p.employeeId)} ${esc(p.name)}
-                      <button type="button" data-unrecv="${i}" aria-label="เอาออก" style="margin-left:4px;font-weight:bold;cursor:pointer">×</button>
+                      <button type="button" data-unrecv="${i}" aria-label="เอาออก">×</button>
                     </span>
-                  `).join('') || '<span class="sum-meta" style="align-self:center">ยังไม่ได้ระบุผู้รับตรวจ (ค้นหาเพิ่มด้านล่าง)</span>'}
+                  `).join('') || '<span class="sum-meta">ยังไม่ได้ระบุผู้รับตรวจ (ค้นหาเพิ่มด้านล่าง)</span>'}
                 </div>
                 <div class="atx-recv-pick">${a5EmpField('', '')}</div>
               </div>
@@ -377,17 +388,17 @@ async function atxForm(activity, me, onDone, editId = 0) {
       const groupScore = currentGroupItems.reduce((s, i) => s + (Number(scoreOf(i)) || 0), 0);
 
       contentHtml = `
-        <div class="wfa-step-section" style="max-width:820px;margin:0 auto;width:100%">
+        <div class="wfa-step-section" style="width:100%">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <div class="wfa-sec-badge is-green">Section 0${step} · ${esc(a5GroupName(activity, curGroup))}</div>
             <div class="sum-meta" style="font-size:12.5px">
               ให้คะแนนแล้ว <strong>${groupDone}/${currentGroupItems.length} ข้อ</strong> · รวม <strong>${groupScore}/${groupMax} คะแนน</strong>
             </div>
           </div>
-          <h3 style="margin:4px 0 4px">${esc(a5GroupName(activity, curGroup))}</h3>
+          <h3 style="margin:4px 0 8px;font-size:16px;font-weight:700">${esc(a5GroupName(activity, curGroup))}</h3>
           ${!state.areaId ? '<div class="atx-note" style="margin-bottom:8px">⚠️ กรุณากลับไปเลือกพื้นที่ใน <strong>ขั้นตอนที่ 1 (ข้อมูลทั่วไป)</strong> ก่อนทำการบันทึกคะแนน</div>' : ''}
 
-          <div class="atx-items-list" style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+          <div class="atx-items-list">
             ${currentGroupItems.map(itemRow).join('')}
           </div>
         </div>

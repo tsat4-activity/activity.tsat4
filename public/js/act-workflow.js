@@ -664,7 +664,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
   if (popupEl) {
     popupEl.style.alignSelf = 'start';
     popupEl.style.marginTop = 'max(16px, min(4vh, 28px))';
-    popupEl.style.width = 'min(920px, 96vw)';
+    popupEl.style.width = 'min(760px, 95vw)';
     popupEl.style.height = 'min(88vh, 740px)';
     popupEl.style.maxHeight = 'min(92vh, 860px)';
   }
@@ -1253,7 +1253,7 @@ async function wfaOpenDetail(id, onRefresh) {
     if (p) {
       p.style.alignSelf = 'start';
       p.style.marginTop = 'max(16px, min(4vh, 28px))';
-      p.style.width = 'min(920px, 96vw)';
+      p.style.width = 'min(760px, 95vw)';
       p.style.height = 'min(88vh, 740px)';
       p.style.maxHeight = 'min(92vh, 860px)';
     }
