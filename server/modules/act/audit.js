@@ -4,7 +4,6 @@ import { mx, tx } from '../../core/db.js';
 import { fail, cleanTerm } from '../../core/http.js';
 import { nameOf } from '../../core/users.js';
 import { ACTIVITIES, ACT_UNITS, AUDIT_UNIT, unitsOf, accessOf, actRoute, fetchAll, fetchIn, grantsAdmin, namesOf, requireAdmin, roundTo, tablesOf, throwIf, viewerOf, yearOf } from './common.js';
-import { seed5sMockAudits } from './audit-mock.js';
 
 // Checklist audits (5S and similar): Dashboard reads for everyone, Setting writes for the year's admins.
 // Tables (Tx Data, one set per activity): db/act/<activity>.sql via tablesOf() · rules: docs/specs/act-5s.md
@@ -75,13 +74,13 @@ async function seed5sMaster() {
   if (areaRes.error || checkRes.error || teamRes.error) return;
   let areas = areaRes.data || [];
   const areaCodes = new Set(areas.map((a) => a.code));
-  if (SEED_5S_AREAS.some(([code]) => !areaCodes.has(code))) {
+  if (!areaCodes.size) {
     await tx.from('mt_5s_area').upsert(SEED_5S_AREAS.map(([code, area_type, name, section]) => ({ code, area_type, name, section, status: 'Active' })), { onConflict: 'code' });
     const reread = await tx.from('mt_5s_area').select('id,code');
     if (!reread.error) areas = reread.data || [];
   }
   const checkNos = new Set((checkRes.data || []).map((c) => Number(c.item_no)));
-  if (SEED_5S_CHECKLIST.some(([item_no]) => !checkNos.has(item_no))) {
+  if (!checkNos.size) {
     await tx.from('mt_5s_checklist').upsert(SEED_5S_CHECKLIST.map(([item_no, s_group, title]) => ({ year: 2026, item_no, s_group, title, score_max: 5, status: 'Active' })), { onConflict: 'year,item_no' });
   }
   const teamRows = teamRes.data || [];
@@ -92,24 +91,22 @@ async function seed5sMaster() {
   const areaIdByCode = new Map(areas.map((a) => [a.code, Number(a.id)]));
   const ownedAreas = new Set(teamRows.filter((r) => r.role === 'owner' && r.area_id).map((r) => Number(r.area_id)));
   const auditKeys = new Set(teamRows.map((r) => `${r.employee_id}:${r.role}:${r.team || ''}`));
+  // owners and auditors only for a year that has none yet: someone an admin removed does not come back on a restart
+  const seeded = teamRows.some((r) => ['owner', 'auditor'].includes(r.role));
   const toInsert = [];
-  for (const [code, , , , ownerEmp] of SEED_5S_AREAS) {
+  for (const [code, , , , ownerEmp] of seeded ? [] : SEED_5S_AREAS) {
     const areaId = areaIdByCode.get(code);
     if (areaId && !ownedAreas.has(areaId) && canUseEmp(ownerEmp)) {
       toInsert.push({ year: 2026, employee_id: ownerEmp, role: 'owner', unit: AUDIT_UNIT, area_id: areaId, status: 'Active' });
     }
   }
-  for (const [empId, role, team] of SEED_5S_AUDIT_TEAM) {
+  for (const [empId, role, team] of seeded ? [] : SEED_5S_AUDIT_TEAM) {
     if (!auditKeys.has(`${empId}:${role}:${team || ''}`) && canUseEmp(empId)) {
       toInsert.push({ year: 2026, employee_id: empId, role, unit: AUDIT_UNIT, team, status: 'Active' });
     }
   }
   if (toInsert.length) {
     await Promise.all(toInsert.map((row) => tx.from('mt_5s_team').insert(row)));
-  }
-  const planRes = await tx.from('mt_5s_audit_plan').select('id', { count: 'exact', head: true }).eq('year', 2026);
-  if (!planRes.error && planRes.count === 0) {
-    await seed5sMockAudits(areas);
   }
 }
 
@@ -745,6 +742,7 @@ export function mountAudit(app) {
     throwIf(error);
     if (!row) return fail(res, 404, 'ไม่พบรายชื่อ');
     if (!(await requireAdmin(req, res, activity, row.year))) return;
+    if (row.year < new Date().getFullYear() && !req.user.creator) return fail(res, 403, 'ตั้งรหัสได้เฉพาะทีมของปีนี้เป็นต้นไป');
     if (row.status !== 'Active') return fail(res, 400, 'รายชื่อนี้เป็น Inactive');
     const employeeId = String(row.employee_id);
     const [employee, user] = await Promise.all([
@@ -756,7 +754,8 @@ export function mountAudit(app) {
     if (user.data && req.body?.reset !== true) return fail(res, 409, 'คนนี้มีบัญชีแล้ว');
     if (user.data && !req.user.creator) {
       const wide = user.data.creator || user.data.executive || (Array.isArray(user.data.admin_of) && user.data.admin_of.length);
-      const leads = wide ? [] : await Promise.all(ACTIVITIES.map((a) => tx.from(tablesOf(a).team).select('role,unit').eq('year', row.year).eq('employee_id', employeeId).eq('status', 'Active')));
+      // ผู้ดูแล of any activity in any year: requireAdmin looks at one year only, so one year must not reach the others
+      const leads = wide ? [] : await Promise.all(ACTIVITIES.map((a) => tx.from(tablesOf(a).team).select('role,unit').eq('employee_id', employeeId).eq('status', 'Active')));
       if (wide || leads.some((r, i) => (r.data || []).some((x) => grantsAdmin(ACTIVITIES[i], x)))) return fail(res, 403, 'บัญชีนี้มีสิทธิ์ผู้ดูแล รีเซ็ตได้เฉพาะผู้ดูแลระบบ');
     }
     // the creator / ผู้ดูแล may type the password (ผู้ใช้กำหนด 2026-11-04, e.g. a member who forgot it) · blank = a random one

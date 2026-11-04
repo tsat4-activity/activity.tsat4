@@ -32,6 +32,9 @@ const WFA_STATUS_BADGES = {
   Implemented: { label: 'Implemented (ใช้งานจริง)', class: 'badge-success' }
 };
 
+// A picture URL for src="" / url(''): https or a base64 image only (as the server), escaped (audit 2026-11-05)
+const wfaImg = (url) => (/^(https?:\/\/[^\s"'<>()\\]+|data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+)$/.test(String(url || '')) ? esc(url) : '');
+
 function wfaCalcReduction(before, after) {
   const b = Number(before);
   const a = Number(after);
@@ -88,7 +91,7 @@ function wfaProposalCardHtml(item, { showActions = true } = {}) {
         <!-- BEFORE Column (16:9) -->
         <div class="wfa-prop-media-col">
           <div class="wfa-prop-img-wrap">
-            ${firstBefore ? `<img src="${firstBefore.image_url}" alt="Before" class="img-zoom" id="wfa-prop-b-img-${item.id}">` : `
+            ${firstBefore ? `<img src="${wfaImg(firstBefore.image_url)}" alt="Before" class="img-zoom" id="wfa-prop-b-img-${item.id}">` : `
               <div class="wfa-prop-img-empty">
                 <span class="material-symbols-rounded">image</span>
                 <span>ไม่มีรูปภาพ Before (16:9)</span>
@@ -98,8 +101,8 @@ function wfaProposalCardHtml(item, { showActions = true } = {}) {
           ${beforeImgs.length > 1 ? `
             <div class="wfa-prop-thumbs">
               ${beforeImgs.map((img, i) => `
-                <button type="button" class="wfa-prop-thumb-btn ${i === 0 ? 'is-active' : ''}" data-swap-img="wfa-prop-b-img-${item.id}" data-swap-cap="wfa-prop-b-cap-${item.id}" data-src="${img.image_url}" data-desc="${esc(img.image_description || beforeCap)}">
-                  <img src="${img.image_url}" alt="Before ${i + 1}">
+                <button type="button" class="wfa-prop-thumb-btn ${i === 0 ? 'is-active' : ''}" data-swap-img="wfa-prop-b-img-${item.id}" data-swap-cap="wfa-prop-b-cap-${item.id}" data-src="${wfaImg(img.image_url)}" data-desc="${esc(img.image_description || beforeCap)}">
+                  <img src="${wfaImg(img.image_url)}" alt="Before ${i + 1}">
                 </button>
               `).join('')}
             </div>
@@ -112,7 +115,7 @@ function wfaProposalCardHtml(item, { showActions = true } = {}) {
         <!-- AFTER Column (16:9) -->
         <div class="wfa-prop-media-col">
           <div class="wfa-prop-img-wrap">
-            ${firstAfter ? `<img src="${firstAfter.image_url}" alt="After" class="img-zoom" id="wfa-prop-a-img-${item.id}">` : `
+            ${firstAfter ? `<img src="${wfaImg(firstAfter.image_url)}" alt="After" class="img-zoom" id="wfa-prop-a-img-${item.id}">` : `
               <div class="wfa-prop-img-empty">
                 <span class="material-symbols-rounded">auto_awesome</span>
                 <span>ไม่มีรูปภาพ After (16:9)</span>
@@ -122,8 +125,8 @@ function wfaProposalCardHtml(item, { showActions = true } = {}) {
           ${afterImgs.length > 1 ? `
             <div class="wfa-prop-thumbs">
               ${afterImgs.map((img, i) => `
-                <button type="button" class="wfa-prop-thumb-btn ${i === 0 ? 'is-active' : ''}" data-swap-img="wfa-prop-a-img-${item.id}" data-swap-cap="wfa-prop-a-cap-${item.id}" data-src="${img.image_url}" data-desc="${esc(img.image_description || afterCap)}">
-                  <img src="${img.image_url}" alt="After ${i + 1}">
+                <button type="button" class="wfa-prop-thumb-btn ${i === 0 ? 'is-active' : ''}" data-swap-img="wfa-prop-a-img-${item.id}" data-swap-cap="wfa-prop-a-cap-${item.id}" data-src="${wfaImg(img.image_url)}" data-desc="${esc(img.image_description || afterCap)}">
+                  <img src="${wfaImg(img.image_url)}" alt="After ${i + 1}">
                 </button>
               `).join('')}
             </div>
@@ -1107,7 +1110,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = [], currentProj = 
     }
     wrap.innerHTML = list.map((img, idx) => `
       <div class="wfa-img-thumb-box">
-        <div class="wfa-img-thumb" style="background-image:url('${img.image_url}')">
+        <div class="wfa-img-thumb" style="background-image:url('${wfaImg(img.image_url)}')">
           <button class="wfa-img-del" type="button" data-del-img="${idx}" title="ลบรูป">×</button>
         </div>
         <input class="wfa-img-desc-input" value="${esc(img.image_description || '')}" placeholder="คำอธิบายใต้ภาพ ${type}" data-desc-img="${idx}">

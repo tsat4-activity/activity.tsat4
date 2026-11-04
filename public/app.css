@@ -802,7 +802,6 @@ body[data-zone="work"]{--ch-1:#ea580c}
 .sys-photo-actions .check{display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer}.sys-photo-actions .check input{flex:0 0 auto;width:16px;height:16px;min-height:0;margin:0;padding:0}
 .img-zoom-box[hidden]{display:none}.img-zoom-box img{width:100%;height:100%;object-fit:contain;display:block;border-radius:6px}
 .img-zoom{cursor:zoom-in}
-.atx-recv-pick{flex:1 1 220px;max-width:320px}.atx-recv-pick .search-slot .field{margin:0}
 
 /* SMF monthly target & actual */
 .smf-input { width: 100%; box-sizing: border-box; min-width: 0; padding: 4px 8px; font-size: 13px; }

@@ -68,16 +68,11 @@ async function settingsOf(activity, year) {
   if (error) throw error;
   const out = { ...DEFAULTS };
   for (const row of data || []) if (row.key in out) out[row.key] = Number(row.value);
-  if (year) {
-    const yearPass = (data || []).find((r) => r.key === `pass_percent:${year}`);
-    if (yearPass && Number(yearPass.value)) out.pass_percent = Number(yearPass.value);
-    const yearSelf = (data || []).find((r) => r.key === `pass_self:${year}`);
-    if (yearSelf && Number(yearSelf.value)) out.pass_self = Number(yearSelf.value);
-    else out.pass_self = out.pass_self ?? out.pass_percent;
-    const yearComm = (data || []).find((r) => r.key === `pass_committee:${year}`);
-    if (yearComm && Number(yearComm.value)) out.pass_committee = Number(yearComm.value);
-    else out.pass_committee = out.pass_committee ?? out.pass_percent;
-  }
+  // pass marks: as the dashboards (audit.js): this year's, the general one, then pass_percent
+  const stored = (key) => Number((data || []).find((r) => r.key === key)?.value) || null;
+  out.pass_percent = stored(`pass_percent:${year}`) ?? stored('pass_percent') ?? DEFAULTS.pass_percent;
+  out.pass_self = stored(`pass_self:${year}`) ?? stored('pass_self') ?? out.pass_percent;
+  out.pass_committee = stored(`pass_committee:${year}`) ?? stored('pass_committee') ?? out.pass_percent;
   return out;
 }
 
@@ -89,13 +84,22 @@ export function mountTransaction(app) {
   });
 
   // Open Issues of an area with how many after photos they have (for the committee form and verification).
-  // exceptAuditId leaves out the Issues an audit opened itself (used when that audit is edited).
-  const openIssuesOf = async (t, areaId, exceptAuditId = 0) => {
+  // exceptAuditId leaves out the Issues an audit opened itself; upTo = its date (used when that audit is edited).
+  const openIssuesOf = async (t, areaId, exceptAuditId = 0, upTo = '') => {
     let query = tx.from(t.issue).select('id,issue_no,audit_id,checklist_id,score,description,issue_date,due_date,action_description,action_date,status,responsible_id,verify_audit_no,photo_before,photo_after')
       .eq('area_id', areaId).neq('status', 'CLOSED').order('issue_no');
     if (exceptAuditId) query = query.neq('audit_id', exceptAuditId);
+    if (upTo) query = query.lte('issue_date', upTo);
     const issues = must(await query);
     return issues.map((i) => ({ ...i, photos: photosOf(i), after_photos: (i.photo_after || []).length }));
+  };
+
+  // ผู้รับการตรวจ = the area's owner of the year, unless the form sent names
+  const receiversOf = async (t, year, areaId, sent) => {
+    const list = idList(sent);
+    if (list.length) return list;
+    const owner = must(await tx.from(t.team).select('employee_id').eq('year', year).eq('area_id', areaId).eq('role', 'owner').eq('status', 'Active').limit(1));
+    return owner.map((o) => String(o.employee_id));
   };
 
   const insertIssues = async (t, { auditId, year, areaId, auditedAt, needIssue, scores, described, daysBefore, plans: preloadedPlans }) => {
@@ -121,20 +125,24 @@ export function mountTransaction(app) {
     const access = await accessOf(req, activity, year);
     if (!access.member) return fail(res, 403, `บันทึกได้เฉพาะทีมของกิจกรรมนี้ปี ${year}`);
     const areaId = Number(req.query.area) || 0;
-    const [settings, items, areas, team, openIssues] = await Promise.all([
+    const editing = Number(req.query.audit) || 0;
+    const editDate = editing ? must(await tx.from(t.audit).select('audited_at').eq('id', editing).maybeSingle())?.audited_at?.slice(0, 10) || '' : '';
+    const [settings, items, areas, team, openIssues, areaOwner] = await Promise.all([
       settingsOf(activity, year),
       fetchAll(() => tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', year).eq('status', 'Active').order('item_no')),
       fetchAll(() => tx.from(t.area).select('id,code,area_type,name').eq('status', 'Active').order('code')),
       fetchAll(() => tx.from(t.team).select('employee_id,role,team').eq('year', year).eq('status', 'Active')),
-      areaId ? openIssuesOf(t, areaId, Number(req.query.audit) || 0) : []
+      areaId ? openIssuesOf(t, areaId, editing, editDate) : [],
+      areaId ? receiversOf(t, year, areaId, []) : []
     ]);
     const types = [];
     if (access.admin || access.ownerAreaIds.length) types.push('SELF');
     if (access.admin || access.chairman || access.auditor) types.push('COMMITTEE');
-    const names = await namesOf(team.map((m) => m.employee_id));
+    const names = await namesOf([...team.map((m) => m.employee_id), ...areaOwner]);
     res.json({
       year,
       access,
+      receivers: areaOwner.map((id) => ({ employeeId: id, name: names.get(id)?.name || '' })),
       settings,
       types,
       items,
@@ -147,7 +155,8 @@ export function mountTransaction(app) {
     });
   });
 
-  // Edit an audit's scores, date, and people. Items locked at 0 by an unanswered Issue stay 0.
+  // Edit an audit's scores, date, and people. A stored 0 (an unanswered Issue, a real score is 1 or more) stays 0, and the
+  // score of an item made Inactive later stays as it is: the audit keeps what it was scored on.
   // Its own Issues: an item that rose above the issue score drops its untouched Issue; a newly low committee item opens one.
   route('patch', '/api/act/:activity/audits/:id', async (req, res, activity, t) => {
     const body = req.body || {};
@@ -161,18 +170,20 @@ export function mountTransaction(app) {
     const team = audit.audit_type === 'COMMITTEE' ? String(body.team || audit.team || '').trim().toUpperCase() : null;
     if (audit.audit_type === 'COMMITTEE' && !/^[A-Z]$/.test(team || '')) return fail(res, 400, 'เลือกทีมที่ตรวจ');
 
-    const [settings, itemsRes, lockedRes, ownRes, carriedIssues] = await Promise.all([
+    const [settings, itemsRes, storedRes, ownRes, carriedIssues] = await Promise.all([
       settingsOf(activity, audit.year),
-      tx.from(t.checklist).select('id,item_no,s_group,title,score_max').eq('year', audit.year).eq('status', 'Active').order('item_no'),
-      tx.from(t.issue).select('checklist_id').eq('verify_audit_no', audit.audit_no).eq('status', 'OVERDUE'),
+      tx.from(t.checklist).select('id,item_no,s_group,title,score_max,status').eq('year', audit.year).order('item_no'),
+      tx.from(t.score).select('checklist_id,score').eq('audit_id', audit.id),
       tx.from(t.issue).select('id,checklist_id,score,status,action_description,photo_after').eq('audit_id', audit.id),
-      audit.audit_type === 'COMMITTEE' ? openIssuesOf(t, audit.area_id, audit.id) : []
+      audit.audit_type === 'COMMITTEE' ? openIssuesOf(t, audit.area_id, audit.id, audit.audited_at.slice(0, 10)) : []
     ]);
-    const items = must(itemsRes);
-    const locked = new Set(must(lockedRes).map((r) => r.checklist_id));
+    const stored = new Map(must(storedRes).map((s) => [s.checklist_id, Number(s.score)]));
+    const items = must(itemsRes).filter((i) => i.status === 'Active' || stored.has(i.id));
+    const locked = new Set([...stored].filter(([, score]) => score === 0).map(([id]) => id));
     const scores = new Map();
     for (const item of items) {
       if (locked.has(item.id)) { scores.set(item.id, 0); continue; }
+      if (item.status !== 'Active') { scores.set(item.id, stored.get(item.id)); continue; }
       const value = Number(body.scores?.[item.id]);
       scores.set(item.id, Number.isInteger(value) && value >= 1 && value <= Number(item.score_max) ? value : null);
     }
@@ -183,7 +194,7 @@ export function mountTransaction(app) {
     const carried = new Set(carriedIssues.map((i) => i.checklist_id));
     const low = (id) => scores.get(id) <= settings.issue_score;
     // Drop own Issues whose item is no longer low, only while nobody has worked on them yet.
-    const drop = own.filter((i) => !low(i.checklist_id) && i.status === 'OPEN' && !String(i.action_description || '').trim() && !(i.photo_after || []).length);
+    const drop = own.filter((i) => scores.has(i.checklist_id) && !low(i.checklist_id) && i.status === 'OPEN' && !String(i.action_description || '').trim() && !(i.photo_after || []).length);
     const stillOwn = new Set(own.filter((i) => !drop.includes(i)).map((i) => i.checklist_id));
     const needIssue = audit.audit_type === 'COMMITTEE' ? items.filter((i) => low(i.id) && !stillOwn.has(i.id) && !carried.has(i.id) && !locked.has(i.id)) : [];
     const described = new Map((Array.isArray(body.issues) ? body.issues : []).map((x) => [Number(x.checklistId), String(x.description || '').trim().slice(0, 2000)]));
@@ -195,7 +206,7 @@ export function mountTransaction(app) {
     const auditPatch = { audited_at: `${auditedAt}T05:00:00Z`, team, total_score: score.total, percent_score: score.percent, result: score.result };
     if (Array.isArray(body.participated) || Array.isArray(body.receivers)) {
       auditPatch.auditors = idList(body.participated).length ? idList(body.participated) : [audit.created_by].filter(Boolean);
-      auditPatch.receivers = idList(body.receivers);
+      auditPatch.receivers = await receiversOf(t, audit.year, audit.area_id, body.receivers);
     }
     must(await tx.from(t.audit).update(auditPatch).eq('id', audit.id));
     must(await tx.from(t.score).delete().eq('audit_id', audit.id));
@@ -259,12 +270,13 @@ export function mountTransaction(app) {
     const prefix = `${type === 'SELF' ? 'S' : 'C'}-${area.code}-${auditedAt.slice(8, 10)}${auditedAt.slice(5, 7)}${auditedAt.slice(2, 4)}-`;
     const same = must(await tx.from(t.audit).select('audit_no').like('audit_no', `${prefix}%`));
     const auditNo = `${prefix}${String(same.length + 1).padStart(2, '0')}`;
+    const receivers = await receiversOf(t, year, areaId, body.receivers);
     const audit = must(await tx.from(t.audit).insert({
       audit_no: auditNo, year, audit_type: type, area_id: areaId, team,
       audited_at: `${auditedAt}T05:00:00Z`, // 12:00 Thai time, so the Thai date never shifts
       total_score: score.total, percent_score: score.percent, result: score.result, status: 'DRAFT', created_by: req.user.employeeId,
       auditors: idList(body.participated).length ? idList(body.participated) : [req.user.employeeId],
-      receivers: idList(body.receivers)
+      receivers
     }).select('id').single());
 
     try {

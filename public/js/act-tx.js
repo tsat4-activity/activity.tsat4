@@ -195,6 +195,9 @@ async function atxForm(activity, me, onDone, editId = 0) {
   }
   const openBy = () => new Map(form.openIssues.map((i) => [i.checklist_id, i]));
   const forcedZero = (issue) => issue && !(String(issue.action_description || '').trim() && issue.after_photos > 0);
+  // a new audit: an Issue without Action locks its item at 0 · an audit being edited keeps the 0 it was saved with (as the server)
+  const savedZero = new Set(editId ? d.scores.filter((s) => Number(s.score) === 0).map((s) => s.checklist_id) : []);
+  const lockedItem = (id, open) => (editId ? savedZero.has(id) : Boolean(forcedZero(open.get(id))));
 
   const groups = [...new Set(form.items.map((i) => i.s_group))].sort((x, y) => x - y);
   const groupIcons = ['delete_sweep', 'grid_view', 'cleaning_services', 'health_and_safety', 'military_tech'];
@@ -212,7 +215,7 @@ async function atxForm(activity, me, onDone, editId = 0) {
   const title = state.editId ? `แก้ไขผลตรวจ ${esc(state.auditNo)}` : 'บันทึกผลตรวจ 5S';
   const saveLabel = state.editId ? 'บันทึกการแก้ไข' : 'บันทึกผลตรวจ';
   openPopup(title, '<div class="wfa-wizard-modal atx-modal" id="atx-wizard-container"></div>', async () => {
-    await atxSave(activity, state, form, openBy(), onDone, groups, (newStep) => { step = newStep; draw(true); });
+    await atxSave(activity, state, form, openBy(), onDone, groups, (newStep) => { step = newStep; draw(true); }, lockedItem);
   }, saveLabel);
 
   const popupEl = $('popup')?.querySelector('.popup');
@@ -231,15 +234,16 @@ async function atxForm(activity, me, onDone, editId = 0) {
     const container = $('atx-wizard-container');
     if (!container) return;
     const open = state.type === 'COMMITTEE' ? openBy() : new Map();
-    const scoreOf = (item) => (forcedZero(open.get(item.id)) ? 0 : state.scores[item.id]);
+    const scoreOf = (item) => (lockedItem(item.id, open) ? 0 : state.scores[item.id]);
     const max = form.items.reduce((s, i) => s + i.score_max, 0);
     const total = form.items.reduce((s, i) => s + (Number(scoreOf(i)) || 0), 0);
     const done = form.items.filter((i) => scoreOf(i) != null).length;
     const percent = max ? (total / max) * 100 : 0;
+    const passMark = (state.type === 'SELF' ? form.settings.pass_self : form.settings.pass_committee) ?? form.settings.pass_percent; // as the server
 
     const sumEl = $('atx-pop-summary');
     if (sumEl) {
-      sumEl.innerHTML = `ให้คะแนนแล้ว <strong>${done}/${form.items.length}</strong> · รวม <strong>${total}/${max}</strong> · <strong>${percent.toFixed(2)}%</strong> · <span class="badge ${percent >= form.settings.pass_percent ? 'badge-success' : 'badge-danger'}">${percent >= form.settings.pass_percent ? 'PASS' : 'ต้องปรับปรุง'}</span>`;
+      sumEl.innerHTML = `ให้คะแนนแล้ว <strong>${done}/${form.items.length}</strong> · รวม <strong>${total}/${max}</strong> · <strong>${percent.toFixed(2)}%</strong> · <span class="badge ${percent >= passMark ? 'badge-success' : 'badge-danger'}">${percent >= passMark ? 'PASS' : 'ต้องปรับปรุง'}</span>`;
     }
     const saveBtn = $('popup-save');
     if (saveBtn) saveBtn.disabled = !state.areaId;
@@ -249,7 +253,7 @@ async function atxForm(activity, me, onDone, editId = 0) {
       const grpObj = STEPS.find((s) => s.step === sNum);
       if (!grpObj || !grpObj.group) return false;
       const gItems = form.items.filter((i) => i.s_group === grpObj.group);
-      return gItems.length > 0 && gItems.every((i) => forcedZero(open.get(i.id)) || state.scores[i.id] != null);
+      return gItems.length > 0 && gItems.every((i) => lockedItem(i.id, open) || state.scores[i.id] != null);
     };
 
     const stepperHtml = `
@@ -272,7 +276,7 @@ async function atxForm(activity, me, onDone, editId = 0) {
 
     const itemRow = (item) => {
       const issue = open.get(item.id);
-      const locked = forcedZero(issue);
+      const locked = lockedItem(item.id, open);
       const value = scoreOf(item);
       const isScored = value != null;
       const isLow = value != null && value <= form.settings.issue_score;
@@ -466,7 +470,9 @@ async function atxForm(activity, me, onDone, editId = 0) {
       if ($('atx-area')) {
         $('atx-area').onchange = async () => {
           state.areaId = $('atx-area').value;
-          form = { ...form, openIssues: state.areaId && state.type === 'COMMITTEE' ? (await a5Api(activity, `audit-form?year=${a5Year}&area=${state.areaId}`)).openIssues : [] };
+          const picked = state.areaId ? await a5Api(activity, `audit-form?year=${a5Year}&area=${state.areaId}`) : null;
+          form = { ...form, openIssues: state.type === 'COMMITTEE' ? picked?.openIssues || [] : [] };
+          state.receivers = picked?.receivers || []; // ผู้รับการตรวจ = the owner of the area
           draw(false);
         };
       }
@@ -495,12 +501,6 @@ async function atxForm(activity, me, onDone, editId = 0) {
           draw(false);
         };
       });
-      if (container.querySelector('.atx-recv-pick')) {
-        a5EmployeeSearch(activity, (p) => {
-          if (!state.receivers.some((r) => r.employeeId === p.employeeId)) state.receivers.push(p);
-          setTimeout(() => draw(false), 0);
-        });
-      }
     } else {
       // Bind Step 2..6 items
       container.querySelectorAll('[data-score]').forEach((node) => {
@@ -519,7 +519,7 @@ async function atxForm(activity, me, onDone, editId = 0) {
   draw(true);
 }
 
-async function atxSave(activity, state, form, open, onDone, groups, setStepAndDraw) {
+async function atxSave(activity, state, form, open, onDone, groups, setStepAndDraw, lockedItem) {
   if (!state.areaId) {
     setStepAndDraw(1);
     toast('กรุณาเลือกพื้นที่ในขั้นตอนที่ 1 (ข้อมูลทั่วไป)', 'error');
@@ -527,7 +527,7 @@ async function atxSave(activity, state, form, open, onDone, groups, setStepAndDr
     throw new Error('กรุณาเลือกพื้นที่');
   }
 
-  const missing = form.items.filter((i) => state.scores[i.id] == null && !(open.get(i.id) && !(String(open.get(i.id).action_description || '').trim() && open.get(i.id).after_photos > 0)));
+  const missing = form.items.filter((i) => state.scores[i.id] == null && !lockedItem(i.id, open));
   if (missing.length) {
     const firstMissing = missing[0];
     const stepIdx = groups.indexOf(firstMissing.s_group);

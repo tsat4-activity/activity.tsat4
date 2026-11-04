@@ -18,7 +18,13 @@ export function calcReduction(before, after) {
   return Math.round(((b - a) / b) * 1000) / 10;
 }
 
-// In-memory fallback if tables are not yet created in Supabase
+// In-memory fallback only while the tables are not created yet in Supabase: any other failure must not look saved
+const tableMissing = (error) => ['PGRST205', '42P01'].includes(error?.code);
+
+// A picture is a real image: https (Storage) or a base64 data URL, nothing that can break out of src="" (audit 2026-11-05)
+const IMAGE_URL = /^(https?:\/\/[^\s"'<>()\\]+|data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+)$/;
+const imageUrl = (v) => (IMAGE_URL.test(String(v || '').trim()) ? String(v).trim() : null);
+
 const mem = {
   ideas: [],
   images: [],
@@ -27,6 +33,25 @@ const mem = {
 };
 
 export function mountWorkflow(app) {
+  // Who the idea is under: yourself, or (Team Submission) someone else of the SMF team when you are in that team too. Admin: anyone.
+  const ownerAllowed = async (req, employeeId) => {
+    if (employeeId === req.user.employeeId || isAdmin(req.user) || !tx) return true;
+    const year = new Date().getFullYear();
+    const { data, error } = await tx.from('mt_smf_team').select('employee_id').in('employee_id', [employeeId, req.user.employeeId]).eq('status', 'Active').gte('year', year - 1);
+    if (error) throw error;
+    return new Set((data || []).map((r) => String(r.employee_id))).size === 2;
+  };
+  // Only the owner of the idea or an admin changes its pictures
+  const ideaEditable = async (req, id) => {
+    let idea = mem.ideas.find((i) => i.id === id) || null;
+    if (!idea && tx) {
+      const { data, error } = await tx.from(T_IDEAS).select('id,employee_id').eq('id', id).maybeSingle();
+      if (error && !tableMissing(error)) throw error;
+      idea = data || null;
+    }
+    return Boolean(idea && (isAdmin(req.user) || idea.employee_id === req.user.employeeId));
+  };
+
   // 1. List ideas
   app.get('/api/workflow/ideas', wrap(requireUser), wrap(async (req, res) => {
     const admin = isAdmin(req.user);
@@ -66,6 +91,7 @@ export function mountWorkflow(app) {
           ideas = data || [];
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -149,6 +175,7 @@ export function mountWorkflow(app) {
           evaluations = evRes.data || [];
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -188,6 +215,9 @@ export function mountWorkflow(app) {
     if (!projectName) return fail(res, 400, 'ระบุชื่อแนวคิดหรือโครงการ');
 
     const empId = String(b.employee_id || req.user.employeeId || '').trim();
+    if (!(await ownerAllowed(req, empId))) return fail(res, 403, 'ส่งในชื่อคนอื่นได้เฉพาะสมาชิกทีม SMF');
+    const pictures = Array.isArray(b.images) ? b.images.filter((img) => img?.image_url) : [];
+    if (pictures.some((img) => !imageUrl(img.image_url))) return fail(res, 400, 'รูปภาพไม่ถูกต้อง');
     const fullName = String(b.full_name || req.user.name || '').trim();
     const dept = String(b.department || req.user.department || '').trim();
     const projCode = String(b.project_code || 'workflow').trim();
@@ -238,8 +268,9 @@ export function mountWorkflow(app) {
             error = null;
           }
         }
+        if (error && !tableMissing(error)) throw error;
         if (error) {
-          console.warn('workflow ideas insert failed, using fallback:', error.message || error);
+          console.warn('workflow ideas table is missing, using fallback:', error.message || error);
           useMem = true;
         } else if (data) {
           inserted = data;
@@ -247,7 +278,8 @@ export function mountWorkflow(app) {
           useMem = true;
         }
       } catch (err) {
-        console.warn('workflow ideas insert exception, using fallback:', err.message || err);
+        if (!tableMissing(err)) throw err;
+        console.warn('workflow ideas table is missing, using fallback:', err.message || err);
         useMem = true;
       }
     } else {
@@ -260,10 +292,9 @@ export function mountWorkflow(app) {
     }
 
     // Process images if provided in payload
-    if (Array.isArray(b.images) && b.images.length && inserted?.id) {
-      for (const img of b.images) {
-        if (!img.image_url) continue;
-        let finalUrl = img.image_url;
+    if (pictures.length && inserted?.id) {
+      for (const img of pictures) {
+        let finalUrl = imageUrl(img.image_url);
 
         // Try uploading base64 to Supabase Storage if available
         if (tx && finalUrl.startsWith('data:image/')) {
@@ -295,8 +326,10 @@ export function mountWorkflow(app) {
         if (!useMem && tx) {
           try {
             const { error: imgErr } = await tx.from(T_IMAGES).insert([imgRow]);
+            if (imgErr && !tableMissing(imgErr)) throw imgErr;
             if (imgErr) mem.images.push({ id: mem.nextId++, ...imgRow });
-          } catch (_) {
+          } catch (err) {
+            if (!tableMissing(err)) throw err;
             mem.images.push({ id: mem.nextId++, ...imgRow });
           }
         } else {
@@ -321,7 +354,10 @@ export function mountWorkflow(app) {
     };
     if (b.team_name !== undefined) updates.team_name = String(b.team_name).trim().slice(0, 200);
     if (Array.isArray(b.team_members)) updates.team_members = b.team_members;
-    if (b.employee_id) updates.employee_id = String(b.employee_id).trim();
+    if (b.employee_id) {
+      updates.employee_id = String(b.employee_id).trim();
+      if (!(await ownerAllowed(req, updates.employee_id))) return fail(res, 403, 'ส่งในชื่อคนอื่นได้เฉพาะสมาชิกทีม SMF');
+    }
     if (b.full_name) updates.full_name = String(b.full_name).trim();
     if (b.department) updates.department = String(b.department).trim();
     if (b.process_name) updates.process_name = String(b.process_name).trim().slice(0, 200);
@@ -358,6 +394,7 @@ export function mountWorkflow(app) {
           updated = data;
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -394,6 +431,7 @@ export function mountWorkflow(app) {
           else throw error;
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -420,6 +458,8 @@ export function mountWorkflow(app) {
     const dataUrl = String(b.image || b.image_url || '').trim();
 
     if (!dataUrl) return fail(res, 400, 'กรุณาแนบรูปภาพ');
+    if (!imageUrl(dataUrl)) return fail(res, 400, 'รูปภาพไม่ถูกต้อง');
+    if (!(await ideaEditable(req, id))) return fail(res, 403, 'แก้รูปได้เฉพาะเจ้าของโครงการหรือ Admin');
 
     let finalUrl = dataUrl;
 
@@ -463,6 +503,7 @@ export function mountWorkflow(app) {
           inserted = data;
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -481,6 +522,14 @@ export function mountWorkflow(app) {
   app.delete('/api/workflow/images/:id', wrap(requireUser), wrap(async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
+    let image = mem.images.find((img) => img.id === id) || null;
+    if (!image && tx) {
+      const found = await tx.from(T_IMAGES).select('id,idea_id').eq('id', id).maybeSingle();
+      if (found.error && !tableMissing(found.error)) throw found.error;
+      image = found.data || null;
+    }
+    if (!image) return fail(res, 404, 'ไม่พบรูปภาพ');
+    if (!(await ideaEditable(req, image.idea_id))) return fail(res, 403, 'แก้รูปได้เฉพาะเจ้าของโครงการหรือ Admin');
 
     let useMem = false;
     if (tx) {
@@ -491,6 +540,7 @@ export function mountWorkflow(app) {
           else throw error;
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -526,11 +576,14 @@ export function mountWorkflow(app) {
 
     if (tx) {
       try {
-        await Promise.all([
+        const done = await Promise.all([
           tx.from(T_IDEAS).update({ project_status: status, admin_note: note, updated_at: new Date().toISOString() }).eq('id', id),
           tx.from(T_EVALS).insert([evalRow])
         ]);
+        const failed = done.find((r) => r.error)?.error;
+        if (failed) throw failed;
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -568,6 +621,7 @@ export function mountWorkflow(app) {
           ideas = data || [];
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
@@ -651,6 +705,7 @@ export function mountWorkflow(app) {
           ideas = data || [];
         }
       } catch (err) {
+        if (!tableMissing(err)) throw err;
         useMem = true;
       }
     } else {
