@@ -352,95 +352,61 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
           </div>
         `;
 
+    setHeaderMeta(`<span class="sum-meta">Less Paper. Less Time. More Efficiency.</span> <strong>เป้าหมาย ${targetCount} โครงการ</strong>`);
+
+    const rightBar = `
+      <div class="a5-year">${a5YearSelect(userMe.years)}</div>
+      <div class="action-bar" style="margin:0;gap:4px">
+        <button class="btn btn-primary small" type="button" id="wfa-btn-add">
+          <span class="material-symbols-rounded">add_circle</span> ส่งข้อมูลโปรเจค (6 ขั้นตอน)
+        </button>
+        <button class="btn btn-secondary small" type="button" id="wfa-btn-viewmode">
+          <span class="material-symbols-rounded">${viewMode === 'proposal' ? 'table_rows' : 'view_agenda'}</span>
+          ${viewMode === 'proposal' ? 'มุมมองตาราง' : 'มุมมอง Proposal'}
+        </button>
+        <button class="btn btn-secondary small" type="button" id="wfa-btn-export">
+          <span class="material-symbols-rounded">download</span> Export รายงาน (CSV)
+        </button>
+        <button class="btn btn-secondary small" type="button" id="wfa-btn-toggle-month">
+          <span class="material-symbols-rounded">calendar_month</span> ${showMonthlyTable ? 'ซ่อนตารางรายเดือน' : 'ตารางรายเดือน'}
+        </button>
+      </div>
+    `;
+
+    const kpis = [
+      chartKpi({ label: `เป้าหมายปี ${a5Year}`, value: targetCount, unit: 'โครงการ', icon: 'flag', note: 'เป้าหมายประจำปี', color: CHART.series[0] }),
+      chartKpi({ label: 'สมาชิกส่งข้อมูลแล้ว', value: totalSubmitted, unit: 'เรื่อง', icon: 'send', note: 'ข้อเสนอทั้งหมด', color: CHART.series[1] }),
+      chartKpi({ label: 'ดำเนินการสำเร็จ', value: implementedCount, unit: 'เรื่อง', icon: 'task_alt', note: 'Implemented', color: CHART.series[2] }),
+      chartKpi({ label: 'ลดเวลาทำงานเฉลี่ย', value: stats.avgTimeSaving || 0, unit: '%', icon: 'timer', note: 'Time Saving', color: CHART.series[3] }),
+      chartKpi({ label: 'ลดการใช้กระดาษเฉลี่ย', value: stats.avgPaperReduction || 0, unit: '%', icon: 'description', note: 'Paper Reduction', color: CHART.series[4] })
+    ].join('');
+
     target.innerHTML = `
       <div class="view-body"><section class="card">
-        ${pageBar(a5Seg('data-smfproj', projTabs, currentProj.id), `<div class="a5-year">${a5YearSelect(userMe.years)}</div>`, 'smf')}
-        <div id="smf-body" style="padding-top:12px;display:flex;flex-direction:column;gap:14px">
+        ${pageBar(a5Seg('data-smfproj', projTabs, currentProj.id), rightBar, 'smf')}
+        <div id="smf-body" style="padding-top:10px;display:flex;flex-direction:column;gap:10px">
           
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-            <div>
-              <h3 style="margin:0;font-size:1.2rem;display:flex;align-items:center;gap:8px">
-                <span>${esc(currentProj.name)}</span>
-                <span class="badge badge-success">เป้าหมาย ${targetCount} โครงการ</span>
-              </h3>
-              <p class="sum-meta" style="margin:4px 0 0">
-                ระบบสมาชิกส่งข้อมูลโปรเจคที่ดำเนินการของ Work Flow Automation (Less Paper. Less Time. More Efficiency.)
-              </p>
-            </div>
-            <div class="action-bar a5-actions" style="margin:0">
-              <button class="btn btn-primary" type="button" id="wfa-btn-add">
-                <span class="material-symbols-rounded">add_circle</span> ส่งข้อมูลโปรเจค (6 ขั้นตอน)
-              </button>
-              <button class="btn btn-secondary" type="button" id="wfa-btn-viewmode">
-                <span class="material-symbols-rounded">${viewMode === 'proposal' ? 'table_rows' : 'view_agenda'}</span>
-                ${viewMode === 'proposal' ? 'มุมมองตาราง' : 'มุมมอง Proposal'}
-              </button>
-              <button class="btn btn-secondary" type="button" id="wfa-btn-export">
-                <span class="material-symbols-rounded">download</span> Export รายงาน (CSV)
-              </button>
-              <button class="btn btn-secondary" type="button" id="wfa-btn-toggle-month">
-                <span class="material-symbols-rounded">calendar_month</span> ${showMonthlyTable ? 'ซ่อนตารางรายเดือน' : 'ตารางรายเดือน'}
-              </button>
-            </div>
-          </div>
+          <!-- Standard KPI Strip -->
+          <div class="ch-kpis">${kpis}</div>
 
-          <!-- Stats Strip -->
-          <div class="wfa-stats-strip">
-            <div class="wfa-stat-card">
-              <span class="material-symbols-rounded wfa-stat-icon">flag</span>
-              <div class="wfa-stat-info">
-                <strong class="wfa-stat-num">${targetCount} โครงการ</strong>
-                <span class="wfa-stat-text">เป้าหมายปี ${a5Year}</span>
-              </div>
-            </div>
-            <div class="wfa-stat-card">
-              <span class="material-symbols-rounded wfa-stat-icon">send</span>
-              <div class="wfa-stat-info">
-                <strong class="wfa-stat-num">${totalSubmitted} เรื่อง</strong>
-                <span class="wfa-stat-text">สมาชิกส่งข้อมูลแล้ว</span>
-              </div>
-            </div>
-            <div class="wfa-stat-card is-success">
-              <span class="material-symbols-rounded wfa-stat-icon">task_alt</span>
-              <div class="wfa-stat-info">
-                <strong class="wfa-stat-num">${implementedCount} เรื่อง</strong>
-                <span class="wfa-stat-text">ดำเนินการสำเร็จ (Implemented)</span>
-              </div>
-            </div>
-            <div class="wfa-stat-card is-success">
-              <span class="material-symbols-rounded wfa-stat-icon">timer</span>
-              <div class="wfa-stat-info">
-                <strong class="wfa-stat-num">${stats.avgTimeSaving || 0}%</strong>
-                <span class="wfa-stat-text">ลดเวลาทำงานเฉลี่ย</span>
-              </div>
-            </div>
-            <div class="wfa-stat-card is-success">
-              <span class="material-symbols-rounded wfa-stat-icon">description</span>
-              <div class="wfa-stat-info">
-                <strong class="wfa-stat-num">${stats.avgPaperReduction || 0}%</strong>
-                <span class="wfa-stat-text">ลดการใช้กระดาษเฉลี่ย</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Filter Bar -->
-          <div class="card wfa-filter-bar">
-            <div class="field" style="flex:2;min-width:200px">
+          <!-- Standard Filter Toolbar -->
+          <div class="toolbar a5-filters" style="margin:2px 0 8px">
+            <div class="field grow">
               <input id="wfa-flt-q" placeholder="ค้นหาชื่อโปรเจค, ปัญหา, พนักงาน, แผนก" value="${esc(filter.q)}">
             </div>
-            <div class="field" style="min-width:140px">
+            <div class="field" style="width:140px">
               <select id="wfa-flt-dept">
                 <option value="">ทุกแผนก</option>
                 ${options(depts, filter.department)}
               </select>
             </div>
-            <div class="field" style="min-width:140px">
+            <div class="field" style="width:140px">
               <select id="wfa-flt-status">
                 <option value="">ทุกสถานะ</option>
                 ${options(['Idea', 'Prototype', 'Testing', 'Implemented'], filter.status, (v) => WFA_STATUS_BADGES[v]?.label || v)}
               </select>
             </div>
-            <label class="wfa-check-label" style="align-self:center">
+            <label class="wfa-check-label" style="align-self:center;font-size:12px">
               <input type="checkbox" id="wfa-flt-my" ${filter.myOnly ? 'checked' : ''}> เฉพาะของฉัน
             </label>
           </div>
@@ -762,6 +728,11 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
   }
 
   openPopup('ส่งข้อมูลโปรเจค Work Flow Automation', modalHtml, handleFinalSave, 'บันทึก');
+  const popupEl = $('popup')?.querySelector('.popup');
+  if (popupEl) {
+    popupEl.style.width = 'min(920px, 96vw)';
+    popupEl.style.maxHeight = 'min(92vh, 860px)';
+  }
 
   let empLookupTimer = null;
 
@@ -1296,5 +1267,12 @@ async function wfaOpenDetail(id, onRefresh) {
   }
 
   const popupNode = $('popup');
-  if (popupNode) wfaBindProposalThumbs(popupNode);
+  if (popupNode) {
+    const p = popupNode.querySelector('.popup');
+    if (p) {
+      p.style.width = 'min(920px, 96vw)';
+      p.style.maxHeight = 'min(92vh, 860px)';
+    }
+    wfaBindProposalThumbs(popupNode);
+  }
 }
