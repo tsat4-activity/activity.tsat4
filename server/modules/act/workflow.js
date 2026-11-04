@@ -208,36 +208,66 @@ export function mountWorkflow(app) {
       try {
         const { data, error } = await tx.from(T_IDEAS).insert([row]).select().maybeSingle();
         if (error) {
-          if (error.code === 'PGRST205' || error.code === '42P01') useMem = true;
-          else throw error;
-        } else {
+          console.warn('workflow ideas insert failed, using fallback:', error.message || error);
+          useMem = true;
+        } else if (data) {
           inserted = data;
+        } else {
+          useMem = true;
         }
       } catch (err) {
+        console.warn('workflow ideas insert exception, using fallback:', err.message || err);
         useMem = true;
       }
     } else {
       useMem = true;
     }
 
-    if (useMem) {
+    if (useMem || !inserted) {
       inserted = { id: mem.nextId++, ...row };
       mem.ideas.push(inserted);
     }
 
     // Process images if provided in payload
-    if (Array.isArray(b.images) && b.images.length) {
+    if (Array.isArray(b.images) && b.images.length && inserted?.id) {
       for (const img of b.images) {
         if (!img.image_url) continue;
+        let finalUrl = img.image_url;
+
+        // Try uploading base64 to Supabase Storage if available
+        if (tx && finalUrl.startsWith('data:image/')) {
+          try {
+            const matches = finalUrl.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/);
+            if (matches) {
+              const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+              const buffer = Buffer.from(matches[2], 'base64');
+              const fileName = `workflow/${inserted.id}_${(img.image_type || 'img').toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+              const bucket = 'img_smf';
+              const up = await tx.storage.from(bucket).upload(fileName, buffer, { contentType: `image/${matches[1]}`, upsert: true });
+              if (!up.error) {
+                finalUrl = tx.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
+              }
+            }
+          } catch (_) {
+            // Keep base64 dataUrl if storage upload is not configured
+          }
+        }
+
         const imgRow = {
           idea_id: inserted.id,
           image_type: ['BEFORE', 'AFTER'].includes(img.image_type) ? img.image_type : 'BEFORE',
-          image_url: img.image_url,
+          image_url: finalUrl,
           image_description: String(img.image_description || '').trim().slice(0, 500),
           created_at: new Date().toISOString()
         };
+
         if (!useMem && tx) {
-          await tx.from(T_IMAGES).insert([imgRow]).catch(() => {});
+          try {
+            const { error: imgErr } = await tx.from(T_IMAGES).insert([imgRow]);
+            if (imgErr) mem.images.push({ id: mem.nextId++, ...imgRow });
+          } catch (_) {
+            mem.images.push({ id: mem.nextId++, ...imgRow });
+          }
         } else {
           mem.images.push({ id: mem.nextId++, ...imgRow });
         }

@@ -1146,7 +1146,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
     });
   }
 
-  // Strictly 16:9 center-crop using cropJpeg(file, 1280, 720)
+  // Strictly 16:9 center-crop using cropJpeg(file, 960, 540)
   async function handleFileUpload(e, list, containerId, type) {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
@@ -1154,7 +1154,7 @@ function wfaOpenSubmitWizard(userMe, onSuccess, teamMembers = []) {
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
       try {
-        const dataUrl = await cropJpeg(file, 1280, 720);
+        const dataUrl = await cropJpeg(file, 960, 540);
         list.push({
           image_type: type,
           image_url: dataUrl,

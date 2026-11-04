@@ -38,6 +38,12 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-04 · Antigravity [SMF / Work Flow Automation Save Bugfix] · แก้ไขบั๊กบันทึกข้อมูลโครงการขัดข้อง (500 ระบบขัดข้อง):
+  - **แก้ไข TypeError จากการเรียก .catch() บน PostgREST Builder**: แก้ไขการบันทึกรูปภาพ `tx.from(T_IMAGES).insert(...)` ซึ่ง Supabase PostgREST builder ไม่มีเมธอด `.catch()` ทำให้เกิด TypeError เมื่อมีการแนบรูปภาพ ให้เปลี่ยนมาใช้โครงสร้าง `try ... catch` พร้อม fallback จัดเก็บลง memory อย่างราบรื่น
+  - **ขยายขนาด JSON Payload ใน Express**: เพิ่มขนาด `express.json({ limit: '20mb' })` และ `express.urlencoded({ limit: '20mb' })` ใน `server/app.js` รองรับการแนบภาพ 16:9 ได้หลายภาพโดยไม่ติดเพดาน 1MB เดิม พร้อมเพิ่ม Middleware ดักจับ Error ส่งคืน JSON ที่ชัดเจน
+  - **ปรับขนาดภาพ 16:9 ให้เหมาะสมกับการแสดงผล**: ปรับการครอปภาพในไคลเอนต์เป็น 960x540 (สัดส่วน 16:9 คมชัดและโหลดเร็วกว่า) และเชื่อมต่อการอัปโหลดไฟล์ไปยัง Supabase Storage (`img_smf`) อัตโนมัติเมื่อพร้อมใช้งาน (`server/app.js`, `server/modules/act/workflow.js`, `public/js/act-workflow.js`)
+
+
 - 2026-11-04 · Antigravity [SMF / Work Flow Automation Layout Standards & Header Alignment] · ปรับแต่งขนาด Modal Popup, จัดแถวปุ่ม Action, ย้ายคำอธิบายไป Header Meta, และปรับสัดส่วนข้อมูลตามมาตรฐาน UI:
   - **ขยาย Modal Popup**: ขยายความกว้าง Popup ฟอร์มส่งข้อมูล 6 ขั้นตอน และหน้าต่างดูรายละเอียดเป็น `min(920px, 96vw)` ทำให้เนื้อหาใน Section 05 (ผลลัพธ์ที่คาดหวัง) ขยายเป็น 3 คอลัมน์ ไม่บีบแคบหรือซ้อนทับกันในแนวตั้ง
   - **จัดวางปุ่ม Action ในแถวเดียวกับแถบโครงการ (`pageBar`)**: ย้ายปุ่มทั้ง 4 ปุ่ม (`+ ส่งข้อมูลโปรเจค (6 ขั้นตอน)`, `มุมมองตาราง / Proposal`, `Export รายงาน (CSV)`, `ตารางรายเดือน`) ขึ้นไปอยู่ในแถวเดียวกับแท็บโครงการและตัวเลือกปี
