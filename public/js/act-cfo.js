@@ -95,7 +95,7 @@ const CFO_REF_COLS = {
   // EF CFP in the column order of อบก. (thaicarbonlabel.tgo.or.th) + id (code) typed in activities / materials (ผู้ใช้กำหนด 2026-11-02)
   // groupCol: กลุ่ม is a column (no band rows) · file = Export / Import columns, one Thai header row like the TGO table
   cfp: { title: 'Emission Factor (CFP) ตาม อบก.', groupCol: true,
-    cols: [['code', 'id'], ['grp', 'กลุ่ม'], ['item_no', 'ลำดับ'], ['name', 'ชื่อ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'], ['total', 'ค่าแฟคเตอร์', '(kgCO₂e)', 1], ['reference', 'ข้อมูลอ้างอิง'], ['remark', 'วันที่อัพเดท']],
+    cols: [['code', 'id'], ['grp', 'กลุ่ม'], ['name', 'ชื่อ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'], ['total', 'ค่าแฟคเตอร์', '(kgCO₂e)', 1], ['reference', 'ข้อมูลอ้างอิง'], ['remark', 'วันที่อัพเดท']],
     file: [['code', 'id'], ['grp', 'กลุ่ม'], ['item_no', 'ลำดับ'], ['name', 'ชื่อ'], ['formula', 'รายละเอียด'], ['unit', 'หน่วย'], ['total', 'ค่าแฟคเตอร์ (kgCO2e)'], ['reference', 'ข้อมูลอ้างอิง'], ['remark', 'วันที่อัพเดท'], ['status', 'สถานะ']] }
 };
 const cfoFilter = { scope: '', department: '', q: '', status: '' };
