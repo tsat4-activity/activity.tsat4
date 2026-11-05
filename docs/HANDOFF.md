@@ -40,6 +40,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-05 · Claude [5S] · core.js openView: หน้าที่ถูกออกระหว่างโหลดไม่เอา error มาทับหน้าปัจจุบัน (เคยขึ้น Cannot read properties of null ที่ CFO Setting) · bindRowSelect กัน container ว่าง
 - 2026-11-05 · Claude [5S] · เตรียมปีหน้า: ผู้ดูแลปีหน้าเห็น Setting ในเมนูซ้าย (access.js accessNav อ่าน 2 ปี) + แก้ข้อมูลหลัก CFO ได้ (requireAdminNow รวม adminNext) · ไม่ต้องรัน SQL
 - 2026-11-05 · Claude [SMF] · โครงการมีช่อง "ปีที่ทำโครงการ" เพิ่มหรือย้ายปีได้ (PATCH projects ย้ายได้เมื่อยังไม่มีทีม / แผน / ผลงาน) · Transaction + สถิติ Work Flow กรองตามปีที่ส่ง (ideas / stats ?year=) · ไม่ต้องรัน SQL
 - 2026-11-05 · Claude [SMF] · ทีม SMF ตามตารางผู้ใช้: 5.1 ทีม SMF = สมาชิกของแต่ละโปรเจค · 5.2 สมาชิกรอง = Work Flow Automation (ป้ายจาก actRoleLabel, ข้อมูลเดิม role member + unit) · Dashboard > Team แยก 2 หัวข้อ · ไม่ต้องรัน SQL

@@ -536,6 +536,7 @@ async function api(path, options = {}) {
 }
 
 function bindRowSelect(container, onSelect) {
+  if (!container) return; // the page was left while it loaded
   const rows = [...container.querySelectorAll('tbody tr[data-pick]')];
   rows.forEach((row) => {
     row.classList.add('row-pick');
@@ -578,6 +579,8 @@ function zoneOf(name) {
   return '';
 }
 
+let viewRun = 0;
+let viewDrawn = 0;
 function openView(name) {
   setHeaderMeta('');
   if ((name === 'system' || name === 'access') && !me.creator) name = 'main';
@@ -601,7 +604,13 @@ function openView(name) {
   const target = $('app-view');
   target.innerHTML = '<div class="empty">กำลังโหลด...</div>';
   const render = VIEWS[name] || viewFallback(name);
-  render(target).catch((err) => { target.innerHTML = `<p class="form-error">${esc(err.message)}</p>`; });
+  // a page left while it still loads must not put its error over the page now open, and if it draws over
+  // that page after it has finished, the page now open is drawn again
+  const run = (viewRun += 1);
+  render(target).catch((err) => { if (run === viewRun) target.innerHTML = `<p class="form-error">${esc(err.message)}</p>`; }).finally(() => {
+    if (run === viewRun) viewDrawn = run;
+    else if (viewDrawn === viewRun) openView(view);
+  });
 }
 
 function moduleCard(viewName, icon, title, text) {
