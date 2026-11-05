@@ -95,28 +95,28 @@ ABSENT_ROUND_3 = {'2103396', '2101946', '2103391', '2102396', '2103864'}
 # Assign each area to a week (1..4) for Committee audits
 WEEKS_BY_CODE = {code: (i % 4) + 1 for i, (code, *_) in enumerate(AREAS)}
 
-# Base averages per month to create natural spread across 82% - 93% (Self)
-# Month 1..11
+# Monthly target averages for Self Audit (Months 1..11: Jan - Nov)
+# Strictly within 85.0% - 93.0% per user requirement
 SELF_MONTH_BASE = [
-    84.6,  # Jan ~84-85%
-    87.2,  # Feb ~87%
-    90.5,  # Mar ~90-91%
-    83.5,  # Apr ~83-84%
-    91.8,  # May ~91-92%
-    88.4,  # Jun ~88%
-    85.2,  # Jul ~85%
-    92.5,  # Aug ~92-93%
-    87.6,  # Sep ~87-88%
-    84.2,  # Oct ~84%
-    89.8,  # Nov ~89-90%
+    87.0,  # Jan ~87.0%
+    88.2,  # Feb ~88.2%
+    91.2,  # Mar ~91.2%
+    86.8,  # Apr ~86.8%
+    92.2,  # May ~92.2%
+    89.8,  # Jun ~89.8%
+    88.0,  # Jul ~88.0%
+    92.4,  # Aug ~92.4%
+    89.2,  # Sep ~89.2%
+    87.5,  # Oct ~87.5%
+    91.5,  # Nov ~91.5%
 ]
 
 # Committee rounds: 3 rounds (Month 3, 6, 9)
-# Spread across 82% - 90%
+# Spread across 84% - 90% (all above 80% pass threshold)
 COMM_ROUNDS = {
-    3: (1, 83.6),  # Mar (Round 1) ~83-84%
+    3: (1, 84.2),  # Mar (Round 1) ~84%
     6: (2, 89.2),  # Jun (Round 2) ~89%
-    9: (3, 86.4),  # Sep (Round 3) ~86-87%
+    9: (3, 86.5),  # Sep (Round 3) ~86.5%
 }
 
 def generate_item_scores(target_total, rng):
@@ -130,8 +130,8 @@ def generate_item_scores(target_total, rng):
     elif diff < 0:
         for i in range(abs(diff)):
             scores[indices[i]] = 3
-    # Add small jitter keeping sum exact
-    for _ in range(rng.randint(1, 3)):
+    # Add slight cross-pillar variation keeping sum exact
+    for _ in range(rng.randint(2, 4)):
         cand_plus = [i for i in range(25) if scores[i] < 5]
         cand_minus = [i for i in range(25) if scores[i] > 3]
         if cand_plus and cand_minus:
@@ -144,7 +144,7 @@ def generate_item_scores(target_total, rng):
     return scores
 
 def generate_all():
-    rng = random.Random(20261102)
+    rng = random.Random(20261105)
 
     plans = []   # (year, code, month, week, round, team)
     audits = []  # (audit_no, year, audit_type, code, team, auditors_sql, receivers_sql, audited_at, total, percent, result, status)
@@ -157,10 +157,77 @@ def generate_all():
             week = WEEKS_BY_CODE[code]
             plans.append((2026, code, m, week, round_no, team))
 
-    # 2. Self Audits: months 1 to 11
-    # Taught: before 10th of each month, spread 82% - 93%
-    for m_idx, base_pct in enumerate(SELF_MONTH_BASE):
-        m = m_idx + 1
+    # 2. Assign area target baselines distributed across 85.0% - 95.0%
+    factory_areas = [a for a in AREAS if a[1] == 'โรงงาน']
+    office_areas = [a for a in AREAS if a[1] == 'สำนักงาน']
+
+    # Deterministic pseudo-random order of areas for natural ranking distribution
+    factory_order = list(factory_areas)
+    office_order = list(office_areas)
+    rng.shuffle(factory_order)
+    rng.shuffle(office_order)
+
+    # Spread target averages: Factory (19 areas) from 85.0% to 96.5%
+    # Office (15 areas) from 85.0% to 96.5%
+    factory_targets = {a[0]: 85.0 + i * (96.5 - 85.0) / 18.0 for i, a in enumerate(factory_order)}
+    office_targets = {a[0]: 85.0 + i * (96.5 - 85.0) / 14.0 for i, a in enumerate(office_order)}
+    area_targets = {**factory_targets, **office_targets}
+
+    mean_month_base = sum(SELF_MONTH_BASE) / len(SELF_MONTH_BASE)
+
+    # Generate initial integer totals out of 125 for Self Audits (months 1..11 x 34 areas)
+    self_totals = {}
+    for code, *_ in AREAS:
+        for m in range(1, 12):
+            base = area_targets[code] + (SELF_MONTH_BASE[m - 1] - mean_month_base)
+            noise = rng.uniform(-0.5, 0.5)
+            pct = base + noise
+            tot = int(round((pct / 100.0) * 125))
+            tot = min(120, max(104, tot))
+            self_totals[(code, m)] = tot
+
+    # Balancing pass 1: Guarantee every area's yearly average is strictly in [85.0%, 95.0%]
+    for code, *_ in AREAS:
+        for _ in range(50):
+            avg_a = sum(self_totals[(code, m)] for m in range(1, 12)) / (11.0 * 125.0) * 100.0
+            if avg_a < 85.0:
+                min_m = min(range(1, 12), key=lambda m: self_totals[(code, m)])
+                self_totals[(code, min_m)] += 1
+            elif avg_a > 95.0:
+                max_m = max(range(1, 12), key=lambda m: self_totals[(code, m)])
+                self_totals[(code, max_m)] -= 1
+            else:
+                break
+
+    # Balancing pass 2: Guarantee every month's average is strictly in [85.5%, 92.5%]
+    for m in range(1, 12):
+        for _ in range(50):
+            avg_m = sum(self_totals[(c, m)] for c, *_ in AREAS) / (len(AREAS) * 125.0) * 100.0
+            if avg_m < 85.5:
+                cand = min(AREAS, key=lambda a: self_totals[(a[0], m)])
+                self_totals[(cand[0], m)] += 1
+            elif avg_m > 92.5:
+                cand = max(AREAS, key=lambda a: self_totals[(a[0], m)])
+                self_totals[(cand[0], m)] -= 1
+            else:
+                break
+
+    # Final verification of Self Audit bounds
+    for code, *_ in AREAS:
+        avg_a = sum(self_totals[(code, m)] for m in range(1, 12)) / (11.0 * 125.0) * 100.0
+        if avg_a < 85.2:
+            min_m = min(range(1, 12), key=lambda m: self_totals[(code, m)])
+            self_totals[(code, min_m)] += 1
+        elif avg_a > 94.8:
+            max_m = max(range(1, 12), key=lambda m: self_totals[(code, m)])
+            self_totals[(code, max_m)] -= 1
+
+    for m in range(1, 12):
+        avg_m = sum(self_totals[(c, m)] for c, *_ in AREAS) / (len(AREAS) * 125.0) * 100.0
+        assert 85.0 <= avg_m <= 93.0, f"Month {m} avg {avg_m:.2f}% out of [85, 93]"
+
+    # Build Self Audits
+    for m in range(1, 12):
         for code_idx, (code, area_type, name, owner) in enumerate(AREAS):
             day = 4 + (code_idx % 5)  # days 4, 5, 6, 7, 8 (all before 10th)
             hour = 9 + (code_idx % 7)
@@ -168,40 +235,30 @@ def generate_all():
             date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:00+07"
             audit_no = f"S-{code}-{day:02d}{m:02d}26-01"
 
-            # Area variation around base_pct
-            # Clamp between 82.0% and 93.6% (103 to 117 points out of 125)
-            area_offset = (((code_idx * 17 + m * 7) % 11) - 5) * 0.7  # -3.5 to +3.5%
-            target_pct = min(93.6, max(82.4, base_pct + area_offset))
-            total = int(round((target_pct / 100.0) * 125))
-            total = min(117, max(103, total))
+            total = self_totals[(code, m)]
             pct = round((total / 125.0) * 100.0, 2)
 
-            audits.append((
+            audits.append([
                 audit_no, 2026, 'SELF', code, 'null::text',
                 f"array['{owner}']::text[]", "'{}'::text[]",
                 f"'{date_str}'::timestamptz", total, pct, 'PASS', 'COMPLETED'
-            ))
+            ])
 
             item_sc = generate_item_scores(total, rng)
             for it_no, sc in enumerate(item_sc, start=1):
                 scores.append((audit_no, it_no, sc))
 
     # 3. Committee Audits: months 3, 6, 9
-    # Taught: spread 82% - 90%
-    # Round 1 & 2: full attendance for all auditors ("ส่วนครั้งที่ 1 2 เต็มทุกคน")
-    # Round 3: 34 areas audited, but absent auditors excluded per attendance image
     for m, (round_no, base_pct) in COMM_ROUNDS.items():
         for code_idx, (code, area_type, name, owner) in enumerate(AREAS):
             team, aud_list = AREA_TEAMS[code]
             week = WEEKS_BY_CODE[code]
-            # Day within week: Week 1: 2-6, Week 2: 9-13, Week 3: 16-20, Week 4: 23-27
             day = (week - 1) * 7 + 2 + (code_idx % 5)
             hour = 9 + (code_idx % 7)
             minute = 10 + (code_idx * 11) % 45
             date_str = f"2026-{m:02d}-{day:02d} {hour:02d}:{minute:02d}:00+07"
             audit_no = f"C-{code}-{day:02d}{m:02d}26-01"
 
-            # In Round 3 (m == 9), redistribute Team I areas and exclude absent auditors
             if m == 9:
                 if code in ROUND_3_REDISTRIBUTE:
                     audit_team, actual_auds = ROUND_3_REDISTRIBUTE[code]
@@ -212,24 +269,49 @@ def generate_all():
                 audit_team = team
                 actual_auds = aud_list
 
-            area_offset = (((code_idx * 13 + m * 11) % 9) - 4) * 0.65  # -2.6 to +2.6%
-            target_pct = min(90.4, max(82.4, base_pct + area_offset))
+            # Correlate committee score with area strength + round baseline
+            area_offset = (area_targets[code] - 90.0) * 0.65
+            noise = rng.uniform(-0.5, 0.5)
+            target_pct = min(93.6, max(83.2, base_pct + area_offset + noise))
             total = int(round((target_pct / 100.0) * 125))
-            total = min(113, max(103, total))
+            total = min(117, max(104, total))
             pct = round((total / 125.0) * 100.0, 2)
 
             aud_sql = "array[" + ", ".join(f"'{x}'" for x in actual_auds) + "]::text[]"
             rec_sql = f"array['{owner}']::text[]"
 
-            audits.append((
+            audits.append([
                 audit_no, 2026, 'COMMITTEE', code, f"'{audit_team}'::text",
                 aud_sql, rec_sql, f"'{date_str}'::timestamptz",
                 total, pct, 'PASS', 'COMPLETED'
-            ))
+            ])
 
             item_sc = generate_item_scores(total, rng)
             for it_no, sc in enumerate(item_sc, start=1):
                 scores.append((audit_no, it_no, sc))
+
+    # Guarantee all 34 area combined averages are strictly within [85.0%, 95.0%]
+    from collections import defaultdict
+    for _ in range(30):
+        area_map = defaultdict(list)
+        for a in audits:
+            area_map[a[3]].append(a)
+        adjusted = False
+        for code, a_list in area_map.items():
+            avg_a = sum(a[9] for a in a_list) / len(a_list)
+            if avg_a < 85.0:
+                # Find audit with lowest score in this area and bump by 1 point
+                min_a = min(a_list, key=lambda x: x[8])
+                min_a[8] += 1
+                min_a[9] = round((min_a[8] / 125.0) * 100.0, 2)
+                # update item score
+                for i, s in enumerate(scores):
+                    if s[0] == min_a[0]:
+                        scores[i] = (s[0], s[1], s[2] + 1)
+                        break
+                adjusted = True
+        if not adjusted:
+            break
 
     # Stats
     self_audits = [a for a in audits if a[2] == 'SELF']
@@ -245,6 +327,24 @@ def generate_all():
     for m in [3, 6, 9]:
         m_rows = [a for a in comm_audits if f"-{m:02d}-" in a[7]]
         print(f"  Month {m:2d}: {sum(a[9] for a in m_rows)/len(m_rows):.2f}% ({len(m_rows)} audits)")
+
+    # Print Ranking Summary (Self + Committee up to Month 11)
+    print("\n=== Factory Area Ranking (Months 1-11) ===")
+    from collections import defaultdict
+    area_pcts = defaultdict(list)
+    for a in audits:
+        area_pcts[a[3]].append(a[9])
+    
+    f_rows = [(c, name, sum(area_pcts[c])/len(area_pcts[c])) for c, atype, name, _ in AREAS if atype == 'โรงงาน']
+    f_rows.sort(key=lambda x: x[2], reverse=True)
+    for rank_no, (c, name, avg_p) in enumerate(f_rows, 1):
+        print(f"  {rank_no:2d}. {c} {name:<16}: {avg_p:.2f}%")
+
+    print("\n=== Office Area Ranking (Months 1-11) ===")
+    o_rows = [(c, name, sum(area_pcts[c])/len(area_pcts[c])) for c, atype, name, _ in AREAS if atype == 'สำนักงาน']
+    o_rows.sort(key=lambda x: x[2], reverse=True)
+    for rank_no, (c, name, avg_p) in enumerate(o_rows, 1):
+        print(f"  {rank_no:2d}. {c} {name:<16}: {avg_p:.2f}%")
 
     # Build SQL
     out = []
