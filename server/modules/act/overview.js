@@ -59,6 +59,7 @@ function planSummary(rows, today, names = new Map(), deptMap = new Map()) {
       label: st.label,
       start: r.start_date,
       end: r.end_date,
+      owner_id: r.owner_id ? String(r.owner_id) : '',
       owner_name: ownerName
     };
   });

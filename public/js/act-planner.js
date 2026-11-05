@@ -1148,10 +1148,12 @@ VIEWS['smf-edit'] = (target) => smfTransaction(target, 'smf');
 async function aplDrawSmfOverview(body, activity) {
   let data;
   let pmData = { months: [] };
+  let teamData = { members: [] };
   try {
-    [data, pmData] = await Promise.all([
+    [data, pmData, teamData] = await Promise.all([
       api(`/api/act/overview?year=${a5Year}`),
-      a5Api(activity, `project-months?year=${a5Year}`).catch(() => ({ months: [] }))
+      a5Api(activity, `project-months?year=${a5Year}`).catch(() => ({ months: [] })),
+      a5Api(activity, `team?year=${a5Year}`).catch(() => ({ members: [] }))
     ]);
   } catch (err) {
     body.innerHTML = `<p class="empty">${esc(err.message)}</p>`;
@@ -1260,10 +1262,45 @@ async function aplDrawSmfOverview(body, activity) {
                     <span class="ov-subtask-pct ${st.progress >= 100 ? 'is-done' : ''}">${st.progress}%</span>
                   </div>
                   <div class="ov-subtask-bar">
-                    <span style="width:${Math.min(100, Math.max(0, st.progress))}%" class="${st.progress >= 100 ? 'is-done' : ''}"></span>
+                    <span style="width:${Math.min(100, Math.max(0, st.progress))}%;background:${ovTone(st.progress)}"></span>
                   </div>
                 </div>
               `;
+            }).join('')}
+          </div>
+        </details>
+      </div>
+    ` : '';
+
+    // a project measured by count (ผู้ใช้กำหนด 2026-11-05): the chairman holds the total, each member one project of their own in
+    // the plan: every member of the team with their projects, who has none yet first · an owner outside the team is listed too
+    const subs = plan?.subtasks || [];
+    const members = teamData.members.filter((m) => m.unit === u.code && m.role === 'member' && m.status === 'Active');
+    const mine = (m) => subs.filter((st) => (st.owner_id && st.owner_id === String(m.employee_id)) || (st.owner_name && st.owner_name === m.name));
+    const others = [...new Set(subs.filter((st) => st.owner_name && !members.some((m) => mine(m).includes(st))).map((st) => st.owner_name))]
+      .map((name) => ({ name, department: 'นอกทีม', list: subs.filter((st) => st.owner_name === name) }));
+    const people = [...members.map((m) => ({ name: m.name || m.employee_id, department: m.department, list: mine(m) })), ...others]
+      .map((m) => ({ ...m, rank: !m.list.length ? 0 : m.list.some((st) => st.progress >= 100) ? 2 : 1 }))
+      .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'th'));
+    const tally = (rank) => people.filter((m) => m.rank === rank).length;
+    const memberSec = isCount && people.length ? `
+      <div class="ov-subtasks-wrap">
+        <details class="ov-subtasks" open>
+          <summary>
+            <span class="ov-subtasks-title"><span class="material-symbols-rounded">groups</span>สมาชิก ${people.length} คน · สำเร็จ ${tally(2)} · กำลังทำ ${tally(1)} · ยังไม่มีแผน ${tally(0)}</span>
+            <span class="ov-subtasks-arrow material-symbols-rounded">expand_more</span>
+          </summary>
+          <div class="ov-subtasks-list">
+            ${people.map((m) => {
+              const best = m.list.reduce((top, st) => Math.max(top, st.progress), 0);
+              const tag = [['ยังไม่มีแผน', 'badge-danger'], ['กำลังทำ', 'badge-warning'], ['สำเร็จ', 'badge-success']][m.rank];
+              return `<div class="ov-subtask-item" title="${esc(m.list.map((st) => `${actNoLead(st.title)} ${st.progress}%`).join(' · '))}">
+                <div class="ov-subtask-head">
+                  <span class="ov-subtask-name">${esc(m.name)}<span class="ov-subtask-owner"> · ${esc(m.department || '-')}</span></span>
+                  <span class="badge ${tag[1]}">${tag[0]}</span>
+                </div>
+                <div class="sum-meta">${m.list.length ? `${esc(m.list.map((st) => actNoLead(st.title)).join(', '))} · ${best}%` : 'ยังไม่มีหัวข้อใน Plan'}</div>
+              </div>`;
             }).join('')}
           </div>
         </details>
@@ -1282,7 +1319,7 @@ async function aplDrawSmfOverview(body, activity) {
       </div>
       ${progressSec}
       ${summarySec}
-      ${subtasksSec}
+      ${memberSec}${subtasksSec}
       ${u.code === 'workflow' ? `<div style="margin-top:6px">${button('', 'ส่งข้อมูล / จัดการ Work Flow Automation', 'primary small', `data-ov-proj="${u.id}"`)}</div>` : ''}
     </article>`;
   };

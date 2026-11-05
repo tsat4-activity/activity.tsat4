@@ -40,6 +40,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-05 · Claude [SMF] · SMF ภาพรวม: การ์ดโครงการที่วัดตามจำนวนมีรายการสมาชิก × โปรเจกต์ใน Plan (ยังไม่มีแผน / กำลังทำ / สำเร็จ) · ประธานถือยอดรวม สมาชิกถือคนละ 1 · overview subtasks เพิ่ม owner_id · ไม่ต้องรัน SQL
 - 2026-11-05 · Claude [5S] · หน้าหลัก / SMF ภาพรวม: โครงการที่วัดตามจำนวน (Work Flow 12 โครงการ) = หัวข้อแผนที่ 100% ÷ เป้า (plan.completedCount) · แถบความคืบหน้า แดง < 50 · เหลือง 50–99 · เขียว 100 · ไม่ต้องรัน SQL
 - 2026-11-05 · Claude [5S] · core.js openView: หน้าที่ถูกออกระหว่างโหลดไม่เอา error มาทับหน้าปัจจุบัน (เคยขึ้น Cannot read properties of null ที่ CFO Setting) · bindRowSelect กัน container ว่าง
 - 2026-11-05 · Claude [5S] · เตรียมปีหน้า: ผู้ดูแลปีหน้าเห็น Setting ในเมนูซ้าย (access.js accessNav อ่าน 2 ปี) + แก้ข้อมูลหลัก CFO ได้ (requireAdminNow รวม adminNext) · ไม่ต้องรัน SQL
