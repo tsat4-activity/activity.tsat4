@@ -913,11 +913,14 @@ async function aplDrawTeam(body, activity, admin) {
   const actName = actLabel(activity);
   const roleLabels = aplRolesOf(activity);
   // project teams (SMF): one card per project, its people with their role
-  const projectCards = units ? Object.entries(units).filter(([code]) => code).map(([code, name], i) => {
+  const cardsOf = (keep) => (units ? Object.entries(units).filter(([code]) => code && keep(code)).map(([code, name], i) => {
     const list = active.filter((m) => m.unit === code);
     const people = ['chairman', 'vice', 'advisor', 'admin', 'member'].flatMap((role) => list.filter((m) => m.role === role).map((m) => `<div class="a5-person">${esc(m.employee_id)} · ${esc(m.name || '-')}<span>${esc(actRoleLabel(activity, role, code))}</span></div>`)).join('');
     return `<div class="a5-team" style="--team:${CHART.series[(i + 2) % CHART.series.length]}"><div class="a5-team-head">${esc(name)}<span>${list.length} คน</span></div>${people || '<div class="a5-person sum-meta">ยังไม่มีรายชื่อ</div>'}</div>`;
-  }).join('') : '';
+  }).join('') : '');
+  // ทีม SMF = the projects · สมาชิกรอง = Work Flow Automation (ผู้ใช้กำหนด 2026-11-05)
+  const projectCards = cardsOf((code) => code !== 'workflow');
+  const workflowCards = cardsOf((code) => code === 'workflow');
   const top = units ? active.filter((m) => !m.unit) : active;
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('apl-team-edit', 'แก้ไขทีม')}</div>` : ''}
@@ -929,6 +932,7 @@ async function aplDrawTeam(body, activity, admin) {
       return `<div class="a5-team" style="--team:${CHART.series[i % CHART.series.length]}"><div class="a5-team-head">${esc(label)}<span>${list.length} คน</span></div>${list.map(person).join('') || '<div class="a5-person">-</div>'}</div>`;
     }).join('')}</div>
     ${projectCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">account_tree</span>ทีม ${esc(actName)}</div><div class="a5-team-grid">${projectCards}</div>` : ''}
+    ${workflowCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">group</span>สมาชิกรอง</div><div class="a5-team-grid">${workflowCards}</div>` : ''}
     <p class="sum-meta">โครงสร้างทีม ${esc(actName)} ปี ${a5Year} · ${active.length} รายชื่อ</p>`;
   a5Lift(body);
   if (admin && $('apl-team-edit')) $('apl-team-edit').onclick = () => {
