@@ -849,7 +849,8 @@ async function aplSetProjects(body, activity, admin, rerender) {
   bindRowSelect($('apl-p-rows'), (id) => { picked = projects.find((p) => String(p.id) === id); $('apl-p-edit').disabled = !picked; $('apl-p-del').disabled = !picked; });
   const form = (p) => {
     const isCount = (p?.target_type || (p?.code === 'workflow' ? 'count' : 'plan')) === 'count';
-    openPopup(p ? `แก้ไขโครงการ ${esc(p.name)}` : `เพิ่มโครงการปี ${a5Year}`, [
+    openPopup(p ? `แก้ไขโครงการ ${esc(p.name)}` : 'เพิ่มโครงการ', [
+      field('ปีที่ทำโครงการ', `<select id="apl-p-year">${options([...new Set([new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1, new Date().getFullYear() + 2, a5Year])].sort().map(String), String(a5Year))}</select>`),
       field('ชื่อโครงการ', `<input id="apl-p-name" maxlength="120" value="${esc(p?.name || '')}" placeholder="เช่น Smart OEE">`),
       field('รหัส (a–z 0–9 ใช้ผูกทีมและแผน)', `<input id="apl-p-code" maxlength="20" value="${esc(p?.code || '')}" placeholder="เช่น oee">`),
       field('รูปแบบโครงการ', `<select id="apl-p-team-type"><option value="team"${(p?.team_type || 'team') === 'team' ? ' selected' : ''}>ทำเป็นทีม (Team)</option><option value="individual"${p?.team_type === 'individual' ? ' selected' : ''}>ทำเดี่ยว (Individual)</option></select>`),
@@ -861,8 +862,9 @@ async function aplSetProjects(body, activity, admin, rerender) {
       field('สถานะ', `<select id="apl-p-status">${options(['Active', 'Inactive'], p?.status || 'Active')}</select>`)
     ].join(''), async () => {
       const targetType = $('apl-p-target-type').value;
+      const year = Number($('apl-p-year').value);
       const payload = {
-        year: a5Year,
+        year,
         name: $('apl-p-name').value,
         code: $('apl-p-code').value,
         teamType: $('apl-p-team-type').value,
@@ -874,8 +876,9 @@ async function aplSetProjects(body, activity, admin, rerender) {
         status: $('apl-p-status').value
       };
       await a5Api(activity, p ? `projects/${p.id}` : 'projects', { method: p ? 'PATCH' : 'POST', body: payload });
-      toast('บันทึกแล้ว');
+      toast(year === a5Year ? 'บันทึกแล้ว' : `บันทึกในปี ${year} แล้ว`);
       closePopup();
+      a5Year = year; // show the year it went to
       rerender();
     });
     $('apl-p-target-type').onchange = () => {

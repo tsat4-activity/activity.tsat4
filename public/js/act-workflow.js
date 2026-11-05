@@ -252,6 +252,7 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
   const loadData = async () => {
     const qParams = new URLSearchParams();
     qParams.set('project_code', currentProj.code || 'workflow');
+    qParams.set('year', a5Year);
     if (filter.q) qParams.set('q', filter.q);
     if (filter.department) qParams.set('department', filter.department);
     if (filter.status) qParams.set('status', filter.status);
@@ -259,7 +260,7 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
 
     const [iData, sData] = await Promise.all([
       api(`/api/workflow/ideas?${qParams.toString()}`).catch(() => ({ ideas: [] })),
-      api(`/api/workflow/stats?project_code=${encodeURIComponent(currentProj.code || 'workflow')}`).catch(() => ({}))
+      api(`/api/workflow/stats?project_code=${encodeURIComponent(currentProj.code || 'workflow')}&year=${a5Year}`).catch(() => ({}))
     ]);
     ideas = iData.ideas || [];
     stats = sData || {};

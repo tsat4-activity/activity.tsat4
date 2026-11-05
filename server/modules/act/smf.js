@@ -71,13 +71,20 @@ export function mountSmf(app) {
     if (!(await requireAdmin(req, res, activity, project.year))) return;
     const { row, error } = input({ code: project.code, ...req.body });
     if (error) return fail(res, 400, error);
+    // the year it runs (ผู้ใช้กำหนด 2026-11-05): a project planned in the wrong year moves while nothing hangs on it
+    const year = yearOf(req.body?.year) || project.year;
+    if (year !== project.year) {
+      if (!(await requireAdmin(req, res, activity, year))) return;
+      if (await usedBy(t, project)) return fail(res, 400, 'โครงการนี้มีทีม / แผนงาน / ผลงานแล้ว ย้ายปีไม่ได้ ให้เพิ่มโครงการในปีใหม่แทน');
+      row.year = year;
+    }
     if (row.code !== project.code && await usedBy(t, project)) return fail(res, 400, 'โครงการนี้มีทีม / แผนงานแล้ว เปลี่ยนรหัสไม่ได้');
     let done = await tx.from(t.project).update(row).eq('id', project.id);
     if (done.error?.code === '42703') {
       const { team_type, target_type, target_count, ...legacy } = row;
       done = await tx.from(t.project).update(legacy).eq('id', project.id);
     }
-    if (done.error?.code === '23505') return fail(res, 400, `ปี ${project.year} มีรหัส ${row.code} แล้ว`);
+    if (done.error?.code === '23505') return fail(res, 400, `ปี ${year} มีรหัส ${row.code} แล้ว`);
     must(done);
     res.json({ ok: true });
   });

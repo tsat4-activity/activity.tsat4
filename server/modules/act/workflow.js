@@ -20,6 +20,9 @@ export function calcReduction(before, after) {
 
 // In-memory fallback only while the tables are not created yet in Supabase: any other failure must not look saved
 const tableMissing = (error) => ['PGRST205', '42P01'].includes(error?.code);
+// The year of an idea = the Thai year it was sent (Transaction, Dashboard of that year)
+const yearOfIdea = (i) => new Date(Date.parse(i.created_at) + 7 * 3600000).getUTCFullYear();
+
 // A column the database does not have yet: say which file to run. Saving without it would lose the team or the project.
 const WF_SQL = 'ตาราง Work Flow ยังไม่มีคอลัมน์ใหม่ ต้องรัน db/act/workflow.sql ใน Tx Data';
 const columnMissing = (error) => ['PGRST204', '42703'].includes(error?.code);
@@ -164,6 +167,9 @@ export function mountWorkflow(app) {
       if (myOnly) ideas = ideas.filter((i) => i.employee_id === req.user.employeeId);
       ideas.sort((a, b) => b.created_at.localeCompare(a.created_at));
     }
+
+    const year = Number(req.query.year) || 0;
+    if (year) ideas = ideas.filter((i) => yearOfIdea(i) === year);
 
     if (q) {
       ideas = ideas.filter((i) =>
@@ -651,6 +657,8 @@ export function mountWorkflow(app) {
       ideas = [...mem.ideas];
       if (projCode) ideas = ideas.filter((i) => (i.project_code || 'workflow') === projCode);
     }
+    const year = Number(req.query.year) || 0;
+    if (year) ideas = ideas.filter((i) => yearOfIdea(i) === year);
 
     const totalProjects = ideas.length;
     const depts = new Set(ideas.map((i) => i.department).filter(Boolean));
