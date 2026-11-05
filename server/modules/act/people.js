@@ -1,17 +1,17 @@
 import { mx, tx } from '../../core/db.js';
 import { cleanTerm, fail, wrap } from '../../core/http.js';
 import { nameOf, requireUser } from '../../core/users.js';
-import { ACTIVITIES, accessOf, fetchIn, tablesOf, viewerOf, yearOf } from './common.js';
+import { ACTIVITIES, AUDIT_UNIT, accessOf, fetchIn, tablesOf, viewerOf, yearOf } from './common.js';
 
 // Access in one place (ผู้ใช้กำหนด 2026-11-04). Every activity (5S · CFO · SMF) checks its own team of the year, so one
 // person may be ผู้ดูแล of SMF, ผู้ตรวจ of 5S and ผู้ชม of CFO at once. The four levels, the same names everywhere:
-//   admin = ผู้ดูแล (Setting + everything) · committee = กรรมการ (ประธาน / รองประธาน / ที่ปรึกษา: read all, confirm)
-//   operator = ผู้ปฏิบัติ (ตัวแทนหน่วยงาน / ผู้ตรวจ / ผู้รับผิดชอบพื้นที่ / สมาชิกโครงการ / หัวหน้าโครงการ: own scope)
+//   admin = ผู้ดูแล (Setting + everything) · committee = กรรมการ (ประธาน / รองประธาน / ที่ปรึกษา, ประธานรอง of ทีมตรวจประเมิน)
+//   operator = ผู้ปฏิบัติ (สมาชิก / ผู้ตรวจ / ผู้รับผิดชอบพื้นที่ / ทีมย่อย: own scope)
 //   viewer = ผู้ชม (in the team of another activity that year, or ผู้บริหาร: read only) · none
 // GET /api/access = mine (the user menu and the sidebar) · GET /api/access/people = everyone's, for the creator.
 const COMMITTEE = ['chairman', 'vice', 'advisor'];
 export const levelOf = (access, roles, viewer) => (access.admin ? 'admin'
-  : roles.some((r) => COMMITTEE.includes(r.role)) ? 'committee'
+  : roles.some((r) => COMMITTEE.includes(r.role) && (!r.unit || r.unit === AUDIT_UNIT)) ? 'committee'
     : roles.length ? 'operator'
       : viewer || access.chairman ? 'viewer' : 'none');
 const roleRow = ({ id, role, unit, team, area_id: areaId, department, status }) => ({ id, role, unit, team, areaId, department, status });

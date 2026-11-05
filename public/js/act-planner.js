@@ -535,7 +535,7 @@ const APL_PROJECTS_ON = ['smf'];
 const APL_ROLE_LABEL = { ...ACT_TEAM_ROLES, auditor: 'ผู้ตรวจประเมิน' };
 // Team per activity (ผู้ใช้กำหนด 2026-10-29, docs/specs/act-teams.md); others use APL_ROLE_LABEL.
 // SMF = Smart Factory: Smart Team manages Setting (server accessOf), ที่ปรึกษา views.
-const APL_ROLE_LABELS = { smf: { chairman: 'ประธาน', vice: 'รองประธาน', advisor: 'ที่ปรึกษา', admin: 'ผู้ประสานงาน', smart: 'Smart Team', member: 'ตัวแทนหน่วยงาน' } };
+const APL_ROLE_LABELS = { smf: { chairman: 'ประธาน', vice: 'รองประธาน', advisor: 'ที่ปรึกษา', admin: 'ผู้ประสานงาน', smart: 'Smart Team', member: 'สมาชิกหลัก' } };
 const aplRolesOf = (activity) => APL_ROLE_LABELS[activity] || APL_ROLE_LABEL;
 const aplDashTab = {};
 const aplSetTab = {};
@@ -803,7 +803,7 @@ async function aplDrawOverview(body) {
     const labels = OV_UNIT_LABEL[p.activity] || {};
     const names = Object.fromEntries((p.projects || []).map((u) => [u.code, u.name]));
     const units = Object.entries(p.team.units).map(([u, n]) => row(labels[u] || names[u] || u, `${n} คน`)).join('');
-    const memberLabel = p.activity === '5s' ? 'สมาชิก' : 'ตัวแทนหน่วยงาน';
+    const memberLabel = actRoleLabel(p.activity, 'member', '');
     return row('ทั้งหมด', `${ovNum(p.team.people)} คน`) + row('คณะกรรมการ', `${ovNum(p.team.committee)} คน`)
       + (p.team.smart ? row('Smart Team', `${p.team.smart} คน`) : '') + (p.team.members ? row(memberLabel, `${p.team.members} คน`) : '') + units;
   };
@@ -915,7 +915,7 @@ async function aplDrawTeam(body, activity, admin) {
   // project teams (SMF): one card per project, its people with their role
   const projectCards = units ? Object.entries(units).filter(([code]) => code).map(([code, name], i) => {
     const list = active.filter((m) => m.unit === code);
-    const people = ['chairman', 'vice', 'advisor', 'admin', 'member'].flatMap((role) => list.filter((m) => m.role === role).map((m) => `<div class="a5-person">${esc(m.employee_id)} · ${esc(m.name || '-')}<span>${esc(role === 'member' ? 'สมาชิก' : roleLabels[role] || role)}</span></div>`)).join('');
+    const people = ['chairman', 'vice', 'advisor', 'admin', 'member'].flatMap((role) => list.filter((m) => m.role === role).map((m) => `<div class="a5-person">${esc(m.employee_id)} · ${esc(m.name || '-')}<span>${esc(actRoleLabel(activity, role, code))}</span></div>`)).join('');
     return `<div class="a5-team" style="--team:${CHART.series[(i + 2) % CHART.series.length]}"><div class="a5-team-head">${esc(name)}<span>${list.length} คน</span></div>${people || '<div class="a5-person sum-meta">ยังไม่มีรายชื่อ</div>'}</div>`;
   }).join('') : '';
   const top = units ? active.filter((m) => !m.unit) : active;
@@ -924,10 +924,11 @@ async function aplDrawTeam(body, activity, admin) {
     ${units ? `<div class="a5-team-title"><span class="material-symbols-rounded">groups</span>${esc(units[''])}</div>` : ''}
     <div class="a5-team-grid">${Object.entries(roleLabels).map(([role, label], i) => {
       const list = top.filter((m) => m.role === role);
-      if (!list.length && (role === 'auditor' || (role === 'member' && !active.some((m) => m.role === 'member')))) return '';
+      if (!list.length && ['auditor', 'smart'].includes(role)) return ''; // Smart Team: rows saved before 2026-11-05 only
+      if (!list.length && role === 'member' && !active.some((m) => m.role === 'member')) return '';
       return `<div class="a5-team" style="--team:${CHART.series[i % CHART.series.length]}"><div class="a5-team-head">${esc(label)}<span>${list.length} คน</span></div>${list.map(person).join('') || '<div class="a5-person">-</div>'}</div>`;
     }).join('')}</div>
-    ${projectCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">account_tree</span>โครงการ</div><div class="a5-team-grid">${projectCards}</div>` : ''}
+    ${projectCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">account_tree</span>ทีม ${esc(actName)}</div><div class="a5-team-grid">${projectCards}</div>` : ''}
     <p class="sum-meta">โครงสร้างทีม ${esc(actName)} ปี ${a5Year} · ${active.length} รายชื่อ</p>`;
   a5Lift(body);
   if (admin && $('apl-team-edit')) $('apl-team-edit').onclick = () => {

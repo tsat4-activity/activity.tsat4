@@ -11,13 +11,10 @@ const ACCESS_LEVELS = {
 };
 let myAccess = null;
 
-// role labels of an activity (the Team pages use the same)
-const accessRoles = (activity) => (activity === 'cfo' ? CFO_ROLE_LABEL : activity === 'smf' ? aplRolesOf(activity) : A5_ROLE_LABEL);
 // one role as text: บทบาท + where (5S team / SMF project / audit group / department)
 function accessRoleText(activity, r, unitNames = {}) {
-  const roles = accessRoles(activity);
   const unit = r.unit ? (A5_UNITS_OF[activity]?.[r.unit] || unitNames[r.unit] || r.unit) : '';
-  const label = r.role === 'member' && r.unit && !A5_UNITS_OF[activity] ? 'สมาชิก' : roles[r.role] || r.role;
+  const label = actRoleLabel(activity, r.role, r.unit);
   return [label, r.team ? `กลุ่ม ${r.team}` : '', unit, r.role === 'member' && !r.unit ? r.department : ''].filter(Boolean).join(' · ');
 }
 

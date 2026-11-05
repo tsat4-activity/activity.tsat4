@@ -7,14 +7,11 @@ const A5_GROUPS = { '5s': ['สะสาง', 'สะดวก', 'สะอา�
 const A5_TEAMS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 const A5_TEAM_COLORS = { A: '#1f2937', B: '#ec4899', C: '#f97316', D: '#ca8a04', E: '#0d9488', F: '#2563eb', G: '#9333ea', H: '#06b6d4', I: '#9ca3af' };
 const A5_AREA_TYPES = ['โรงงาน', 'สำนักงาน'];
-// 5S team (ผู้ใช้กำหนด 2026-10-30, ปรับ 2026-11-01): four teams only (mt_5s_team.unit), no committee · each team has
-// ประธาน · รองประธาน · ที่ปรึกษา · ผู้ประสานงาน + สมาชิก · ทีมตรวจประเมิน has no สมาชิก: its people are split by role into
-// ผู้รับผิดชอบพื้นที่ and ผู้ตรวจประเมิน (กลุ่ม A–I). Rows saved earlier without a team show as ไม่ระบุทีม until edited.
+// 5S team (ผู้ใช้กำหนด 2026-11-05): คณะกรรมการ 5ส + four teams (mt_5s_team.unit), roles in act.js actRolesFor · ทีมตรวจประเมิน holds
+// ผู้ตรวจประเมิน (กลุ่ม A–I) and ผู้รับผิดชอบพื้นที่.
 const A5_ROLE_LABEL = { ...ACT_TEAM_ROLES, owner: 'ผู้รับผิดชอบพื้นที่', auditor: 'ผู้ตรวจประเมิน' };
-const A5_UNITS = { '': 'ไม่ระบุทีม', standard: 'ทีมมาตรฐาน', academic: 'ทีมวิชาการ', pr: 'ทีมประชาสัมพันธ์', audit: 'ทีมตรวจประเมิน' };
+const A5_UNITS = { '': 'คณะกรรมการ 5ส', standard: 'ทีมมาตรฐาน', academic: 'ทีมวิชาการ', pr: 'ทีมประชาสัมพันธ์', audit: 'ทีมตรวจประเมิน' };
 const A5_UNIT_LOOK = { '': ['#475569', 'groups'], standard: ['#0d9488', 'verified'], academic: ['#2563eb', 'menu_book'], pr: ['#d97706', 'campaign'], audit: ['#7c3aed', 'fact_check'] };
-// Roles each unit may hold, in screen order
-const a5RolesOf = (unit) => ['chairman', 'vice', 'advisor', 'admin', ...(unit === 'audit' ? ['owner', 'auditor'] : unit ? ['member'] : [])];
 // Sub-teams per activity (server ACT_UNITS); others have one team
 const A5_UNITS_OF = { '5s': A5_UNITS };
 const A5_DASH_TABS = { intro: 'Introduction', summary: 'Summary', ranking: 'Ranking', auditor: 'Auditor', schedule: 'Schedule', audit: 'Audit Plan', team: 'Team' };
@@ -521,8 +518,7 @@ async function a5DrawTeam(body, activity) {
     const [tone, icon] = A5_UNIT_LOOK[unit];
     return `<div class="a5-team-head"><span class="a5-badge" style="background:${tone}"><span class="material-symbols-rounded" style="font-size:15px">${icon}</span></span>${esc(A5_UNITS[unit])}<span>${count} คน</span></div>`;
   };
-  const leads = (list) => ['chairman', 'vice', 'advisor', 'admin', 'member'].flatMap((role) => list.filter((m) => m.role === role).map((m) => person(m, A5_ROLE_LABEL[role]))).join('');
-  // rows saved before the committee was dropped (no team): listed apart until an admin moves them into a team
+  const leads = (list) => ['chairman', 'vice', 'advisor', 'admin', 'member'].flatMap((role) => list.filter((m) => m.role === role).map((m) => person(m, actRoleLabel(activity, role, m.unit)))).join('');
   const top = active.filter((m) => unitOf(m) === '');
   // the four teams: leads + members; ทีมตรวจประเมิน also lists its auditors (by กลุ่ม) and the area owners
   const unitCards = ['standard', 'academic', 'pr', 'audit'].map((unit) => {
@@ -540,9 +536,10 @@ async function a5DrawTeam(body, activity) {
   }).join('');
   const title = (icon, text) => `<div class="a5-team-title"><span class="material-symbols-rounded">${icon}</span>${text}</div>`;
   body.innerHTML = `
-    ${title('account_tree', `ทีม 5ส ปี ${a5Year}`)}
+    ${title('groups', `${A5_UNITS['']} ปี ${a5Year}`)}
+    <div class="a5-team-grid"><div class="a5-team is-wide" style="--team:${A5_UNIT_LOOK[''][0]}">${head('', top.length)}<div class="a5-people">${leads(top) || '<div class="a5-person sum-meta">ยังไม่มีรายชื่อ</div>'}</div></div></div>
+    ${title('account_tree', 'ทีมย่อย')}
     <div class="a5-team-grid a5-unit-grid">${unitCards}</div>
-    ${top.length ? `${title('help', `ไม่ระบุทีม ${top.length} คน (แก้ไขที่ Setting > ทีม เพื่อเลือกทีม)`)}<div class="a5-team-grid">${top.map((m) => `<div class="a5-team" style="--team:${A5_UNIT_LOOK[''][0]}">${person(m, A5_ROLE_LABEL[m.role] || m.role)}</div>`).join('')}</div>` : ''}
     <p class="sum-meta">ปี ${a5Year} · ${active.length} รายชื่อ · ผู้รับผิดชอบพื้นที่ Self Audit 25 ข้อก่อนวันที่ 10 ทุกเดือน · ผู้ตรวจประเมิน Committee Audit ทุก 3 เดือน</p>`;
   a5Lift(body);
 }
@@ -645,8 +642,7 @@ async function a5SetAreas(body, activity, admin, rerender) {
   };
 }
 
-// roles: { role: label } this activity uses (5S: A5_ROLE_LABEL by sub-team · CFO: + member + department).
-// Activities with sub-teams (A5_UNITS_OF) pick ทีม first; the role list follows that team (a5RolesOf).
+// roles: { role: label } this activity uses · activities with sub-teams pick ทีม first; the role list follows it (actRolesFor).
 // unitsIn: { '': committee label, code: project name } for activities whose sub-teams are their projects (SMF).
 // One form for add (m = null: pick the employee, or preset = { employeeId, name } from Setting > สิทธิ์ผู้ใช้) and edit (m = the
 // row: the employee stays, the rest can change) · ctx = { activity, roles, units, areasList, rerender } (a5TeamSpec)
@@ -656,16 +652,15 @@ function a5TeamForm(ctx, m, preset = null) {
   const hasTeam = keys.includes('auditor');
   const unitKeys = units ? Object.keys(units) : [''];
   const unitOf = (x) => x.unit || (units && ['owner', 'auditor'].includes(x.role) ? 'audit' : '');
-  const roleLabel = (role, unit) => (role === 'member' && unit && !A5_UNITS_OF[activity] ? 'สมาชิก' : roles[role] || role);
+  const roleLabel = (role, unit) => actRoleLabel(activity, role, unit);
   let chosen = m ? { employeeId: m.employee_id, name: m.name } : preset;
-  // 5S has no committee: a team is required (an old row without one may stay as it is until a team is picked)
-  const teamKeys = A5_UNITS_OF[activity] ? unitKeys.filter((k) => k || (m && !unitOf(m))) : unitKeys;
+  const teamKeys = unitKeys;
   const unit0 = m ? unitOf(m) : teamKeys[0];
-  // 5S: a5RolesOf · project teams (SMF): the four leads + สมาชิก · the committee: every role of the activity
-  const rolesFor = (unit) => (!units ? keys : A5_UNITS_OF[activity] ? a5RolesOf(unit) : unit ? ['chairman', 'vice', 'advisor', 'admin', 'member'] : keys.filter((r) => !['owner', 'auditor'].includes(r)));
+  // the place decides the roles (actRolesFor) · a row saved earlier keeps its own role while it stays in that place
+  const rolesFor = (unit) => { const list = actRolesFor(activity, unit); return m && unit === unit0 && !list.includes(m.role) ? [m.role, ...list] : list; };
   // ผู้ดูแล (admin, SMF smart) of a year are added by the creator only; the ผู้ดูแล add their members (server grantsAdmin)
   const lead = (r, unit) => r === 'smart' || (r === 'admin' && !(activity === 'smf' && unit));
-  const roleOptions = (unit, current) => options(rolesFor(unit).filter((r) => keys.includes(r) && (me?.creator || r === current || !lead(r, unit))), current || '', (v) => roleLabel(v, unit));
+  const roleOptions = (unit, current) => options(rolesFor(unit).filter((r) => (me?.creator || r === current || !lead(r, unit))), current || '', (v) => roleLabel(v, unit));
   const who = chosen ? field('พนักงาน', `<input value="${esc(`${chosen.employeeId} · ${chosen.name || ''}`)}" disabled>`) : a5EmpField('พนักงาน');
   const actLabel = ACTIVITIES.find(([id]) => id === activity)?.[1] || activity;
   openPopup(`${m ? 'แก้ไขรายชื่อ' : 'เพิ่มรายชื่อ'} ${esc(actLabel)} ปี ${a5Year}`, `${who}
@@ -673,7 +668,7 @@ function a5TeamForm(ctx, m, preset = null) {
     ${field('บทบาท', `<select id="a5-role">${roleOptions(unit0, m?.role)}</select>`)}
     ${hasTeam ? field('กลุ่มตรวจ (เฉพาะผู้ตรวจประเมิน)', `<select id="a5-team">${options(A5_TEAMS, m?.team || 'A', (t) => `กลุ่ม ${t}`)}</select>`, '') : ''}
     ${keys.includes('owner') && areasList.length ? field('พื้นที่ (เฉพาะผู้รับผิดชอบพื้นที่)', `<select id="a5-owner-area">${options(areasList.map((a) => a.id), m?.area_id || areasList[0]?.id, (id) => { const a = areasList.find((x) => String(x.id) === String(id)); return a ? `${a.code} - ${a.name}` : id; })}</select>`, '') : ''}
-    ${keys.includes('member') && !A5_UNITS_OF[activity] ? field('หน่วยงาน (เฉพาะสมาชิกที่ไม่อยู่ในโครงการ)', `<input id="a5-dept" maxlength="80" placeholder="เช่น PD1" value="${esc((m || preset)?.department || '')}">`) : ''}
+    ${keys.includes('member') ? field('หน่วยงาน (สมาชิกของคณะกรรมการ)', `<input id="a5-dept" maxlength="80" placeholder="เช่น PD1" value="${esc((m || preset)?.department || '')}">`) : ''}
     ${m ? field('สถานะ', `<select id="a5-status">${options(['Active', 'Inactive'], m.status)}</select>`) : ''}`, async () => {
     if (!chosen) throw new Error('เลือกพนักงานจากรายชื่อก่อน');
     const r = $('a5-role').value;
@@ -749,7 +744,7 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
   const unitKeys = units ? Object.keys(units) : [''];
   const unitOf = (m) => m.unit || (units && ['owner', 'auditor'].includes(m.role) ? 'audit' : '');
   // in a project team (SMF) a member is สมาชิก, not the committee's ตัวแทนหน่วยงาน
-  const roleLabel = (role, unit) => (role === 'member' && unit && !A5_UNITS_OF[activity] ? 'สมาชิก' : roles[role] || role);
+  const roleLabel = (role, unit) => actRoleLabel(activity, role, unit);
   const rows = listQuery([...data.members].sort((a, b) => unitKeys.indexOf(unitOf(a)) - unitKeys.indexOf(unitOf(b)) || keys.indexOf(a.role) - keys.indexOf(b.role) || String(a.team || '').localeCompare(String(b.team || '')) || String(a.area_code || '').localeCompare(String(b.area_code || '')) || String(a.employee_id).localeCompare(String(b.employee_id))), a5Heads.team, (m, key) => (key === 'role' ? roleLabel(m.role, unitOf(m)) : key === 'unit' ? units[unitOf(m)] : m[key] || ''));
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('a5-add', 'เพิ่มรายชื่อ', 'primary')}${button('a5-edit', 'แก้ไข', 'secondary', 'disabled')}${button('a5-del', 'ลบ', 'danger', 'disabled')}${button('a5-login', 'รหัสเข้าระบบ', 'secondary', 'disabled')}${button('a5-copy', `คัดลอกจากปี ${a5Year - 1}`)}</div>` : ''}
@@ -763,7 +758,7 @@ async function a5SetTeam(body, activity, admin, rerender, roles = A5_ROLE_LABEL,
   const form = (m) => a5TeamForm({ activity, roles, units, areasList, rerender }, m);
   $('a5-add').onclick = () => form(null);
   $('a5-edit').onclick = () => picked && form(picked);
-  $('a5-del').onclick = () => picked && confirmPopup('ลบรายชื่อ', `ตรวจ ${esc(picked.employee_id)} ${esc(picked.name)} (${esc(roles[picked.role] || picked.role)}) อีกครั้งก่อนลบ`, async () => {
+  $('a5-del').onclick = () => picked && confirmPopup('ลบรายชื่อ', `ตรวจ ${esc(picked.employee_id)} ${esc(picked.name)} (${esc(roleLabel(picked.role, unitOf(picked)))}) อีกครั้งก่อนลบ`, async () => {
     await a5Api(activity, `team/${picked.id}`, { method: 'DELETE' });
     toast('ลบแล้ว');
     rerender();

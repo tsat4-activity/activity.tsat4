@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { mx, tx } from '../../core/db.js';
 import { fail, cleanTerm } from '../../core/http.js';
 import { nameOf } from '../../core/users.js';
-import { ACTIVITIES, ACT_UNITS, AUDIT_UNIT, unitsOf, accessOf, actRoute, fetchAll, fetchIn, grantsAdmin, namesOf, requireAdmin, roundTo, tablesOf, throwIf, viewerOf, yearOf } from './common.js';
+import { ACTIVITIES, ACT_UNITS, AUDIT_UNIT, PROJECT_ON, unitsOf, accessOf, actRoute, fetchAll, fetchIn, grantsAdmin, namesOf, requireAdmin, roundTo, tablesOf, throwIf, viewerOf, yearOf } from './common.js';
 
 // Checklist audits (5S and similar): Dashboard reads for everyone, Setting writes for the year's admins.
 // Tables (Tx Data, one set per activity): db/act/<activity>.sql via tablesOf() · rules: docs/specs/act-5s.md
@@ -11,6 +11,11 @@ const AREA_TYPES = ['โรงงาน', 'สำนักงาน'];
 const ROLES = ['admin', 'chairman', 'vice', 'advisor', 'smart', 'auditor', 'owner', 'member'];
 // Area owners and auditors belong to ทีมตรวจประเมิน; plain members of a sub-team need no department.
 const AUDIT_ONLY = ['owner', 'auditor'];
+// Who may sit where (ผู้ใช้กำหนด 2026-11-05, the same in act.js actRolesFor): the committee of every activity · a 5S team ·
+// ทีมตรวจประเมิน · an SMF project. A row saved earlier in another place keeps it until it is moved.
+const rolesFor = (activity, unit) => (!unit ? ['chairman', 'vice', 'advisor', 'admin', 'member']
+  : PROJECT_ON.includes(activity) ? ['member']
+    : unit === AUDIT_UNIT ? ['chairman', 'vice', 'auditor', 'owner'] : ['chairman', 'vice', 'member']);
 const AUDIT_TYPES = ['SELF', 'COMMITTEE'];
 
 // Default 5S master data from inbox/master_5s.xlsx (34 areas + area owners, 17 audit team members, 25 checklist items for 2026).
@@ -84,7 +89,7 @@ async function seed5sMaster() {
     await tx.from('mt_5s_checklist').upsert(SEED_5S_CHECKLIST.map(([item_no, s_group, title]) => ({ year: 2026, item_no, s_group, title, score_max: 5, status: 'Active' })), { onConflict: 'year,item_no' });
   }
   const teamRows = teamRes.data || [];
-  const noUnitIds = teamRows.filter((r) => !r.unit && ['owner', 'auditor', 'chairman', 'admin'].includes(r.role)).map((r) => r.id);
+  const noUnitIds = teamRows.filter((r) => !r.unit && ['owner', 'auditor'].includes(r.role)).map((r) => r.id);
   if (noUnitIds.length) await tx.from('mt_5s_team').update({ unit: AUDIT_UNIT }).in('id', noUnitIds);
   const validEmps = new Set((empRes.data || []).map((e) => String(e.employee_id)));
   const canUseEmp = (id) => !validEmps.size || validEmps.has(id);
@@ -643,7 +648,7 @@ export function mountAudit(app) {
   });
 
   // Where one team row sits: role + sub-team + audit group / area / department, checked the same way for add and edit.
-  const placementOf = (activity, body, units) => {
+  const placementOf = (activity, body, units, current = null) => {
     const role = ROLES.includes(body?.role) ? body.role : '';
     if (body?.unit && !units.includes(body.unit)) return { error: 'ทีมย่อยไม่ถูกต้อง' };
     // owner / auditor always sit in ทีมตรวจประเมิน when the activity has an audit team (5S)
@@ -652,12 +657,11 @@ export function mountAudit(app) {
     const areaId = role === 'owner' && body?.areaId ? Number(body.areaId) : null;
     const department = role === 'member' && !unit ? String(body?.department || '').trim().slice(0, 80) : '';
     if (!role) return { error: 'เลือกบทบาท' };
-    // 5S (ผู้ใช้กำหนด 2026-11-01): no committee, every row is in one of the four teams · ทีมตรวจประเมิน has no สมาชิก
-    if (units.includes(AUDIT_UNIT) && !unit) return { error: 'เลือกทีม (ทีมมาตรฐาน / วิชาการ / ประชาสัมพันธ์ / ตรวจประเมิน)' };
-    if (unit === AUDIT_UNIT && role === 'member') return { error: 'ทีมตรวจประเมินไม่มีสมาชิก เลือกผู้รับผิดชอบพื้นที่หรือผู้ตรวจประเมิน' };
+    const same = current && current.role === role && (current.unit || null) === unit;
+    if (!same && !rolesFor(activity, unit).includes(role)) return { error: 'บทบาทนี้ไม่มีในทีมที่เลือก' };
     if (role === 'auditor' && !/^[A-Z]$/.test(team)) return { error: 'ผู้ตรวจต้องเลือกกลุ่มตรวจ A–Z' };
     if (role === 'owner' && !areaId) return { error: 'ผู้รับผิดชอบพื้นที่ต้องระบุพื้นที่' };
-    if (role === 'member' && !unit && !department) return { error: 'ตัวแทนหน่วยงานต้องระบุหน่วยงาน' };
+    if (role === 'member' && !unit && !department) return { error: 'สมาชิกของคณะกรรมการต้องระบุหน่วยงาน' };
     return { role, unit, team, area_id: areaId, department: department || null };
   };
 
@@ -694,7 +698,7 @@ export function mountAudit(app) {
     if (req.body?.role !== undefined) {
       // a row may keep the project it already has even if that project was closed since
       const units = await unitsOf(activity, row.year, true);
-      const place = placementOf(activity, req.body, row.unit && !units.includes(row.unit) ? [...units, row.unit] : units);
+      const place = placementOf(activity, req.body, row.unit && !units.includes(row.unit) ? [...units, row.unit] : units, row);
       if (place.error) return fail(res, 400, place.error);
       if (grantsAdmin(activity, place) && !req.user.creator) return fail(res, 403, 'ผู้ดูแลกิจกรรมเพิ่มได้เฉพาะผู้ดูแลระบบ');
       const self = String(row.employee_id) === req.user.employeeId && !req.user.creator;

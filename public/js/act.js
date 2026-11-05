@@ -4,6 +4,14 @@
 // Every activity's team starts with ประธาน · รองประธาน · ที่ปรึกษา · ผู้ประสานงาน (ผู้ใช้กำหนด 2026-10-30), then its own
 // roles. ผู้ประสานงาน = admin (manages Setting). Server roles: server/modules/act/audit.js ROLES.
 const ACT_TEAM_ROLES = { chairman: 'ประธาน', vice: 'รองประธาน', advisor: 'ที่ปรึกษา', admin: 'ผู้ประสานงาน', member: 'สมาชิก' };
+// Team of each activity (ผู้ใช้กำหนด 2026-11-05, the same in server audit.js rolesFor): คณะกรรมการ (no unit) = ประธาน · รองประธาน ·
+// ที่ปรึกษา · ผู้ประสานงาน · สมาชิกหลัก (CFO: สมาชิก) · a 5S team = ประธานรอง · รองประธานรอง · สมาชิกรอง · ทีมตรวจประเมิน = ประธานรอง ·
+// รองประธานรอง · ผู้ตรวจประเมิน · ผู้รับผิดชอบพื้นที่ · an SMF project = สมาชิกรอง · a row saved earlier in another place keeps its label
+const actRolesFor = (activity, unit) => (!unit ? ['chairman', 'vice', 'advisor', 'admin', 'member']
+  : activity === 'smf' ? ['member'] : unit === 'audit' ? ['chairman', 'vice', 'auditor', 'owner'] : ['chairman', 'vice', 'member']);
+const ACT_SUB_ROLES = { chairman: 'ประธานรอง', vice: 'รองประธานรอง', member: 'สมาชิกรอง' };
+const actRoleLabel = (activity, role, unit) => (unit ? ACT_SUB_ROLES[role] : role === 'member' && activity !== 'cfo' ? 'สมาชิกหลัก' : null)
+  || { ...ACT_TEAM_ROLES, owner: 'ผู้รับผิดชอบพื้นที่', auditor: 'ผู้ตรวจประเมิน', smart: 'Smart Team' }[role] || role;
 // A title that starts with its own number ("1.1 แต่งตั้ง…", from Excel) next to a number column shows without it
 // (ผู้ใช้แจ้ง 2026-10-30: เลขซ้ำ). Display only; the stored title is unchanged.
 const actNoLead = (title) => String(title ?? '').replace(/^\s*\d+(?:\.\d+)*\.?\s+(?=\S)/, '');

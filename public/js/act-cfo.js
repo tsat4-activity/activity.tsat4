@@ -6,7 +6,7 @@ const CFO = 'cfo';
 // Scope 1/2/3 colours = the shared chart palette (core.js CHART, green here): this year greens, the base year slate.
 const CFO_SCOPE_COLORS = CHART_THEMES.cool.series.slice(0, 3);
 const CFO_BASE_COLORS = CHART_THEMES.cool.base;
-const CFO_ROLE_LABEL = { ...ACT_TEAM_ROLES, admin: 'ผู้ประสานงาน (ผู้จัดทำ)', member: 'สมาชิก (ตัวแทนหน่วยงาน)' }; // TGO forms call the coordinator ผู้จัดทำ
+const CFO_ROLE_LABEL = { ...ACT_TEAM_ROLES }; // TGO forms call the coordinator ผู้จัดทำ
 const CFO_DASH_TABS = { intro: 'Introduction', summary: 'Summary', scope: 'Scope', usage: 'Usage (SAP)', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
 const CFO_SET_TABS = { team: 'Team', activities: 'Activities', ef: 'Emission Factor', material: 'Materials (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'Company', intro: 'Introduction' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 // TGO Fr-03.2 weighted criteria (server s3Rule, ผู้ใช้กำหนด 2026-11-02): level 1–5 per issue · Magnitude comes from the data
