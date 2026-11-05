@@ -128,6 +128,21 @@ async function teamOf(activity, year) {
   };
 }
 
+// Work Flow results of a year per project code: sent, and passed = Implemented (ใช้งานจริง) · a project measured by count
+// (target_type count, e.g. 12 โครงการ) shows passed / target instead of its plan (ผู้ใช้กำหนด 2026-11-05)
+async function ideasOf(year) {
+  const rows = await fetchAll(() => tx.from('automation_ideas').select('id,project_code,project_status,created_at').order('id'));
+  const out = {};
+  for (const r of rows) {
+    if (new Date(Date.parse(r.created_at) + 7 * 3600000).getUTCFullYear() !== year) continue;
+    const code = r.project_code || 'workflow';
+    const one = (out[code] = out[code] || { sent: 0, passed: 0 });
+    one.sent += 1;
+    if (r.project_status === 'Implemented') one.passed += 1;
+  }
+  return out;
+}
+
 // 5S: average score of completed audits, Self / Committee this month, Self Audits still due (owners by the 10th), Issues.
 async function fiveS(year, today) {
   const t = tablesOf('5s');
@@ -178,13 +193,14 @@ export function mountOverview(app) {
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const today = todayIso();
     const projects = await Promise.all(ACTIVITIES.map(async (activity) => {
-      const [plan, team, results, projList] = await Promise.all([
+      const [plan, team, results, projList, ideas] = await Promise.all([
         safe(() => planOf(activity, year, today)),
         safe(() => teamOf(activity, year)),
         safe(() => (activity === '5s' ? fiveS(year, today) : CFO_ON.includes(activity) ? cfo(year) : null)),
-        safe(() => projectsOf(activity, year))
+        safe(() => projectsOf(activity, year)),
+        activity === 'smf' ? safe(() => ideasOf(year)) : null
       ]);
-      return { activity, plan, team, results, projects: projList };
+      return { activity, plan, team, results, projects: projList, ideas };
     }));
     res.json({ year, today, projects });
   }));

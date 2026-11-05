@@ -40,6 +40,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-05 · Claude [5S] · หน้าหลัก / SMF ภาพรวม: โครงการที่วัดตามจำนวน (Work Flow 12 โครงการ) คิดจากงานที่ Implemented ในปีนั้น ÷ เป้า (overview.js ideasOf) ไม่ใช่แผนงาน · แถบความคืบหน้า แดง < 50 · เหลือง 50–99 · เขียว 100 · ไม่ต้องรัน SQL
 - 2026-11-05 · Claude [5S] · core.js openView: หน้าที่ถูกออกระหว่างโหลดไม่เอา error มาทับหน้าปัจจุบัน (เคยขึ้น Cannot read properties of null ที่ CFO Setting) · bindRowSelect กัน container ว่าง
 - 2026-11-05 · Claude [5S] · เตรียมปีหน้า: ผู้ดูแลปีหน้าเห็น Setting ในเมนูซ้าย (access.js accessNav อ่าน 2 ปี) + แก้ข้อมูลหลัก CFO ได้ (requireAdminNow รวม adminNext) · ไม่ต้องรัน SQL
 - 2026-11-05 · Claude [SMF] · โครงการมีช่อง "ปีที่ทำโครงการ" เพิ่มหรือย้ายปีได้ (PATCH projects ย้ายได้เมื่อยังไม่มีทีม / แผน / ผลงาน) · Transaction + สถิติ Work Flow กรองตามปีที่ส่ง (ideas / stats ?year=) · ไม่ต้องรัน SQL

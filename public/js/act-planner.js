@@ -752,6 +752,15 @@ async function aplSetIntro(body, activity, admin, rerender) {
 // หน้าหลัก = ภาพรวมกิจกรรมในโรงงาน (server: server/modules/act/overview.js): KPIs of every activity, then one card per
 // activity (5S · CFO · SMF) with plan progress · key results · team · open problems, and a link to its Dashboard.
 const OV_PLAN = [['early', 'เสร็จก่อนแผน'], ['done', 'เสร็จ'], ['ahead', 'เร็วกว่าแผน'], ['ontrack', 'ตามแผน'], ['behind', 'ช้ากว่าแผน'], ['late', 'เสร็จช้า'], ['overdue', 'เลยกำหนด'], ['waiting', 'ยังไม่ถึง']];
+// progress bars: red below 50%, yellow up to 99%, green at 100% (ผู้ใช้กำหนด 2026-11-05)
+const ovTone = (pct) => (pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444');
+const ovBar = (pct) => `<div class="ov-bar"><span style="width:${Math.min(100, pct)}%;background:${ovTone(pct)}"></span></div>`;
+// a project measured by count: Work Flow projects that passed against the target · else its plan
+const ovCount = (u, ideas) => {
+  const target = u.target_count || 10;
+  const one = ideas?.[u.code] || { sent: 0, passed: 0 };
+  return { target, sent: one.sent, passed: one.passed, percent: Math.min(100, Math.round((one.passed / target) * 100)) };
+};
 const OV_UNIT_LABEL = { '5s': { standard: 'ทีมมาตรฐาน', academic: 'ทีมวิชาการ', pr: 'ทีมประชาสัมพันธ์', audit: 'ทีมตรวจประเมิน' } };
 const ovNum = (n, d = 0) => Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: d, minimumFractionDigits: d });
 
@@ -775,15 +784,17 @@ async function aplDrawOverview(body) {
     return list.map((u) => {
       const plan = p.plan?.byUnit?.[u.code];
       const team = p.team?.units?.[u.code] || 0;
-      return `<div class="ov-proj"><div class="ov-proj-name">${esc(u.name)}</div><div class="ov-progress"><div class="ov-bar"><span style="width:${plan?.percent || 0}%"></span></div><b>${plan?.percent || 0}%</b></div>
-        <div class="sum-meta">${plan ? `${plan.items} หัวข้อ${plan.overdue ? ` · <span class="ov-bad">เลยกำหนด ${plan.overdue}</span>` : ''}` : 'ยังไม่มีแผน'} · ทีม ${team} คน</div></div>`;
+      const count = u.target_type === 'count' ? ovCount(u, p.ideas) : null;
+      const pct = count ? count.percent : plan?.percent || 0;
+      return `<div class="ov-proj"><div class="ov-proj-name">${esc(u.name)}</div><div class="ov-progress">${ovBar(pct)}<b>${pct}%</b></div>
+        <div class="sum-meta">${count ? `ผ่าน ${count.passed} จากเป้าหมาย ${count.target} ${esc(u.unit || 'โครงการ')} · ส่งแล้ว ${count.sent}` : plan ? `${plan.items} หัวข้อ${plan.overdue ? ` · <span class="ov-bad">เลยกำหนด ${plan.overdue}</span>` : ''}` : 'ยังไม่มีแผน'} · ทีม ${team} คน</div></div>`;
     }).join('');
   };
   const planHtml = (p) => {
     if (!p.plan) return '<p class="sum-meta">ไม่มีแผนงาน (Project Planner)</p>';
     if (!p.plan.items) return '<p class="sum-meta">ยังไม่มีรายการแผนปีนี้</p>';
     const chips = OV_PLAN.filter(([code]) => p.plan.counts[code]).map(([code, label]) => `<span class="ov-chip is-${code}">${label} ${p.plan.counts[code]}</span>`).join('');
-    return `<div class="ov-progress"><div class="ov-bar"><span style="width:${p.plan.percent}%"></span></div><b>${p.plan.percent}%</b></div>
+    return `<div class="ov-progress">${ovBar(p.plan.percent)}<b>${p.plan.percent}%</b></div>
       <div class="ov-chips">${chips}</div><p class="sum-meta">${p.plan.items} หัวข้อหลัก</p>`;
   };
   const resultHtml = (p) => {
@@ -1183,9 +1194,10 @@ async function aplDrawSmfOverview(body, activity) {
     const plan = p.plan?.byUnit?.[u.code];
     const isCount = u.target_type === 'count';
     const isIndiv = u.team_type === 'individual';
-    const targetCount = u.target_count || 10;
-    const completed = plan?.completedCount || 0;
-    const countPct = Math.min(100, Math.round((completed / targetCount) * 100));
+    const count = ovCount(u, p.ideas);
+    const targetCount = count.target;
+    const completed = count.passed;
+    const countPct = count.percent;
     const pctVal = isCount ? countPct : (plan ? plan.percent : 0);
     const chips = plan ? OV_PLAN.filter(([code]) => plan.counts[code]).map(([code, label]) => `<span class="ov-chip is-${code}">${label} ${plan.counts[code]}</span>`).join('') : '';
     const late = plan?.late?.length ? `<ul class="ov-late">${plan.late.map((t) => `<li><span>${esc(actNoLead(t.title))}</span><b>${actShort(t.end)} · ${t.progress}%</b></li>`).join('')}</ul>` : '';
@@ -1195,9 +1207,9 @@ async function aplDrawSmfOverview(body, activity) {
         <span class="ov-sec-title">${isCount ? 'ความคืบหน้าตามเป้าหมาย' : 'ความคืบหน้าแผนงาน'}</span>
         <b class="ov-pct-big">${pctVal}%</b>
       </div>
-      ${plan ? `
-        <div class="ov-progress"><div class="ov-bar"><span style="width:${pctVal}%"></span></div></div>
-        <div class="ov-count-sub">${isCount ? `สำเร็จแล้ว <b>${completed}</b> จากเป้าหมาย <b>${targetCount}</b> ${esc(u.unit || 'โครงการ')}` : `สำเร็จแล้ว <b>${completed}</b> จาก <b>${plan.totalTasks || plan.items || 1}</b> หัวข้อแผนงาน`}</div>
+      ${plan || isCount ? `
+        <div class="ov-progress">${ovBar(pctVal)}</div>
+        <div class="ov-count-sub">${isCount ? `ผ่านแล้ว <b>${completed}</b> จากเป้าหมาย <b>${targetCount}</b> ${esc(u.unit || 'โครงการ')} · ส่งแล้ว ${count.sent}` : `สำเร็จแล้ว <b>${completed}</b> จาก <b>${plan.totalTasks || plan.items || 1}</b> หัวข้อแผนงาน`}</div>
         <div class="ov-chips">${chips}</div>
       ` : '<p class="sum-meta">ยังไม่มีหัวข้อแผน (Setting > แผนงาน เลือกโครงการนี้)</p>'}
     </div>`;
@@ -1211,7 +1223,7 @@ async function aplDrawSmfOverview(body, activity) {
         </div>
         <div class="ov-stat-box ${isCount ? (completed >= targetCount ? 'is-done' : 'is-active') : (plan?.percent >= 100 ? 'is-done' : '')}">
           <span class="ov-stat-num">${isCount ? `${completed}/${targetCount}` : `${plan ? plan.percent : 0}%`}</span>
-          <span class="ov-stat-lbl">${isCount ? 'โครงการสำเร็จ' : 'บรรลุตามแผน'}</span>
+          <span class="ov-stat-lbl">${isCount ? 'โครงการผ่าน' : 'บรรลุตามแผน'}</span>
         </div>
         <div class="ov-stat-box ${plan?.overdue ? 'is-danger' : ''}">
           <span class="ov-stat-num">${ovNum(plan?.overdue)}</span>
