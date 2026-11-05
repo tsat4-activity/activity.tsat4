@@ -545,7 +545,7 @@ async function aplDashboard(target, activity) {
   const tabs = APL_DASH_TABS_OF[activity] || APL_DASH_TABS;
   const tab = tabs[aplDashTab[activity]] ? aplDashTab[activity] : Object.keys(tabs)[0];
   target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Seg('data-apldash', tabs, tab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
+    ${pageBar(a5Pick('data-apldash', tabs, tab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
     <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
   </section></div>`;
   const rerender = () => aplDashboard(target, activity).catch(onErr);
@@ -1039,7 +1039,7 @@ async function smfTransaction(target, activity = 'smf') {
   }).join('');
 
   target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Seg('data-smfproj', projTabs, currentProj.id), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'smf')}
+    ${pageBar(a5Pick('data-smfproj', projTabs, currentProj.id, 'โครงการ'), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'smf')}
     <div id="smf-body" style="padding-top:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
         <div>

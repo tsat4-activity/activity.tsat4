@@ -64,7 +64,7 @@ function atxPhotoInput(id, onPick) {
 async function atxPage(target, activity) {
   const me = await a5Api(activity, `me?year=${a5Year}`);
   target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Seg('data-atx', ATX_TABS, atxTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
+    ${pageBar(a5Pick('data-atx', ATX_TABS, atxTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
     <div id="atx-body"></div>
   </section></div>`;
   const rerender = () => atxPage(target, activity).catch(onErr);

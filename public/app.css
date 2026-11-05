@@ -1068,3 +1068,5 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 /* Improvement Proposal: the whole card scrolls, from its top (Before / After are the first thing), and the two pictures have room */
 .popup:has(.wfa-modal-detail){width:min(880px,95vw)}
 .popup:has(.wfa-modal-detail) .popup-fields{display:block;overflow-y:auto}
+/* pages of a view as a dropdown (a5Pick) */
+.seg-pick{display:flex;align-items:center}.seg-pick>.field{margin:0;flex-direction:row;align-items:center;gap:6px;white-space:nowrap}.seg-pick select{width:auto;min-width:170px}

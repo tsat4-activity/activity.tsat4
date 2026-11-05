@@ -42,6 +42,17 @@ function a5SetPick(tabs, active) {
   return field('หน้า', `<select id="a5-setpick">${options(Object.keys(tabs), active, (k) => tabs[k])}</select>`);
 }
 
+// Pages of a view as a dropdown (ผู้ใช้กำหนด 2026-11-05: tabs took different room on each screen): the same choices as a5Seg,
+// whose hidden buttons keep the view's own click handlers
+function a5Pick(attr, tabs, active, label = 'หน้า') {
+  const entries = Array.isArray(tabs) ? tabs : Object.entries(tabs);
+  return `<div class="seg-pick">${field(label, `<select data-seg-pick="${esc(attr)}">${entries.map(([key, name]) => `<option value="${esc(key)}"${String(key) === String(active) ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select>`)}<span hidden>${a5Seg(attr, tabs, active)}</span></div>`;
+}
+document.addEventListener('change', (e) => {
+  const attr = e.target.dataset?.segPick;
+  if (attr) e.target.closest('.seg-pick').querySelector(`[${attr}="${CSS.escape(e.target.value)}"]`)?.click();
+});
+
 function a5Seg(attr, tabs, active) {
   const entries = Array.isArray(tabs) ? tabs : Object.entries(tabs);
   return `<div class="seg" role="group">${entries.map(([key, name]) => `<button class="seg-btn${key === active ? ' is-active' : ''}" type="button" ${attr}="${esc(key)}" aria-pressed="${key === active}">${esc(name)}</button>`).join('')}</div>`;
@@ -86,7 +97,7 @@ function a5Lift(body) {
 async function a5Dashboard(target, activity) {
   const me = await a5Api(activity, `me?year=${a5Year}`);
   target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Seg('data-a5dash', A5_DASH_TABS, a5DashTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
+    ${pageBar(a5Pick('data-a5dash', A5_DASH_TABS, a5DashTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
     <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
   </section></div>`;
   const rerender = () => a5Dashboard(target, activity).catch(onErr);
