@@ -18,19 +18,25 @@ function accessRoleText(activity, r, unitNames = {}) {
   return [label, r.team ? `กลุ่ม ${r.team}` : '', unit, r.role === 'member' && !r.unit ? r.department : ''].filter(Boolean).join(' · ');
 }
 
-// sidebar: the level next to each activity · Setting only for its ผู้ดูแล (and the creator)
+// sidebar: the level next to each activity · Setting only for its ผู้ดูแล (and the creator) · next year's ผู้ดูแล prepares the
+// year ahead (December: team, plan, announcement), so that year counts for Setting, and shows as the level until the year starts
 async function accessNav() {
+  const year = new Date().getFullYear();
+  let next;
   try {
-    myAccess = await api(`/api/access?year=${new Date().getFullYear()}`);
+    [myAccess, next] = await Promise.all([api(`/api/access?year=${year}`), api(`/api/access?year=${year + 1}`)]);
   } catch { return; }
+  const nextOf = new Map(next.activities.map((a) => [a.id, a]));
   for (const a of myAccess.activities) {
+    const later = nextOf.get(a.id);
     const acc = document.querySelector(`[data-nav-acc="${a.id}"]`);
     if (!acc) continue;
     const parent = acc.querySelector('.nav-parent');
     parent.querySelector('.nav-level')?.remove();
-    const label = ACCESS_LEVELS[a.level]?.[0];
-    if (label && !me.creator) parent.insertAdjacentHTML('beforeend', `<span class="nav-level nav-level-${a.level}">${esc(label)}</span>`);
-    acc.querySelector(`.nav-btn[data-view="${a.id}-setting"]`)?.classList.toggle('d-none', !me.creator && a.level !== 'admin');
+    const shown = a.level === 'none' || (later?.level === 'admin' && a.level !== 'admin') ? later || a : a;
+    const label = ACCESS_LEVELS[shown.level]?.[0];
+    if (label && !me.creator) parent.insertAdjacentHTML('beforeend', `<span class="nav-level nav-level-${shown.level}" title="${shown === a ? `ปี ${year}` : `ปี ${year + 1}`}">${esc(shown === a ? label : `${label} ${year + 1}`)}</span>`);
+    acc.querySelector(`.nav-btn[data-view="${a.id}-setting"]`)?.classList.toggle('d-none', !me.creator && a.level !== 'admin' && later?.level !== 'admin');
   }
 }
 

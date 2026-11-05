@@ -122,9 +122,11 @@ export function mountCfo(app) {
 
   // CFO master data (EF, activities, materials) has no year: the admin of this year, or of last year while this year's
   // team is not set up yet (early January), may edit it (audit 2026-11-03)
+  // next year's admin prepares too (activities and EF before the year starts, ผู้ใช้กำหนด 2026-11-05)
+  const adminNext = async (req, activity) => (await accessOf(req, activity, thisYear() + 1)).admin;
   const requireAdminNow = async (req, res, activity) => {
     const now = thisYear();
-    if ((await accessOf(req, activity, now)).admin) return true;
+    if ((await accessOf(req, activity, now)).admin || await adminNext(req, activity)) return true;
     const thisTeam = must(await tx.from(tablesOf(activity).team).select('id').eq('year', now).eq('role', 'admin').eq('status', 'Active').limit(1));
     if (!thisTeam.length && (await accessOf(req, activity, now - 1)).admin) return true;
     fail(res, 403, `แก้ได้เฉพาะ admin ของกิจกรรมนี้ปี ${now}`);
@@ -321,7 +323,7 @@ export function mountCfo(app) {
     const usedGwp = new Set([...used, ...activities].map((u) => u.gwp_code));
     const usedAct = new Set(used.map((u) => u.activity_id));
     res.json({
-      admin: access.admin,
+      admin: access.admin || await adminNext(req, activity),
       scopes, settings, refs,
       gwp: gwp.map((g) => ({ ...g, used: usedGwp.has(g.code) })),
       ef: ef.map((e) => ({ ...e, used: usedEf.has(e.id) })),
@@ -614,7 +616,7 @@ export function mountCfo(app) {
       return acc;
     }, {})).map((m) => ({ ...m, tco2e: Math.round(m.tco2e * 1000) / 1000 }));
     const count = (id, ok) => rows.filter((r) => r.group_id === id && (!ok || Number(r.factor) > 0)).length;
-    res.json({ admin: access.admin, ready: groups.length > 0 || (await sapReady(t)), rows, months, sections,
+    res.json({ admin: access.admin || await adminNext(req, activity), ready: groups.length > 0 || (await sapReady(t)), rows, months, sections,
       groups: groups.map((g) => ({ ...g, items: count(g.id), counted: count(g.id, true) })) });
   });
 
