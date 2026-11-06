@@ -97,6 +97,7 @@ html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-parent,html[data-th
 .pw-wrap .pw-toggle{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:28px;height:28px}
 .required:after{content:' *';color:var(--mo-danger)}
 input,select,textarea{width:100%;min-height:28px;border:1px solid var(--mo-line);border-radius:var(--mo-radius);padding:4px 8px;background:var(--mo-input);color:var(--mo-text);font-size:12px}
+.toolbar select,.page-bar .field select,.popup-fields select,.seg-pick select{min-width:0;max-width:100%;text-overflow:ellipsis}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--mo-focus);border-color:var(--mo-primary)}
 .btn[hidden]{display:none}
 .btn{border:1px solid transparent;border-radius:var(--mo-radius);min-height:28px;padding:0 10px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-size:12px;background:transparent;color:var(--mo-text)}
@@ -1095,6 +1096,10 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
 /* CFO แก้กิจกรรม: block + ไม่ยึด dvh อย่างเดียว (บางจอ 1080p / Edge ได้ max-height≈0) · เลื่อนในกล่อง */
 .popup.cfo-activity-popup{width:min(560px,calc(100vw - 24px));max-height:min(92vh,calc(100vh - 48px),92dvh,calc(100dvh - 48px));display:block;overflow-y:auto;overflow-x:hidden;padding-bottom:14px;min-height:min(200px,40vh)}
 .popup.cfo-activity-popup .popup-fields{display:flex;flex-direction:column;gap:10px;overflow:visible}
+/* Scope 3-3 block: stack full-width so EF <select> matches other fields (native list width follows longest optgroup/option — keep labels short in JS too) */
+.popup.cfo-activity-popup #cfo-a-up{display:flex;flex-direction:column;gap:10px;min-width:0;width:100%}
+.popup.cfo-activity-popup #cfo-a-up>.field{min-width:0;width:100%}
+.popup.cfo-activity-popup .popup-fields select{min-width:0;max-width:100%;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .popup.cfo-activity-popup .popup-actions{position:sticky;bottom:0;margin-top:14px;margin-left:-16px;margin-right:-16px;margin-bottom:-12px;padding:12px 16px 12px;border-top:1px solid var(--mo-line);background:var(--mo-surface);box-shadow:0 -8px 20px rgba(0,0,0,.06)}
 /* Work Flow list: every column on the page, long text ends in … (the full text is the title) · a phone scrolls inside the frame */
 table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px}

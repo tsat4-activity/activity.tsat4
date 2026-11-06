@@ -46,6 +46,9 @@ let cfoEfView = 'energy';
 const CFO_EF_PICK = ['energy', 'chemical', 'cfp'];
 // <optgroup>s of the reference EF that pass keep(r): label = table · group · section (heading rows without a reference,
 // e.g. "On-road vehicles"), rows in sheet order · used by the activity form
+function cfoRefOptionLine(r) {
+  return `${r.code ? `[${r.code}] ` : ''}${r.name.replace(/^-\s*/, '')}${r.formula && r.sheet === 'cfp' ? ` · ${r.formula}` : ''} (${cfoRefNum(r.total)} kgCO₂e/${r.unit})`;
+}
 function cfoEfGroups(keep) {
   return CFO_EF_PICK.map((sheet) => {
     const out = new Map();
@@ -58,7 +61,7 @@ function cfoEfGroups(keep) {
       const label = [CFO_EF_VIEWS[sheet], r.grp, section].filter(Boolean).join(' · ');
       out.set(label, [...(out.get(label) || []), r]);
     });
-    return [...out].map(([label, list]) => `<optgroup label="${esc(label)}">${list.map((r) => `<option value="ref:${r.id}">${esc(`${r.code ? `[${r.code}] ` : ''}${r.name.replace(/^-\s*/, '')}${r.formula && r.sheet === 'cfp' ? ` · ${r.formula}` : ''} (${cfoRefNum(r.total)} kgCO₂e/${r.unit})`)}</option>`).join('')}</optgroup>`).join('');
+    return [...out].map(([label, list]) => optgroupFromFull(label, list.map((r) => optionFromFull(`ref:${r.id}`, cfoRefOptionLine(r), { max: 56 })).join(''), { max: 48 })).join('');
   }).join('');
 }
 let cfoMaster = null; // Setting master data of the open page (cfoEfGroups reads it)
@@ -707,13 +710,14 @@ async function cfoEntries(target) {
       ${field('Scope', `<select id="cfo-s-scope">${options(['1', '2', '3'], String(scope), (v) => `Scope ${v}`)}</select>`)}
       ${field('เดือน', `<select id="cfo-s-month">${options(['', ...Array.from({ length: 12 }, (_, i) => String(i + 1))], cfoTx.month, (v) => (v ? ACT_MONTHS[v - 1] : 'ทั้งปี'))}</select>`)}
       ${field('category', `<select id="cfo-s-cat">${options(['', ...categories], cfoTx.category, (v) => v || 'ทั้งหมด')}</select>`)}
-      ${field('Activity', `<select id="cfo-s-act"><option value="">ทั้งหมด</option>${inCategory.map((r) => `<option value="${r.id}"${String(r.id) === cfoTx.activity ? ' selected' : ''}>${esc(r.name)} · ${esc(r.detail || '')}</option>`).join('')}</select>`)}
+      ${field('Activity', `<select id="cfo-s-act"><option value="">ทั้งหมด</option>${inCategory.map((r) => optionFromFull(r.id, `${r.name} · ${r.detail || ''}`, { selected: String(r.id) === String(cfoTx.activity), max: 72 })).join('')}</select>`)}
       <div class="action-bar">${button('cfo-record', 'บันทึกกิจกรรม', 'primary', 'disabled')}${d.admin ? `${button('cfo-confirm', confirmed ? 'เปิดให้แก้เดือนนี้' : 'ยืนยันเดือนนี้', 'secondary', m ? '' : 'disabled title="เลือกเดือนก่อน"')}${button('cfo-year', 'ปิดทั้งปี', 'secondary')}` : ''}</div>
     </div>
     <div class="table-wrap sheet" id="cfo-rows"><table class="mo-data-table cfo-scope-table"><thead><tr><th>Activity</th><th>Description</th><th>emission source</th><th class="num">kgCO₂e/unit</th><th>Progress</th><th class="num">Amount</th><th>Unit</th><th class="num">tCO₂e</th><th>สถานะ</th><th></th></tr></thead>
       <tbody>${groups.map((g) => `<tr class="cfo-group"><td colspan="10">${esc(g)}</td></tr>${list.filter((r) => r.category === g).map(row).join('')}`).join('') || '<tr><td colspan="10" class="empty">ไม่มีกิจกรรม</td></tr>'}</tbody></table></div>
     <p class="sum-meta">รวม ${cfoT(list.reduce((t, r) => t + value(r, 'tco2e'), 0))} tCO₂e · ${list.length} กิจกรรม${m ? ` · ${ACT_MONTHS[m - 1]} ${a5Year} บันทึกแล้ว ${list.filter((r) => r.byMonth[m]).length}` : ` · ปี ${a5Year}`}${a5Year === new Date().getFullYear() ? ` · เดือนนี้หน่วยงานคุณยังไม่บันทึก ${all.filter((r) => r.canEdit && !r.byMonth[new Date().getMonth() + 1]).length} กิจกรรม` : ''}</p>`;
   a5Lift(body);
+  bindSelectOptionTitles(body);
   $('cfo-s-scope').onchange = () => { cfoTx.scope = $('cfo-s-scope').value; cfoTx.category = ''; cfoTx.activity = ''; rerender(); };
   $('cfo-s-month').onchange = () => { cfoTx.month = $('cfo-s-month').value; rerender(); };
   $('cfo-s-cat').onchange = () => { cfoTx.category = $('cfo-s-cat').value; cfoTx.activity = ''; rerender(); };
@@ -882,6 +886,7 @@ function cfoSetActivities(body, m, rerender) {
   $('cfo-f-q').value = cfoFilter.q;
   draw();
   a5Lift(body);
+  bindSelectOptionTitles(body);
   $('cfo-f-scope').onchange = () => { cfoFilter.scope = $('cfo-f-scope').value; draw(); };
   $('cfo-f-dept').onchange = () => { cfoFilter.department = $('cfo-f-dept').value; draw(); };
   const search = () => { cfoFilter.q = $('cfo-f-q').value; draw(); };
@@ -924,7 +929,7 @@ function cfoSetActivities(body, m, rerender) {
       // by number: 3-1, 3-2 … 3-15 (the code is text, so the server order puts 3-10 after 3-1)
       const list = m.scopes.filter((sc) => String(sc.scope) === (type === 'sep' ? '1' : type)).sort((x, y) => Number(x.code.split('-')[1]) - Number(y.code.split('-')[1]));
       const keep = list.some((sc) => sc.code === $('cfo-a-scope').value) ? $('cfo-a-scope').value : (current && list.some((sc) => sc.code === current.scope_code) ? current.scope_code : list[0]?.code);
-      $('cfo-a-scope').innerHTML = list.map((sc) => `<option value="${esc(sc.code)}"${sc.code === keep ? ' selected' : ''}>${esc(sc.code)} ${esc(sc.name_th || sc.name)}</option>`).join('') || '<option value="">ยังไม่มีหมวด (รัน db/act/cfo.sql)</option>';
+      $('cfo-a-scope').innerHTML = list.map((sc) => optionFromFull(sc.code, `${sc.code} ${sc.name_th || sc.name}`, { selected: sc.code === keep, max: 72 })).join('') || '<option value="">ยังไม่มีหมวด (รัน db/act/cfo.sql)</option>';
     };
     const fillCalc = () => {
       const type = $('cfo-a-type').value;
@@ -940,18 +945,20 @@ function cfoSetActivities(body, m, rerender) {
       if (calc === 'septic') {
         box.innerHTML = '<option value="">บ่อเกรอะ: ใช้ kg CH₄ × GWP CH₄ (ระบบตั้ง EF ให้)</option>';
         $('cfo-a-hint').textContent = 'บ่อเกรอะ: กรอกจำนวนคนและวันทำงานตอนบันทึก ระบบคิด kg CH₄ จากค่าบ่อเกรอะใน Setting > บริษัท';
+        if ($('popup')) bindSelectOptionTitles($('popup'));
         return;
       }
       const unitOk = (unit) => !CFO_CALCS[calc]?.unit || CFO_CALCS[calc].unit.test(unit || '');
       const inCategory = CFO_EF_CATEGORY[$('cfo-a-scope').value] || (() => true);
       const groups = cfoEfGroups((r) => CFO_EF_FOR[type](r) && inCategory(r) && unitOk(r.unit));
-      const own = current && unitOk(current.unit) ? `<optgroup label="EF ที่ใช้อยู่"><option value="ef:${current.id}" selected>${esc(cfoEfLabel(current))}</option></optgroup>` : '';
+      const own = current && unitOk(current.unit) ? `<optgroup label="EF ที่ใช้อยู่">${optionFromFull(`ef:${current.id}`, cfoEfLabel(current), { selected: true, max: 72 })}</optgroup>` : '';
       const keep = box.value;
       box.innerHTML = `<option value="">- เลือก EF -</option>${own}${groups}`;
       if (keep && box.querySelector(`option[value="${keep}"]`)) box.value = keep;
       const n = box.querySelectorAll('option[value^="ref:"]').length;
       $('cfo-a-hint').textContent = `${n} EF ที่ใช้กับ ${CFO_ACT_TYPES[type]} หมวด ${$('cfo-a-scope').value}${CFO_CALCS[calc]?.unit ? ` และสูตร ${CFO_CALCS[calc].short} (หน่วย ${CFO_CALCS[calc].out})` : ''}${n ? '' : ' · ยังไม่มี เพิ่มได้ที่ Setting > Emission Factor'}`;
       fillEf3();
+      if ($('popup')) bindSelectOptionTitles($('popup'));
     };
     // Scope 1 fuel and Scope 2 electricity: the same quantity is also counted in 3-3 (การได้มาของเชื้อเพลิง / ไฟฟ้า)
     // with an EF of the same unit, like the TGO Fr-04.1 sheet (ผู้ใช้กำหนด 2026-11-01). A fuel in litres can also use an EF CFP
@@ -988,7 +995,7 @@ function cfoSetActivities(body, m, rerender) {
       const mainName = kind === 'ref' ? m.refs.find((r) => String(r.id) === id)?.name || '' : current?.name || '';
       const fits = (r) => cfoUnitKey(r.unit) === cfoUnitKey(unit) || (r.sheet === 'cfp' && cfoUnitKey(unit) === 'l' && cfoUnitKey(r.unit) === 'kg');
       const groups = unit ? cfoEfGroups((r) => (r.sheet === 'cfp' || r.sheet === 'energy') && !cfoBio(r) && fits(r) && r.id !== Number(id)) : '';
-      box.innerHTML = `<option value="">- ไม่คิด 3-3 -</option>${own ? `<optgroup label="EF ที่ใช้อยู่"><option value="ef:${own.id}">${esc(cfoEfLabel(own))}</option></optgroup>` : ''}${groups}`;
+      box.innerHTML = `<option value="">- ไม่คิด 3-3 -</option>${own ? `<optgroup label="EF ที่ใช้อยู่">${optionFromFull(`ef:${own.id}`, cfoEfLabel(own), { max: 72 })}</optgroup>` : ''}${groups}`;
       if (keep && box.querySelector(`option[value="${keep}"]`)) box.value = keep;
       else if (!a?.ef3_off && (kind === 'ref' || (kind === 'ef' && !a?.ef3_id))) {
         // grid mix "(CFO Scope2)" → its "SCOPE 3" row of the same years (e.g. 2022-2024: 0.475 → 0.0812) · an activity saved
@@ -1007,10 +1014,12 @@ function cfoSetActivities(body, m, rerender) {
       $('cfo-a-hint3').textContent = !unit ? 'เลือก EF ด้านบนก่อน' : convert
         ? `ปริมาณเดียวกัน (${unit}) คิดใน 3-3 · ${up.code || ''} ${cfoRefNum(up.total)} kgCO₂e/kg × ${$('cfo-a-f3').value || '?'} kg/ลิตร = ${cfoRefNum(up.total * Number($('cfo-a-f3').value || 0))} kgCO₂e/ลิตร`
         : `ปริมาณเดียวกัน (${unit}) คิดอีกบรรทัดใน 3-3 · ${type === '2' ? 'ไฟฟ้า grid mix เลือกแถว SCOPE 3 ของปีเดียวกันให้' : 'EF การได้มาของเชื้อเพลิง: EF CFP ของ อบก. (หน่วย kg คูณความหนาแน่นให้)'}`;
+      if ($('popup')) bindSelectOptionTitles($('popup'));
     };
     fillScope();
     fillCalc();
     fillEf();
+    if ($('popup')) bindSelectOptionTitles($('popup'));
     $('cfo-a-type').onchange = () => { fillScope(); fillCalc(); fillEf(); };
     $('cfo-a-scope').onchange = fillEf;
     $('cfo-a-calc').onchange = fillEf;
@@ -1337,8 +1346,9 @@ async function cfoSetMaterial(body, m, rerender) {
     if (g?.ef_ref_id) {
       // the list holds Active rows: an EF made Inactive later stays on the group until another is picked
       const own = refs.get(g.ef_ref_id);
-      if (own && !$('cfo-g-ef').querySelector(`option[value="ref:${own.id}"]`)) $('cfo-g-ef').insertAdjacentHTML('beforeend', `<optgroup label="EF ที่ใช้อยู่"><option value="ref:${own.id}">${esc(`${own.code ? `[${own.code}] ` : ''}${own.name.replace(/^-\s*/, '')} (${cfoRefNum(own.total)} kgCO₂e/${own.unit})`)}</option></optgroup>`);
+      if (own && !$('cfo-g-ef').querySelector(`option[value="ref:${own.id}"]`)) $('cfo-g-ef').insertAdjacentHTML('beforeend', `<optgroup label="EF ที่ใช้อยู่">${optionFromFull(`ref:${own.id}`, cfoRefOptionLine(own), { max: 72 })}</optgroup>`);
       $('cfo-g-ef').value = `ref:${g.ef_ref_id}`;
+      if ($('popup')) bindSelectOptionTitles($('popup'));
     }
   };
   $('cfo-g-add').onclick = () => groupForm(null);

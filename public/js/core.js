@@ -19,6 +19,44 @@ function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+// Long <option> labels: show shortened text, full string in title (hover) — native select cannot CSS-ellipsis options
+function truncateMiddle(text, max = 72) {
+  const s = String(text ?? '');
+  if (s.length <= max) return s;
+  const el = Math.max(4, max - 3);
+  const left = Math.ceil(el / 2);
+  const right = Math.floor(el / 2);
+  return `${s.slice(0, left)}...${s.slice(s.length - right)}`;
+}
+
+function optionFromFull(value, full, { selected = false, max = 72 } = {}) {
+  const s = String(full ?? '');
+  const short = truncateMiddle(s, max);
+  const title = s.length > short.length ? ` title="${esc(s)}"` : '';
+  return `<option value="${esc(value)}"${selected ? ' selected' : ''}${title}>${esc(short)}</option>`;
+}
+
+// Long <optgroup label="…"> also widens the native dropdown; shorten label + full text on hover
+function optgroupFromFull(fullLabel, innerHtml, { max = 52 } = {}) {
+  const s = String(fullLabel ?? '');
+  const short = truncateMiddle(s, max);
+  const title = s.length > short.length ? ` title="${esc(s)}"` : '';
+  return `<optgroup label="${esc(short)}"${title}>${innerHtml}</optgroup>`;
+}
+
+function bindSelectOptionTitles(container) {
+  if (!container) return;
+  const sync = (sel) => {
+    const opt = sel.options[sel.selectedIndex];
+    const t = opt?.getAttribute('title');
+    sel.title = t || String(opt?.textContent || '').trim() || '';
+  };
+  container.querySelectorAll('select').forEach((sel) => {
+    sync(sel);
+    sel.addEventListener('change', () => sync(sel));
+  });
+}
+
 function button(id, label, kind = 'secondary', extra = '') {
   return `<button class="btn btn-${kind}" type="button"${id ? ` id="${id}"` : ''} ${extra}>${label}</button>`;
 }
@@ -61,7 +99,7 @@ function gridField(id, cols, rows = 5, note = 'คัดลอกหลายแ
 function gridRowHtml(cols, values = {}) {
   const cell = (c) => {
     const v = values[c.key] ?? c.value ?? '';
-    if (c.type === 'select') return `<td><select data-key="${c.key}">${c.options.map(([val, label]) => `<option value="${esc(val)}"${String(val) === String(v) ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></td>`;
+    if (c.type === 'select') return `<td><select data-key="${c.key}">${c.options.map(([val, label]) => optionFromFull(val, label, { selected: String(val) === String(v), max: 64 }))}</select></td>`;
     return `<td><input data-key="${c.key}"${c.type === 'number' ? ' type="number"' : ''} value="${esc(v)}"></td>`;
   };
   return `<tr><td class="grid-no"></td>${cols.map(cell).join('')}<td class="grid-x"><button class="icon-btn" type="button" data-grid-del title="ลบแถว" aria-label="ลบแถว">×</button></td></tr>`;
@@ -135,8 +173,11 @@ async function gridSave(grid, saveRow) {
   return saved;
 }
 
-function options(values, current, labelOf = (value) => value) {
-  return values.map((value) => `<option value="${esc(value)}"${String(current) === String(value) ? ' selected' : ''}>${esc(labelOf(value))}</option>`).join('');
+function options(values, current, labelOf = (value) => value, maxLabel = 80) {
+  return values.map((value) => {
+    const full = String(labelOf(value));
+    return optionFromFull(value, full, { selected: String(current) === String(value), max: maxLabel });
+  }).join('');
 }
 
 // value: text already in the box (a pick field showing the current choice). The ค้นหา button stays for the page's code
@@ -435,6 +476,7 @@ function openPopup(title, body, onSave, saveLabel = 'บันทึก', popupC
     </div>
   </section>`;
   document.body.appendChild(node);
+  bindSelectOptionTitles(node);
   document.addEventListener('keydown', popupKey);
   $('popup-cancel').onclick = closePopup;
   node.addEventListener('click', (event) => { if (event.target === node) closePopup(); });
