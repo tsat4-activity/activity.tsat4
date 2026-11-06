@@ -117,8 +117,9 @@ input:disabled,select:disabled,textarea:disabled{opacity:.55;cursor:not-allowed}
 .dmy-pick .material-symbols-rounded{font-size:18px}.dmy-pick:disabled{opacity:.5;cursor:not-allowed}
 .dmy > input.dmy-real{position:absolute;left:0;bottom:0;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none}
 .form-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;justify-content:flex-end}
-.popup-back{position:fixed;inset:0;z-index:80;background:rgba(23,23,23,.45);display:grid;place-items:center;padding:16px}
-.popup{align-self:start;margin-top:max(16px,min(4vh,28px));width:min(380px,100%);max-height:min(88vh,760px);overflow:auto;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:var(--mo-radius);padding:16px 16px 12px;box-shadow:0 16px 40px rgba(0,0,0,.2)}
+/* overflow-y: จอสั้น / split-screen เลื่อนดูโมดัลได้ · align บนกลาง เพื่อไม่ตัดหัว */
+.popup-back{position:fixed;inset:0;z-index:80;background:rgba(23,23,23,.45);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.popup{flex-shrink:0;margin:max(16px,min(4vh,28px)) auto;width:min(380px,calc(100vw - 24px));max-height:min(88vh,760px);max-height:min(88dvh,760px);overflow:auto;-webkit-overflow-scrolling:touch;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:var(--mo-radius);padding:16px 16px 12px;box-shadow:0 16px 40px rgba(0,0,0,.2)}
 /* Excel-style entry grid in a popup (gridField): the popup widens for it */
 .popup:has(.grid-edit){width:min(1040px,100%)}
 .popup:has(.wfa-wizard-modal),.popup:has(.wfa-modal-detail),.popup:has(.atx-modal){align-self:start;margin-top:max(16px,min(4vh,28px));width:min(620px,95vw);height:min(88vh,740px);max-height:min(92vh,850px);display:flex;flex-direction:column;overflow:hidden;padding:16px 20px 14px}
@@ -1091,9 +1092,10 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
 .acc-chip{display:inline-block;margin:1px 2px;padding:2px 8px;border-radius:999px;background:var(--mo-soft,#eef3ee);font-size:12px;white-space:nowrap}.acc-chip.is-muted{opacity:.5}
 .popup.popup-wide{width:min(820px,100%)}
 /* CFO > Setting > Activities: long form (Scope, EF, 3-3) needs width + scroll so top fields stay reachable */
-.popup.cfo-activity-popup{width:min(560px,100%);max-height:min(90vh,880px);display:flex;flex-direction:column;overflow:hidden;padding-bottom:14px}
-.popup.cfo-activity-popup .popup-fields{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:4px}
-.popup.cfo-activity-popup .popup-actions{flex:0 0 auto;margin-top:10px;padding-top:10px;border-top:1px solid var(--mo-line)}
+/* CFO แก้กิจกรรม: เลื่อนทั้งกล่อง (หลีก flex ที่ทำให้ .popup-fields หายบนบางจอ) */
+.popup.cfo-activity-popup{width:min(560px,calc(100vw - 24px));max-height:none;max-height:min(92dvh,calc(100dvh - 24px));display:block;overflow-y:auto;overflow-x:hidden;padding-bottom:14px}
+.popup.cfo-activity-popup .popup-fields{overflow:visible;min-height:0}
+.popup.cfo-activity-popup .popup-actions{margin-top:14px;padding-top:12px;border-top:1px solid var(--mo-line)}
 /* Work Flow list: every column on the page, long text ends in … (the full text is the title) · a phone scrolls inside the frame */
 table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px}
 .wfa-list-table td{max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
