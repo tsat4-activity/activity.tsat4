@@ -420,12 +420,13 @@ function popupKey(event) {
   if (event.key === 'Escape') closePopup();
 }
 
-function openPopup(title, body, onSave, saveLabel = 'บันทึก') {
+function openPopup(title, body, onSave, saveLabel = 'บันทึก', popupClass = '') {
   closePopup();
   const node = document.createElement('div');
   node.className = 'popup-back';
   node.id = 'popup';
-  node.innerHTML = `<section class="popup" role="dialog" aria-modal="true">
+  const extra = popupClass ? ` ${popupClass}` : '';
+  node.innerHTML = `<section class="popup${extra}" role="dialog" aria-modal="true">
     <div class="popup-title">${title}</div>
     <div class="popup-fields">${body}</div>
     <div class="popup-actions">

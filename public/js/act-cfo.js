@@ -918,7 +918,7 @@ function cfoSetActivities(body, m, rerender) {
       toast('บันทึกแล้ว');
       closePopup();
       rerender();
-    });
+    }, 'บันทึก', 'cfo-activity-popup');
     const fillScope = () => {
       const type = $('cfo-a-type').value;
       // by number: 3-1, 3-2 … 3-15 (the code is text, so the server order puts 3-10 after 3-1)
