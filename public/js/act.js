@@ -34,28 +34,52 @@ function actDeckLeadSlot(m, activity, unit, emptyLabel) {
   return `<div class="a5-deck-lead-slot">${actDeckCard(m, actRoleLabel(activity, m.role, unit))}</div>`;
 }
 
-function actDeckTeamFrame({ deckId, headHtml, tone, activity, unit, chair, vice, chairEmpty, viceEmpty, extraHtml, extraCount }) {
-  const toggle = extraCount ? `<button class="btn a5-deck-toggle" type="button" data-a5-deck="${esc(deckId)}" aria-expanded="false">แสดงสมาชิก (${extraCount})</button>` : '';
+function actDeckTeamFrame({ deckId, headHtml, tone, activity, unit, chair, vice, chairEmpty, viceEmpty, extraHtml, extraCount, expandBar }) {
+  const toggle = extraCount ? `<button class="btn a5-deck-toggle" type="button" data-a5-deck="${esc(deckId)}" data-a5-deck-tone="${esc(tone)}" aria-expanded="false">แสดงสมาชิก (${extraCount})</button>` : '';
+  const more = expandBar ? '' : `<div class="a5-deck-more d-none" id="a5-deck-${esc(deckId)}">${extraHtml || '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>'}</div>`;
   return `<div class="a5-team a5-team-deck" style="--team:${tone}">${headHtml}
     <div class="a5-deck-leads-split">
       ${actDeckLeadSlot(chair, activity, unit, chairEmpty || 'ประธาน')}
       ${actDeckLeadSlot(vice, activity, unit, viceEmpty || 'รองประธาน')}
     </div>
-    ${toggle}
-    <div class="a5-deck-more d-none" id="a5-deck-${esc(deckId)}">${extraHtml || '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>'}</div>
+    ${toggle}${more}
   </div>`;
 }
 
-function actDeckBindToggles(root) {
+function actDeckBindToggles(root, opts = {}) {
+  const bar = opts.bar ? root.querySelector(opts.bar) : null;
+  const store = opts.store ? root.querySelector(opts.store) : null;
+  const setBtn = (btn, expanded) => {
+    const n = btn.textContent.match(/\((\d+)\)/)?.[1] || '';
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    btn.textContent = expanded ? `ซ่อนสมาชิก (${n})` : `แสดงสมาชิก (${n})`;
+  };
   root.querySelectorAll('.a5-deck-toggle').forEach((btn) => {
     btn.onclick = () => {
       const key = btn.dataset.a5Deck;
+      if (bar && store && key) {
+        const src = store.querySelector(`[data-a5-deck-panel="${key}"]`);
+        if (!src) return;
+        const open = bar.dataset.open === key && !bar.classList.contains('d-none');
+        if (open) {
+          bar.classList.add('d-none');
+          bar.dataset.open = '';
+          bar.innerHTML = '';
+          setBtn(btn, false);
+          return;
+        }
+        bar.innerHTML = src.innerHTML;
+        bar.style.setProperty('--team', btn.dataset.a5DeckTone || '');
+        bar.classList.remove('d-none');
+        bar.dataset.open = key;
+        root.querySelectorAll('.a5-deck-toggle').forEach((b) => setBtn(b, b === btn));
+        bar.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
       const panel = key ? document.getElementById(`a5-deck-${key}`) : btn.closest('.a5-team-deck')?.querySelector('.a5-deck-more');
       if (!panel) return;
       const hidden = panel.classList.toggle('d-none');
-      const n = btn.textContent.match(/\((\d+)\)/)?.[1] || '';
-      btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
-      btn.textContent = hidden ? `แสดงสมาชิก (${n})` : `ซ่อนสมาชิก (${n})`;
+      setBtn(btn, !hidden);
     };
   });
 }

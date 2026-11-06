@@ -528,7 +528,8 @@ async function a5DrawTeam(body, activity) {
     const [tone, icon] = A5_UNIT_LOOK[unit];
     return `<div class="a5-team-head"><span class="a5-badge" style="background:${tone}"><span class="material-symbols-rounded" style="font-size:15px">${icon}</span></span>${esc(A5_UNITS[unit])}<span>${count} คน</span></div>`;
   };
-  const deckUnit = (unit) => {
+  const unitKeys = ['standard', 'academic', 'pr', 'audit'];
+  const deckPanels = unitKeys.map((unit) => {
     const list = active.filter((m) => unitOf(m) === unit);
     const core = list.filter((m) => !['owner', 'auditor'].includes(m.role));
     const chair = core.find((m) => m.role === 'chairman');
@@ -542,29 +543,34 @@ async function a5DrawTeam(body, activity) {
       ${auditors.length ? `<div class="a5-team-sub">ผู้ตรวจประเมิน ${auditors.length} คน</div>${actDeckGrid(auditors, activity, unit, (m) => `กลุ่ม ${m.team}`)}` : ''}
       ${owners.length ? `<div class="a5-team-sub">ผู้รับผิดชอบพื้นที่ ${owners.length} พื้นที่</div>${actDeckGrid(owners, activity, unit, (m) => m.area_code || '')}` : ''}`
       : actDeckGrid(members, activity, unit);
-    return actDeckTeamFrame({
-      deckId: unit,
-      headHtml: head(unit, list.length),
-      tone: A5_UNIT_LOOK[unit][0],
-      activity,
+    return {
       unit,
-      chair,
-      vice,
-      chairEmpty: 'ประธานทีมรอง',
-      viceEmpty: 'รองประธานทีมรอง',
-      extraHtml: extra,
-      extraCount
-    });
-  };
+      extra: extra || '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>',
+      frame: actDeckTeamFrame({
+        deckId: unit,
+        headHtml: head(unit, list.length),
+        tone: A5_UNIT_LOOK[unit][0],
+        activity,
+        unit,
+        chair,
+        vice,
+        chairEmpty: 'ประธานทีมรอง',
+        viceEmpty: 'รองประธานทีมรอง',
+        extraCount,
+        expandBar: true
+      })
+    };
+  });
   const top = active.filter((m) => unitOf(m) === '');
   const title = (icon, text) => `<div class="a5-team-title"><span class="material-symbols-rounded">${icon}</span>${text}</div>`;
   body.innerHTML = `
     ${title('groups', `${A5_UNITS['']} ปี ${a5Year}`)}
     <div class="a5-team-grid"><div class="a5-team a5-team-deck is-wide" style="--team:${A5_UNIT_LOOK[''][0]}">${head('', top.length)}${actDeckGrid(top, activity, '')}</div></div>
     ${title('account_tree', 'ทีมย่อย')}
-    <div class="a5-team-grid a5-unit-grid">${['standard', 'academic', 'pr', 'audit'].map((unit) => deckUnit(unit)).join('')}</div>
+    <div class="a5-team-grid a5-unit-grid">${deckPanels.map((p) => p.frame).join('')}<div class="a5-deck-expand-bar d-none" id="a5-deck-expand-bar"></div></div>
+    <div id="a5-deck-store" hidden>${deckPanels.map((p) => `<div data-a5-deck-panel="${esc(p.unit)}">${p.extra}</div>`).join('')}</div>
     <p class="sum-meta">ปี ${a5Year} · ${active.length} รายชื่อ · ผู้รับผิดชอบพื้นที่ Self Audit 25 ข้อก่อนวันที่ 10 ทุกเดือน · ผู้ตรวจประเมิน Committee Audit ทุก 3 เดือน</p>`;
-  actDeckBindToggles(body);
+  actDeckBindToggles(body, { bar: '#a5-deck-expand-bar', store: '#a5-deck-store' });
   a5Lift(body);
 }
 
