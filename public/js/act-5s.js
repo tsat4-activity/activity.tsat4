@@ -532,6 +532,11 @@ function a5DeckGrid(list, activity, unit, noteOf) {
   return `<div class="a5-deck-grid">${list.map((m) => a5DeckCard(m, actRoleLabel(activity, m.role, unit), noteOf?.(m))).join('')}</div>`;
 }
 
+function a5DeckLeadSlot(m, activity, unit, emptyLabel) {
+  if (!m) return `<div class="a5-deck-lead-slot is-empty"><span class="sum-meta">${esc(emptyLabel)}</span></div>`;
+  return `<div class="a5-deck-lead-slot">${a5DeckCard(m, actRoleLabel(activity, m.role, unit))}</div>`;
+}
+
 async function a5DrawTeam(body, activity) {
   const data = await a5Api(activity, `team?year=${a5Year}`);
   setHeaderMeta(`คณะกรรมการ 5ส และทีมตรวจประเมิน (${a5Year})`);
@@ -541,10 +546,11 @@ async function a5DrawTeam(body, activity) {
     const [tone, icon] = A5_UNIT_LOOK[unit];
     return `<div class="a5-team-head"><span class="a5-badge" style="background:${tone}"><span class="material-symbols-rounded" style="font-size:15px">${icon}</span></span>${esc(A5_UNITS[unit])}<span>${count} คน</span></div>`;
   };
-  const deckUnit = (unit, wide = false) => {
+  const deckUnit = (unit) => {
     const list = active.filter((m) => unitOf(m) === unit);
     const core = list.filter((m) => !['owner', 'auditor'].includes(m.role));
-    const leads = core.filter((m) => m.role === 'chairman' || m.role === 'vice');
+    const chair = core.find((m) => m.role === 'chairman');
+    const vice = core.find((m) => m.role === 'vice');
     const members = core.filter((m) => !['chairman', 'vice'].includes(m.role));
     const auditors = list.filter((m) => m.role === 'auditor').sort((a, b) => String(a.team).localeCompare(String(b.team)));
     const owners = list.filter((m) => m.role === 'owner').sort((a, b) => String(a.area_code).localeCompare(String(b.area_code)));
@@ -555,8 +561,11 @@ async function a5DrawTeam(body, activity) {
       ${owners.length ? `<div class="a5-team-sub">ผู้รับผิดชอบพื้นที่ ${owners.length} พื้นที่</div>${a5DeckGrid(owners, activity, unit, (m) => m.area_code || '')}` : ''}`
       : a5DeckGrid(members, activity, unit);
     const toggle = extraCount ? `<button class="btn a5-deck-toggle" type="button" data-a5-deck="${esc(unit)}" aria-expanded="false">แสดงสมาชิก (${extraCount})</button>` : '';
-    return `<div class="a5-team a5-team-deck${wide ? ' is-wide' : ''}" style="--team:${A5_UNIT_LOOK[unit][0]}">${head(unit, list.length)}
-      <div class="a5-deck-leads">${leads.length ? a5DeckGrid(leads, activity, unit) : '<p class="sum-meta">ยังไม่มีประธานทีมรอง / รองประธานทีมรอง</p>'}</div>
+    return `<div class="a5-team a5-team-deck" style="--team:${A5_UNIT_LOOK[unit][0]}">${head(unit, list.length)}
+      <div class="a5-deck-leads-split">
+        ${a5DeckLeadSlot(chair, activity, unit, 'ประธานทีมรอง')}
+        ${a5DeckLeadSlot(vice, activity, unit, 'รองประธานทีมรอง')}
+      </div>
       ${toggle}
       <div class="a5-deck-more d-none" id="a5-deck-${esc(unit)}">${extra || '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>'}</div>
     </div>`;
@@ -567,7 +576,7 @@ async function a5DrawTeam(body, activity) {
     ${title('groups', `${A5_UNITS['']} ปี ${a5Year}`)}
     <div class="a5-team-grid"><div class="a5-team a5-team-deck is-wide" style="--team:${A5_UNIT_LOOK[''][0]}">${head('', top.length)}${a5DeckGrid(top, activity, '')}</div></div>
     ${title('account_tree', 'ทีมย่อย')}
-    <div class="a5-team-grid a5-unit-grid">${['standard', 'academic', 'pr', 'audit'].map((unit) => deckUnit(unit, unit === 'audit')).join('')}</div>
+    <div class="a5-team-grid a5-unit-grid">${['standard', 'academic', 'pr', 'audit'].map((unit) => deckUnit(unit)).join('')}</div>
     <p class="sum-meta">ปี ${a5Year} · ${active.length} รายชื่อ · ผู้รับผิดชอบพื้นที่ Self Audit 25 ข้อก่อนวันที่ 10 ทุกเดือน · ผู้ตรวจประเมิน Committee Audit ทุก 3 เดือน</p>`;
   body.querySelectorAll('.a5-deck-toggle').forEach((btn) => {
     btn.onclick = () => {
