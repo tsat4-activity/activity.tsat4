@@ -524,7 +524,7 @@ function a5DeckCard(m, roleText, note = '') {
     ? `<img class="a5-deck-photo img-zoom" src="${esc(m.photo)}" alt="" loading="lazy">`
     : '<div class="a5-deck-photo is-empty" aria-hidden="true"><span class="material-symbols-rounded">person</span></div>';
   const name = [m.prefix, m.first_name || m.name, m.last_name].filter(Boolean).join(' ').trim() || m.name || '-';
-  return `<article class="a5-deck-card">${photo}<div class="a5-deck-body"><div class="a5-deck-name">${esc(name)}</div><div class="a5-deck-id">${esc(m.employee_id)}</div>${roleText ? `<div class="a5-deck-meta">${esc(roleText)}</div>` : ''}${note ? `<div class="a5-deck-note">${esc(note)}</div>` : ''}</div></article>`;
+  return `<article class="a5-deck-card">${photo}<div class="a5-deck-body"><div class="a5-deck-top"><span class="a5-deck-name">${esc(name)}</span><span class="a5-deck-id">${esc(m.employee_id)}</span></div><div class="a5-deck-foot">${roleText ? `<span class="a5-deck-meta">${esc(roleText)}</span>` : '<span></span>'}${note ? `<span class="a5-deck-note">${esc(note)}</span>` : ''}</div></div></article>`;
 }
 
 function a5DeckGrid(list, activity, unit, noteOf) {
@@ -552,7 +552,7 @@ async function a5DrawTeam(body, activity) {
     const extra = unit === 'audit' ? `
       ${members.length ? `<div class="a5-team-sub">สมาชิกทีมรอง</div>${a5DeckGrid(members, activity, unit)}` : ''}
       ${auditors.length ? `<div class="a5-team-sub">ผู้ตรวจประเมิน ${auditors.length} คน</div>${a5DeckGrid(auditors, activity, unit, (m) => `กลุ่ม ${m.team}`)}` : ''}
-      ${owners.length ? `<div class="a5-team-sub">ผู้รับผิดชอบพื้นที่ ${owners.length} พื้นที่</div>${a5DeckGrid(owners, activity, unit, (m) => [m.area_code, m.area_name].filter(Boolean).join(' '))}` : ''}`
+      ${owners.length ? `<div class="a5-team-sub">ผู้รับผิดชอบพื้นที่ ${owners.length} พื้นที่</div>${a5DeckGrid(owners, activity, unit, (m) => m.area_code || '')}` : ''}`
       : a5DeckGrid(members, activity, unit);
     const toggle = extraCount ? `<button class="btn a5-deck-toggle" type="button" data-a5-deck="${esc(unit)}" aria-expanded="false">แสดงสมาชิก (${extraCount})</button>` : '';
     return `<div class="a5-team a5-team-deck${wide ? ' is-wide' : ''}" style="--team:${A5_UNIT_LOOK[unit][0]}">${head(unit, list.length)}
