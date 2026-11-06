@@ -640,24 +640,33 @@ async function cfoDrawCompany(body, admin, rerender) {
   };
 }
 
-// Team Member (TSATP4-CFO): org chart by level — ประธาน · รองประธาน / ผู้จัดทำ · สมาชิก (ตัวแทนหน่วยงาน).
+// Team Member (TSATP4-CFO): deck — ประธาน · รองประธาน แสดงเสมอ · กดขยายสมาชิก / ผู้จัดทำ
 async function cfoDrawTeam(body, admin) {
   const team = await a5Api(CFO, `team?year=${a5Year}`);
   const active = team.members.filter((p) => p.status === 'Active');
-  const first = (name) => String(name || '').replace(/^(นางสาว|นาง|นาย|Mr\.?|Mrs\.?|Ms\.?|Miss)\s*/, '').split(/\s+/)[0];
-  const tiers = [
-    { label: 'ประธาน', color: 'var(--cfo-tier-1)', people: active.filter((p) => p.role === 'chairman') },
-    { label: 'รองประธาน , ผู้จัดทำ', color: 'var(--cfo-tier-2)', people: [...active.filter((p) => p.role === 'vice'), ...active.filter((p) => p.role === 'admin')] },
-    { label: 'สมาชิก', color: 'var(--cfo-tier-3)', people: active.filter((p) => p.role === 'member').sort((a, b) => String(a.department).localeCompare(String(b.department))) }
-  ];
-  const card = (p) => `<div class="cfo-person"><span class="material-symbols-rounded">person</span><strong>${esc(p.name ? `คุณ${first(p.name)}` : p.employee_id)}</strong><small>${esc(p.department || '')}</small></div>`;
+  const chair = active.find((p) => p.role === 'chairman');
+  const vice = active.find((p) => p.role === 'vice');
+  const rest = active.filter((p) => !['chairman', 'vice'].includes(p.role))
+    .sort((a, b) => String(a.department).localeCompare(String(b.department)));
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('cfo-team-edit', 'แก้ไขทีม')}</div>` : ''}
     <section class="card cfo-team">
       <div class="plan-head"><div class="card-title">Fr-03.1 โครงสร้างและหน้าที่ความรับผิดชอบ · ปี ${a5Year}</div><span class="sum-meta">${active.length} คน</span></div>
-      ${tiers.map((t) => `<div class="cfo-tier">${t.people.length ? `<div class="cfo-tier-people">${t.people.map(card).join('')}</div>` : '<p class="empty">ยังไม่มี</p>'}
-        <div class="cfo-tier-rule" style="--tier:${t.color}"><span>${esc(t.label)}</span></div></div>`).join('')}
+      ${actDeckTeamFrame({
+        deckId: 'cfo',
+        headHtml: '<div class="a5-team-head"><span class="material-symbols-rounded">groups</span>คณะทำงาน CFO</div>',
+        tone: 'var(--cfo-tier-1)',
+        activity: CFO,
+        unit: '',
+        chair,
+        vice,
+        chairEmpty: 'ประธาน',
+        viceEmpty: 'รองประธาน',
+        extraHtml: actDeckGrid(rest, CFO, ''),
+        extraCount: rest.length
+      })}
     </section>`;
+  actDeckBindToggles(body);
   a5Lift(body);
   if (admin) $('cfo-team-edit').onclick = () => { cfoSetTab = 'team'; openView(`${CFO}-setting`); };
 }

@@ -370,6 +370,7 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .a5-team-title{margin:16px 0 8px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}.a5-team-title:first-child{margin-top:0}
 .a5-team-title .material-symbols-rounded{font-size:18px}
 .a5-unit-grid{grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch;gap:8px}
+.a5-unit-grid--auto{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
 /* SMF Dashboard > ภาพรวม (ผู้ใช้กำหนด 2026-11-01): one card per main project */
 .ov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px;align-items:start}
 .ov-card{border-top:4px solid var(--ov);padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0;background:var(--mo-surface);box-shadow:var(--mo-shadow);border-radius:var(--mo-radius)}

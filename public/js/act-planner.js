@@ -923,31 +923,53 @@ async function aplDrawTeam(body, activity, admin) {
     return;
   }
   const active = (data.members || []).filter((m) => m.status === 'Active');
-  const person = (m) => `<div class="a5-person">${esc(m.employee_id)} · ${esc(m.name || '-')}<span>${esc(m.department || (m.team ? `ทีม ${m.team}` : ''))}</span></div>`;
   const actName = actLabel(activity);
-  const roleLabels = aplRolesOf(activity);
-  // project teams (SMF): one card per project, its people with their role
-  const cardsOf = (keep) => (units ? Object.entries(units).filter(([code]) => code && keep(code)).map(([code, name], i) => {
+  const deckForUnit = (code, name, tone) => {
     const list = active.filter((m) => m.unit === code);
-    const people = ['chairman', 'vice', 'advisor', 'admin', 'member'].flatMap((role) => list.filter((m) => m.role === role).map((m) => `<div class="a5-person">${esc(m.employee_id)} · ${esc(m.name || '-')}<span>${esc(actRoleLabel(activity, role, code))}</span></div>`)).join('');
-    return `<div class="a5-team" style="--team:${CHART.series[(i + 2) % CHART.series.length]}"><div class="a5-team-head">${esc(name)}<span>${list.length} คน</span></div>${people || '<div class="a5-person sum-meta">ยังไม่มีรายชื่อ</div>'}</div>`;
-  }).join('') : '');
-  // ทีม SMF = the projects · สมาชิกทีมรอง = Work Flow Automation (ผู้ใช้กำหนด 2026-11-05)
+    const chair = list.find((m) => m.role === 'chairman');
+    const vice = list.find((m) => m.role === 'vice');
+    const members = list.filter((m) => !['chairman', 'vice'].includes(m.role));
+    return actDeckTeamFrame({
+      deckId: code,
+      headHtml: `<div class="a5-team-head">${esc(name)}<span>${list.length} คน</span></div>`,
+      tone,
+      activity,
+      unit: code,
+      chair,
+      vice,
+      chairEmpty: code === 'workflow' ? 'หัวหน้าทีมรอง' : 'ประธานทีมรอง',
+      viceEmpty: 'รองประธานทีมรอง',
+      extraHtml: actDeckGrid(members, activity, code),
+      extraCount: members.length
+    });
+  };
+  const cardsOf = (keep) => (units ? Object.entries(units).filter(([code]) => code && keep(code)).map(([code, name], i) => deckForUnit(code, name, CHART.series[(i + 2) % CHART.series.length])).join('') : '');
   const projectCards = cardsOf((code) => code !== 'workflow');
   const workflowCards = cardsOf((code) => code === 'workflow');
   const top = units ? active.filter((m) => !m.unit) : active;
+  const topChair = top.find((m) => m.role === 'chairman');
+  const topVice = top.find((m) => m.role === 'vice');
+  const topRest = top.filter((m) => !['chairman', 'vice'].includes(m.role));
+  const committeeBlock = units && top.length ? actDeckTeamFrame({
+    deckId: `${activity}-committee`,
+    headHtml: `<div class="a5-team-head"><span class="material-symbols-rounded">groups</span>${esc(units[''])}<span>${top.length} คน</span></div>`,
+    tone: CHART.series[0],
+    activity,
+    unit: '',
+    chair: topChair,
+    vice: topVice,
+    chairEmpty: 'ประธาน',
+    viceEmpty: 'รองประธาน',
+    extraHtml: actDeckGrid(topRest, activity, ''),
+    extraCount: topRest.length
+  }) : (top.length ? `<div class="a5-team a5-team-deck is-wide">${actDeckGrid(top, activity, '')}</div>` : '');
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('apl-team-edit', 'แก้ไขทีม')}</div>` : ''}
-    ${units ? `<div class="a5-team-title"><span class="material-symbols-rounded">groups</span>${esc(units[''])}</div>` : ''}
-    <div class="a5-team-grid">${Object.entries(roleLabels).map(([role, label], i) => {
-      const list = top.filter((m) => m.role === role);
-      if (!list.length && ['auditor', 'smart'].includes(role)) return ''; // Smart Team: rows saved before 2026-11-05 only
-      if (!list.length && role === 'member' && !active.some((m) => m.role === 'member')) return '';
-      return `<div class="a5-team" style="--team:${CHART.series[i % CHART.series.length]}"><div class="a5-team-head">${esc(label)}<span>${list.length} คน</span></div>${list.map(person).join('') || '<div class="a5-person">-</div>'}</div>`;
-    }).join('')}</div>
-    ${projectCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">account_tree</span>ทีม ${esc(actName)}</div><div class="a5-team-grid">${projectCards}</div>` : ''}
-    ${workflowCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">group</span>สมาชิกทีมรอง</div><div class="a5-team-grid">${workflowCards}</div>` : ''}
+    ${units ? `<div class="a5-team-title"><span class="material-symbols-rounded">groups</span>${esc(units[''])}</div><div class="a5-team-grid">${committeeBlock}</div>` : ''}
+    ${projectCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">account_tree</span>ทีม ${esc(actName)}</div><div class="a5-team-grid a5-unit-grid a5-unit-grid--auto">${projectCards}</div>` : ''}
+    ${workflowCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">group</span>สมาชิกทีมรอง</div><div class="a5-team-grid a5-unit-grid a5-unit-grid--auto">${workflowCards}</div>` : ''}
     <p class="sum-meta">โครงสร้างทีม ${esc(actName)} ปี ${a5Year} · ${active.length} รายชื่อ</p>`;
+  actDeckBindToggles(body);
   a5Lift(body);
   if (admin && $('apl-team-edit')) $('apl-team-edit').onclick = () => {
     aplSetTab[activity] = 'team';

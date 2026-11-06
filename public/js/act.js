@@ -14,6 +14,51 @@ const ACT_SUB_ROLES = { chairman: 'ประธานทีมรอง', vice: 
 const actRoleLabel = (activity, role, unit) => (activity === 'smf' && unit && role === 'member' ? (unit === 'workflow' ? 'สมาชิกทีมรอง' : 'ทีม SMF') : null)
   || (unit ? ACT_SUB_ROLES[role] : role === 'member' && activity !== 'cfo' ? 'สมาชิกหลัก' : null)
   || { ...ACT_TEAM_ROLES, owner: 'ผู้รับผิดชอบพื้นที่', auditor: 'ผู้ตรวจประเมิน', smart: 'Smart Team' }[role] || role;
+
+// Team deck (Dashboard > Team): compact horizontal cards · lead slots · expand/collapse members
+function actDeckCard(m, roleText, note = '') {
+  const photo = m.photo
+    ? `<img class="a5-deck-photo img-zoom" src="${esc(m.photo)}" alt="" loading="lazy">`
+    : '<div class="a5-deck-photo is-empty" aria-hidden="true"><span class="material-symbols-rounded">person</span></div>';
+  const name = [m.prefix, m.first_name || m.name, m.last_name].filter(Boolean).join(' ').trim() || m.name || '-';
+  return `<article class="a5-deck-card">${photo}<div class="a5-deck-body"><div class="a5-deck-top"><span class="a5-deck-name">${esc(name)}</span><span class="a5-deck-id">${esc(m.employee_id)}</span></div><div class="a5-deck-foot">${roleText ? `<span class="a5-deck-meta">${esc(roleText)}</span>` : '<span></span>'}${note ? `<span class="a5-deck-note">${esc(note)}</span>` : ''}</div></div></article>`;
+}
+
+function actDeckGrid(list, activity, unit, noteOf) {
+  if (!list.length) return '<p class="sum-meta">ยังไม่มีรายชื่อ</p>';
+  return `<div class="a5-deck-grid">${list.map((m) => actDeckCard(m, actRoleLabel(activity, m.role, unit), noteOf?.(m))).join('')}</div>`;
+}
+
+function actDeckLeadSlot(m, activity, unit, emptyLabel) {
+  if (!m) return `<div class="a5-deck-lead-slot is-empty"><span class="sum-meta">${esc(emptyLabel)}</span></div>`;
+  return `<div class="a5-deck-lead-slot">${actDeckCard(m, actRoleLabel(activity, m.role, unit))}</div>`;
+}
+
+function actDeckTeamFrame({ deckId, headHtml, tone, activity, unit, chair, vice, chairEmpty, viceEmpty, extraHtml, extraCount }) {
+  const toggle = extraCount ? `<button class="btn a5-deck-toggle" type="button" data-a5-deck="${esc(deckId)}" aria-expanded="false">แสดงสมาชิก (${extraCount})</button>` : '';
+  return `<div class="a5-team a5-team-deck" style="--team:${tone}">${headHtml}
+    <div class="a5-deck-leads-split">
+      ${actDeckLeadSlot(chair, activity, unit, chairEmpty || 'ประธาน')}
+      ${actDeckLeadSlot(vice, activity, unit, viceEmpty || 'รองประธาน')}
+    </div>
+    ${toggle}
+    <div class="a5-deck-more d-none" id="a5-deck-${esc(deckId)}">${extraHtml || '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>'}</div>
+  </div>`;
+}
+
+function actDeckBindToggles(root) {
+  root.querySelectorAll('.a5-deck-toggle').forEach((btn) => {
+    btn.onclick = () => {
+      const key = btn.dataset.a5Deck;
+      const panel = key ? document.getElementById(`a5-deck-${key}`) : btn.closest('.a5-team-deck')?.querySelector('.a5-deck-more');
+      if (!panel) return;
+      const hidden = panel.classList.toggle('d-none');
+      const n = btn.textContent.match(/\((\d+)\)/)?.[1] || '';
+      btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+      btn.textContent = hidden ? `แสดงสมาชิก (${n})` : `ซ่อนสมาชิก (${n})`;
+    };
+  });
+}
 // A title that starts with its own number ("1.1 แต่งตั้ง…", from Excel) next to a number column shows without it
 // (ผู้ใช้แจ้ง 2026-10-30: เลขซ้ำ). Display only; the stored title is unchanged.
 const actNoLead = (title) => String(title ?? '').replace(/^\s*\d+(?:\.\d+)*\.?\s+(?=\S)/, '');
