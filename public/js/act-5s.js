@@ -519,39 +519,65 @@ async function a5DrawSchedule(body, activity) {
   a5Lift(body);
 }
 
+function a5DeckCard(m, roleText, note = '') {
+  const photo = m.photo
+    ? `<img class="a5-deck-photo img-zoom" src="${esc(m.photo)}" alt="" loading="lazy">`
+    : '<div class="a5-deck-photo is-empty" aria-hidden="true"><span class="material-symbols-rounded">person</span></div>';
+  const name = [m.prefix, m.first_name || m.name, m.last_name].filter(Boolean).join(' ').trim() || m.name || '-';
+  return `<article class="a5-deck-card">${photo}<div class="a5-deck-body"><div class="a5-deck-name">${esc(name)}</div><div class="a5-deck-id">${esc(m.employee_id)}</div>${roleText ? `<div class="a5-deck-meta">${esc(roleText)}</div>` : ''}${note ? `<div class="a5-deck-note">${esc(note)}</div>` : ''}</div></article>`;
+}
+
+function a5DeckGrid(list, activity, unit, noteOf) {
+  if (!list.length) return '<p class="sum-meta">ยังไม่มีรายชื่อ</p>';
+  return `<div class="a5-deck-grid">${list.map((m) => a5DeckCard(m, actRoleLabel(activity, m.role, unit), noteOf?.(m))).join('')}</div>`;
+}
+
 async function a5DrawTeam(body, activity) {
   const data = await a5Api(activity, `team?year=${a5Year}`);
   setHeaderMeta(`คณะกรรมการ 5ส และทีมตรวจประเมิน (${a5Year})`);
   const active = data.members.filter((m) => m.status === 'Active');
   const unitOf = (m) => m.unit || (['owner', 'auditor'].includes(m.role) ? 'audit' : '');
-  const person = (m, note) => `<div class="a5-person">${esc(m.employee_id)} · ${esc(m.name || '-')}<span>${esc(note ?? m.department ?? '')}</span></div>`;
   const head = (unit, count) => {
     const [tone, icon] = A5_UNIT_LOOK[unit];
     return `<div class="a5-team-head"><span class="a5-badge" style="background:${tone}"><span class="material-symbols-rounded" style="font-size:15px">${icon}</span></span>${esc(A5_UNITS[unit])}<span>${count} คน</span></div>`;
   };
-  const leads = (list) => ['chairman', 'vice', 'advisor', 'admin', 'member'].flatMap((role) => list.filter((m) => m.role === role).map((m) => person(m, actRoleLabel(activity, role, m.unit)))).join('');
-  const top = active.filter((m) => unitOf(m) === '');
-  // the four teams: leads + members; ทีมตรวจประเมิน also lists its auditors (by กลุ่ม) and the area owners
-  const unitCards = ['standard', 'academic', 'pr', 'audit'].map((unit) => {
+  const deckUnit = (unit, wide = false) => {
     const list = active.filter((m) => unitOf(m) === unit);
-    const team = list.filter((m) => !['owner', 'auditor'].includes(m.role));
-    let extra = '';
-    if (unit === 'audit') {
-      const auditors = list.filter((m) => m.role === 'auditor').sort((a, b) => String(a.team).localeCompare(String(b.team)));
-      const owners = list.filter((m) => m.role === 'owner').sort((a, b) => String(a.area_code).localeCompare(String(b.area_code)));
-      extra = `<div class="a5-team-sub">ผู้ตรวจประเมิน ${auditors.length} คน</div><div class="a5-people">${auditors.map((m) => person(m, `กลุ่ม ${m.team}`)).join('') || '<div class="a5-person sum-meta">-</div>'}</div>
-        <div class="a5-team-sub">ผู้รับผิดชอบพื้นที่ ${owners.length} พื้นที่</div><div class="a5-people">${owners.map((m) => person(m, [m.area_code, m.area_name].filter(Boolean).join(' '))).join('') || '<div class="a5-person sum-meta">-</div>'}</div>`;
-    }
-    // ทีมตรวจประเมิน is long (owners of every area): full width, people in columns
-    return `<div class="a5-team${unit === 'audit' ? ' is-wide' : ''}" style="--team:${A5_UNIT_LOOK[unit][0]}">${head(unit, list.length)}<div class="a5-people">${leads(team) || '<div class="a5-person sum-meta">ยังไม่มีรายชื่อ</div>'}</div>${extra}</div>`;
-  }).join('');
+    const core = list.filter((m) => !['owner', 'auditor'].includes(m.role));
+    const leads = core.filter((m) => m.role === 'chairman' || m.role === 'vice');
+    const members = core.filter((m) => !['chairman', 'vice'].includes(m.role));
+    const auditors = list.filter((m) => m.role === 'auditor').sort((a, b) => String(a.team).localeCompare(String(b.team)));
+    const owners = list.filter((m) => m.role === 'owner').sort((a, b) => String(a.area_code).localeCompare(String(b.area_code)));
+    const extraCount = members.length + auditors.length + owners.length;
+    const extra = unit === 'audit' ? `
+      ${members.length ? `<div class="a5-team-sub">สมาชิกทีมรอง</div>${a5DeckGrid(members, activity, unit)}` : ''}
+      ${auditors.length ? `<div class="a5-team-sub">ผู้ตรวจประเมิน ${auditors.length} คน</div>${a5DeckGrid(auditors, activity, unit, (m) => `กลุ่ม ${m.team}`)}` : ''}
+      ${owners.length ? `<div class="a5-team-sub">ผู้รับผิดชอบพื้นที่ ${owners.length} พื้นที่</div>${a5DeckGrid(owners, activity, unit, (m) => [m.area_code, m.area_name].filter(Boolean).join(' '))}` : ''}`
+      : a5DeckGrid(members, activity, unit);
+    const toggle = extraCount ? `<button class="btn a5-deck-toggle" type="button" data-a5-deck="${esc(unit)}" aria-expanded="false">แสดงสมาชิก (${extraCount})</button>` : '';
+    return `<div class="a5-team a5-team-deck${wide ? ' is-wide' : ''}" style="--team:${A5_UNIT_LOOK[unit][0]}">${head(unit, list.length)}
+      <div class="a5-deck-leads">${leads.length ? a5DeckGrid(leads, activity, unit) : '<p class="sum-meta">ยังไม่มีประธานทีมรอง / รองประธานทีมรอง</p>'}</div>
+      ${toggle}
+      <div class="a5-deck-more d-none" id="a5-deck-${esc(unit)}">${extra || '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>'}</div>
+    </div>`;
+  };
+  const top = active.filter((m) => unitOf(m) === '');
   const title = (icon, text) => `<div class="a5-team-title"><span class="material-symbols-rounded">${icon}</span>${text}</div>`;
   body.innerHTML = `
     ${title('groups', `${A5_UNITS['']} ปี ${a5Year}`)}
-    <div class="a5-team-grid"><div class="a5-team is-wide" style="--team:${A5_UNIT_LOOK[''][0]}">${head('', top.length)}<div class="a5-people">${leads(top) || '<div class="a5-person sum-meta">ยังไม่มีรายชื่อ</div>'}</div></div></div>
+    <div class="a5-team-grid"><div class="a5-team a5-team-deck is-wide" style="--team:${A5_UNIT_LOOK[''][0]}">${head('', top.length)}${a5DeckGrid(top, activity, '')}</div></div>
     ${title('account_tree', 'ทีมย่อย')}
-    <div class="a5-team-grid a5-unit-grid">${unitCards}</div>
+    <div class="a5-team-grid a5-unit-grid">${['standard', 'academic', 'pr', 'audit'].map((unit) => deckUnit(unit, unit === 'audit')).join('')}</div>
     <p class="sum-meta">ปี ${a5Year} · ${active.length} รายชื่อ · ผู้รับผิดชอบพื้นที่ Self Audit 25 ข้อก่อนวันที่ 10 ทุกเดือน · ผู้ตรวจประเมิน Committee Audit ทุก 3 เดือน</p>`;
+  body.querySelectorAll('.a5-deck-toggle').forEach((btn) => {
+    btn.onclick = () => {
+      const panel = $(btn.dataset.a5Deck);
+      const open = panel.classList.toggle('d-none');
+      const n = btn.textContent.match(/\((\d+)\)/)?.[1] || '';
+      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      btn.textContent = open ? `แสดงสมาชิก (${n})` : `ซ่อนสมาชิก (${n})`;
+    };
+  });
   a5Lift(body);
 }
 

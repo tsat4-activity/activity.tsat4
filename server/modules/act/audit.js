@@ -528,10 +528,15 @@ export function mountAudit(app) {
       departments,
       members: rows.map((r) => {
         const area = r.area_id ? areaMap.get(Number(r.area_id)) : null;
+        const person = names.get(String(r.employee_id)) || {};
         return {
           ...r,
-          name: names.get(String(r.employee_id))?.name || '',
-          department: r.department || names.get(String(r.employee_id))?.department || '',
+          name: person.name || '',
+          photo: person.photo || '',
+          first_name: person.firstName || '',
+          last_name: person.lastName || '',
+          prefix: person.prefix || '',
+          department: r.department || person.department || '',
           manager_name: r.manager_id ? names.get(String(r.manager_id))?.name || '' : '',
           area_code: area?.code || '',
           area_name: area?.name || '',

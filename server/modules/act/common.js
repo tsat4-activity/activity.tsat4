@@ -114,8 +114,15 @@ export async function fetchIn(build, column, ids, size = 200) {
 }
 
 export async function namesOf(ids) {
-  const rows = await fetchIn(() => mx.from('mt_main_employee').select('employee_id,prefix,first_name,last_name,department'), 'employee_id', ids.map(String));
-  return new Map(rows.map((row) => [String(row.employee_id), { name: nameOf(row), department: row.department || '' }]));
+  const rows = await fetchIn(() => mx.from('mt_main_employee').select('employee_id,prefix,first_name,last_name,department,photo'), 'employee_id', ids.map(String));
+  return new Map(rows.map((row) => [String(row.employee_id), {
+    name: nameOf(row),
+    department: row.department || '',
+    photo: row.photo || '',
+    firstName: row.first_name || '',
+    lastName: row.last_name || '',
+    prefix: row.prefix || ''
+  }]));
 }
 
 // What the signed-in user may do in one activity for one year.
