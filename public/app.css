@@ -1112,16 +1112,16 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 .popup:has(.wfa-modal-detail) .popup-fields{display:block;overflow-y:auto}
 /* pages of a view as a dropdown (a5Pick) */
 .seg-pick{display:flex;align-items:center}.seg-pick>.field{margin:0;flex-direction:row;align-items:center;gap:6px;white-space:nowrap}.seg-pick select{width:auto;min-width:170px}
-/* pages of a view as an underlined tab row (a5Pick / a5SetPick, ผู้ใช้กำหนด 2026-11-08) */
+/* pages of a view as an underlined tab row (a5Pick / a5SetPick, ผู้ใช้กำหนด 2026-11-08) · text 12px = the sidebar menu */
 /* the tab row takes the full width (its own line, underlined); year / filters go on the line below, on the right */
 .page-bar:has(> .page-bar-left > .tab-line){flex-wrap:wrap;margin-bottom:10px;row-gap:8px}
 .page-bar:has(> .page-bar-left > .tab-line) > .page-bar-left{flex:1 1 100%;min-width:0;border-bottom:1px solid var(--mo-line)}
 .page-bar:has(> .page-bar-left > .tab-line) > .page-bar-right:not(:has(> :not(.page-bar-slot:empty))){display:none}
 .tab-line{display:flex;gap:2px;min-width:0;overflow-x:auto;scrollbar-width:none}.tab-line::-webkit-scrollbar{display:none}
-.tab-line-btn{flex:0 0 auto;border:0;background:none;color:var(--mo-text-muted);font-size:14px;padding:9px 14px;margin-bottom:-1px;border-bottom:2.5px solid transparent;white-space:nowrap;cursor:pointer}
+.tab-line-btn{flex:0 0 auto;border:0;background:none;color:var(--mo-text-muted);font-size:12px;padding:7px 12px;margin-bottom:-1px;border-bottom:2.5px solid transparent;white-space:nowrap;cursor:pointer}
 .tab-line-btn:hover{color:var(--mo-text)}
 .tab-line-btn.is-active{color:var(--mo-text);font-weight:600;border-bottom-color:var(--mo-primary)}
-@media(max-width:700px){.tab-line-btn{font-size:13px;padding:8px 10px}}
+@media(max-width:700px){.tab-line-btn{padding:7px 9px}}
 /* Dashboard tiles (ผู้ใช้กำหนด 2026-11-08): white rounded tiles, label on top, big number, note below, icon / pie in the
    top-right corner · colors stay the theme's */
 .ch-kpis{gap:12px}
