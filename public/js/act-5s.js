@@ -37,20 +37,26 @@ function a5TeamColor(team) {
   return A5_TEAM_COLORS[team] || '#64748b';
 }
 
-// Setting pages pick their sub-page from one dropdown (ผู้ใช้กำหนด 2026-11-02, AGENTS.md) · the page binds #a5-setpick
-function a5SetPick(tabs, active) {
-  return field('หน้า', `<select id="a5-setpick">${options(Object.keys(tabs), active, (k) => tabs[k])}</select>`);
-}
-
-// Pages of a view as a dropdown (ผู้ใช้กำหนด 2026-11-05: tabs took different room on each screen): the same choices as a5Seg,
-// whose hidden buttons keep the view's own click handlers
+// Pages of a view as an underlined tab row (ผู้ใช้กำหนด 2026-11-08, แทน dropdown เดิม): plain text tabs, the active one
+// underlined, the row scrolls sideways on a narrow screen · each tab is a button carrying `attr`, so the view's own
+// click handlers ([attr] buttons) keep working
 function a5Pick(attr, tabs, active, label = 'หน้า') {
   const entries = Array.isArray(tabs) ? tabs : Object.entries(tabs);
-  return `<div class="seg-pick">${field(label, `<select data-seg-pick="${esc(attr)}">${entries.map(([key, name]) => `<option value="${esc(key)}"${String(key) === String(active) ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select>`)}<span hidden>${a5Seg(attr, tabs, active)}</span></div>`;
+  return `<div class="tab-line" role="tablist" aria-label="${esc(label)}">${entries.map(([key, name]) => {
+    const on = String(key) === String(active);
+    return `<button class="tab-line-btn${on ? ' is-active' : ''}" type="button" role="tab" aria-selected="${on}" ${attr}="${esc(key)}">${esc(name)}</button>`;
+  }).join('')}</div>`;
 }
-document.addEventListener('change', (e) => {
-  const attr = e.target.dataset?.segPick;
-  if (attr) e.target.closest('.seg-pick').querySelector(`[${attr}="${CSS.escape(e.target.value)}"]`)?.click();
+// Setting pages: the same tab row · the page binds $('a5-setpick').onchange and reads .value (as with the old dropdown)
+function a5SetPick(tabs, active) {
+  return a5Pick('data-setpick', tabs, active).replace('<div class="tab-line"', '<div class="tab-line" id="a5-setpick"');
+}
+document.addEventListener('click', (e) => {
+  const tab = e.target.closest?.('[data-setpick]');
+  const row = tab?.closest('#a5-setpick');
+  if (!row || tab.classList.contains('is-active')) return;
+  row.value = tab.dataset.setpick;
+  row.dispatchEvent(new Event('change'));
 });
 
 function a5Seg(attr, tabs, active) {
