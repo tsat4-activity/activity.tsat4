@@ -678,7 +678,9 @@ async function aplDrawIntro(body, activity) {
 
 // Setting > Introduction: upload the pages of a year — images (in the order chosen) or a PDF (each page becomes an image)
 // · JPEG 1600 px wide, smaller quality until ≤ 680 KB · sent 4 pages a request (first replaces the year, then appends)
+// · at most APL_INTRO_MAX pages a year (ผู้ใช้กำหนด 2026-11-08), counted before any page is drawn; the server checks it too
 const APL_INTRO_W = 1600;
+const APL_INTRO_MAX = 5;
 const aplJpeg = (canvas) => {
   for (const q of [0.85, 0.75, 0.65, 0.55, 0.45]) {
     const url = canvas.toDataURL('image/jpeg', q);
@@ -709,7 +711,7 @@ async function aplSetIntro(body, activity, admin, rerender) {
   const own = d.shown === a5Year;
   body.innerHTML = `
     ${admin ? `<div class="apl-intro-up">
-      ${field(`ไฟล์ปี ${a5Year}: PDF หรือรูปหลายรูป (เรียงหน้าตามชื่อไฟล์)`, '<input id="apl-intro-file" type="file" accept="application/pdf,image/*" multiple>')}
+      ${field(`ไฟล์ปี ${a5Year}: PDF หรือรูป ไม่เกิน ${APL_INTRO_MAX} หน้า (เรียงหน้าตามชื่อไฟล์)`, '<input id="apl-intro-file" type="file" accept="application/pdf,image/*" multiple>')}
       ${button('apl-intro-up', 'อัปโหลด', 'primary', 'disabled')}${own ? button('apl-intro-del', `ลบฉบับปี ${a5Year}`, 'danger') : ''}
     </div>` : ''}
     <p class="sum-meta" id="apl-intro-note">${own ? `ปี ${a5Year} มี ${d.pages.length} หน้า · อัปโหลดใหม่ = แทนที่ทั้งชุด` : d.shown ? `ปี ${a5Year} ยังไม่มี Dashboard แสดงฉบับปี ${d.shown} (${d.pages.length} หน้า)` : (APL_INTRO[activity] ? 'ยังไม่มีเอกสารที่อัปโหลด Dashboard แสดง PDF ที่มากับระบบ' : 'ยังไม่มีเอกสาร เลือกไฟล์ PDF หรือรูปแล้วกด อัปโหลด')}</p>
@@ -726,10 +728,15 @@ async function aplSetIntro(body, activity, admin, rerender) {
       // a PDF gives its pages; images are pages in the order of their file names
       const canvases = [];
       const pdfs = files.filter((f) => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+      let count = files.length - pdfs.length;
+      if (pdfs.length) {
+        const pdfjs = await aplLoadPdf();
+        for (const f of pdfs) count += (await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise).numPages;
+      }
+      if (count > APL_INTRO_MAX) throw new Error(`อัปโหลดได้ไม่เกิน ${APL_INTRO_MAX} หน้า (ไฟล์ที่เลือกมี ${count} หน้า)`);
       for (const f of pdfs) { note(`กำลังแปลง ${f.name} เป็นรูป...`); canvases.push(...await aplPdfPages(f, APL_INTRO_W)); }
       for (const f of files.filter((x) => !pdfs.includes(x)).sort((a, b) => a.name.localeCompare(b.name, 'th', { numeric: true }))) canvases.push(await aplImageCanvas(f));
       if (!canvases.length) throw new Error('เลือกไฟล์ PDF หรือรูปก่อน');
-      if (canvases.length > 60) throw new Error('ไม่เกิน 60 หน้า');
       const pages = canvases.map(aplJpeg);
       for (let i = 0; i < pages.length; i += 4) {
         note(`กำลังอัปโหลดหน้า ${i + 1}–${Math.min(pages.length, i + 4)} จาก ${pages.length}...`);

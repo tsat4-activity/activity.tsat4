@@ -179,6 +179,7 @@ export function mountSmf(app) {
   // the list is mt_<act>_setting intro_<year> = JSON [{ url, path }] · a year without pages shows the latest year before it
   const every = actRoute(app); // not only SMF
   const introKey = (year) => `intro_${year}`;
+  const INTRO_MAX = 5; // pages a year (ผู้ใช้กำหนด 2026-11-08) · act-planner.js APL_INTRO_MAX
   const introOf = async (t) => {
     const rows = must(await tx.from(t.setting).select('key,value')).filter((r) => /^intro_\d{4}$/.test(r.key));
     return new Map(rows.map((r) => {
@@ -196,7 +197,7 @@ export function mountSmf(app) {
   every('post', '/api/act/:activity/intro', async (req, res, activity, t) => {
     const year = yearOf(req.body?.year);
     if (!year || !(await requireAdmin(req, res, activity, year))) return;
-    const images = Array.isArray(req.body?.pages) ? req.body.pages.slice(0, 10) : [];
+    const images = Array.isArray(req.body?.pages) ? req.body.pages.slice(0, INTRO_MAX + 1) : [];
     if (!images.length) return fail(res, 400, 'ยังไม่มีหน้าเอกสาร');
     const bytes = images.map(imageBytes);
     if (bytes.some((b) => !b)) return fail(res, 400, 'แต่ละหน้าต้องเป็น JPEG ไม่เกิน 700 KB');
@@ -211,6 +212,10 @@ export function mountSmf(app) {
       added.push({ path, url: tx.storage.from(t.bucket).getPublicUrl(path).data.publicUrl });
     }
     const pages = replace ? added : [...old, ...added];
+    if (pages.length > INTRO_MAX) { // at most INTRO_MAX pages a year: drop what was just stored
+      await tx.storage.from(t.bucket).remove(added.map((p) => p.path));
+      return fail(res, 400, `Introduction ได้ไม่เกิน ${INTRO_MAX} หน้า`);
+    }
     must(await tx.from(t.setting).upsert({ key: introKey(year), value: JSON.stringify(pages) }, { onConflict: 'key' }));
     if (replace && old.length) await tx.storage.from(t.bucket).remove(old.map((p) => p.path));
     res.json({ ok: true, pages: pages.length });
