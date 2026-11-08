@@ -1125,9 +1125,10 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 /* Dashboard tiles (ผู้ใช้กำหนด 2026-11-08): white rounded tiles, label on top, big number, note below, icon / pie in the
    top-right corner · colors stay the theme's */
 .ch-kpis{gap:12px}
-.ch-kpi,:where(body[data-dash]) .ch-kpi{position:relative;display:block;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:14px 16px;min-height:0}
-.ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{position:absolute;top:12px;right:12px;width:30px;height:30px;font-size:17px}
-.ch-kpi-body{gap:4px;padding-right:34px}
+.ch-kpi,:where(body[data-dash]) .ch-kpi{position:relative;display:flex;align-items:center;gap:12px;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:14px 16px;min-height:0}
+/* the pie / icon is a large circle on the right of the tile (ผู้ใช้กำหนด 2026-11-08: ใหญ่ตามวงกลม) */
+.ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{order:2;margin-left:auto;width:72px;height:72px;font-size:34px;border-width:1.5px}
+.ch-kpi-body{flex:1 1 auto;gap:4px}
 .ch-kpi-label,:where(body[data-dash]) .ch-kpi-label{font-size:13px;font-weight:500}
 .ch-kpi-value strong,:where(body[data-dash]) .ch-kpi-value strong{font-size:26px;font-weight:700;line-height:1.15}
 .ch-kpi-value small,:where(body[data-dash]) .ch-kpi-value small{font-size:13px}
@@ -1136,4 +1137,4 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 .a5-aud-kpi,.kpi{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:14px 16px}
 .a5-aud-kpi-label,.kpi-label{font-size:13px;font-weight:500;color:var(--mo-text-muted)}
 .a5-aud-kpi-val,.kpi-value{font-size:24px;font-weight:700;line-height:1.2;margin-top:4px}
-@media(max-width:700px){.ch-kpi-value strong,:where(body[data-dash]) .ch-kpi-value strong{font-size:21px}.a5-aud-kpi-val,.kpi-value{font-size:20px}}
+@media(max-width:700px){.ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{width:52px;height:52px;font-size:26px}.ch-kpi-value strong,:where(body[data-dash]) .ch-kpi-value strong{font-size:21px}.a5-aud-kpi-val,.kpi-value{font-size:20px}}
