@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { mx, tx } from '../../core/db.js';
 import { fail, wrap, cleanTerm, adminWriteError, listFilters } from '../../core/http.js';
 import { ADMIN_SCOPES, CREATOR_ID, MEMBER_TABLES, creatorOnly, defineModule } from '../../core/access.js';
-import { requireUser } from '../../core/users.js';
+import { clearUserCache, requireUser } from '../../core/users.js';
 import { MAIN_TABLES } from '../../core/tables.js';
 import { imageBytes } from '../act/common.js';
 
@@ -191,6 +191,7 @@ export default defineModule({
       if (req.params.name === 'mt_main_user') out.role = 'employee';
       const { error } = await client.from(req.params.name).insert(out);
       if (error) return fail(res, 400, adminWriteError(error, 'เพิ่มแถวไม่ได้'));
+      clearUserCache();
       res.status(201).json({ ok: true });
     }));
 
@@ -223,6 +224,7 @@ export default defineModule({
       const { data, error } = await query.select(spec.pk.join(','));
       if (error) return fail(res, 400, adminWriteError(error, 'แก้ไขแถวไม่ได้'));
       if (!data?.length) return fail(res, 400, 'แก้ไขแถวไม่ได้');
+      clearUserCache();
       res.json({ ok: true });
     }));
 
@@ -237,6 +239,7 @@ export default defineModule({
       for (const column of spec.pk) query = query.eq(column, key[column]);
       const { error } = await query;
       if (error) return fail(res, 400, adminWriteError(error, 'ลบแถวไม่ได้'));
+      clearUserCache();
       res.json({ ok: true });
     }));
   }

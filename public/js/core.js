@@ -66,7 +66,8 @@ function field(label, control, extra = '') {
 }
 
 // A picked image file -> JPEG data URL of width × height, cropped from the centre to that ratio (e.g. 500 × 600 = 2.5 : 3).
-function cropJpeg(file, width, height) {
+// Automatically steps down JPEG quality so the resulting image stays under ~250 KB for fast uploads & storage savings.
+function cropJpeg(file, width, height, maxBytes = 250000) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     const url = URL.createObjectURL(file);
@@ -79,7 +80,13 @@ function cropJpeg(file, width, height) {
       const sh = height * scale;
       canvas.getContext('2d').drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, 0, 0, width, height);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
+      let quality = 0.78;
+      let data = canvas.toDataURL('image/jpeg', quality);
+      while (data.length * 0.75 > maxBytes && quality > 0.4) {
+        quality = Math.round((quality - 0.08) * 100) / 100;
+        data = canvas.toDataURL('image/jpeg', quality);
+      }
+      resolve(data);
     };
     image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('เปิดรูปไม่ได้')); };
     image.src = url;

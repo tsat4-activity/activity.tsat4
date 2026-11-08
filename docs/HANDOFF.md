@@ -40,6 +40,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-08 · Gemini [5S] · เพิ่ม In-Memory Cache 60 วินาที ใน `loadUser()` (`server/core/users.js`) พร้อมล้างแคชทันทีเมื่อเปลี่ยนรหัสผ่านหรือแก้ตารางผู้ใช้ (`auth.js`, `system/index.js`) + บีบอัดรูปอัปโหลดฝั่งหน้าเว็บให้ไม่เกิน ~250 KB อัตโนมัติ (`core.js` `cropJpeg`, `act-tx.js` `atxWideJpeg`) เพื่อรองรับผู้ใช้งาน 100 Accounts บน Render + Supabase ฟรี · วางโครงสร้างโฟลเดอร์ `server/integration/` และ `db/integration/` เตรียมเชื่อม API ในอนาคต
 - 2026-11-08 · Claude [5S] · ทีมย่อย: ประธานทีมรอง → **หัวหน้าทีม**, รองประธานทีมรอง → **รองหัวหน้าทีม** (ACT_SUB_ROLES, ช่องว่างในการ์ดทีม) · actDeckGrid เรียงตามตำแหน่ง ประธาน → รองประธาน → ที่ปรึกษา → ผู้ประสานงาน → สมาชิก
 - 2026-11-08 · Claude [5S] · หน้าย่อยเป็นแถบแท็บขีดเส้นใต้แทน dropdown (a5Pick / a5SetPick → `.tab-line`, ทุกกิจกรรม ทั้ง Dashboard / Transaction / Setting / โครงการ SMF) · การ์ดตัวเลข Dashboard เป็นกระเบื้อง (`.ch-kpi`, `.a5-aud-kpi`, `.kpi`) สีเดิม
 - 2026-11-08 · Claude [5S] · Introduction อัปโหลดได้ไม่เกิน 5 หน้าต่อปี (APL_INTRO_MAX ใน act-planner.js / INTRO_MAX ใน smf.js) · นับหน้า PDF ก่อนแปลง · ชุดเดิมที่เกิน (เช่น 5S ปี 2026 = 22 หน้า) ยังแสดงอยู่ จนกว่าจะอัปโหลดใหม่หรือลบ

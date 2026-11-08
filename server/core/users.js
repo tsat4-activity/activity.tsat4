@@ -3,12 +3,25 @@ import { fail } from './http.js';
 import { cookies, readSession, setSession } from './session.js';
 import { CREATOR_ID, MEMBER_TABLES, isCreatorRow } from './access.js';
 
+const USER_CACHE = new Map();
+const USER_CACHE_TTL_MS = 60_000;
+
+export function clearUserCache(employeeId) {
+  if (employeeId) USER_CACHE.delete(String(employeeId));
+  else USER_CACHE.clear();
+}
+
 export function nameOf(employee) {
   if (!employee) return '';
   return [employee.prefix, employee.first_name, employee.last_name].filter(Boolean).join(' ');
 }
 
-export async function loadUser(employeeId) {
+export async function loadUser(employeeId, { fresh = false } = {}) {
+  const key = String(employeeId || '');
+  if (!fresh) {
+    const cached = USER_CACHE.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.row;
+  }
   const { data, error } = await mx
     .from('mt_main_user')
     // '*' so executive / admin_of read as missing (not an error) before db/06_main_user_access.sql is run.
@@ -16,7 +29,10 @@ export async function loadUser(employeeId) {
     .eq('employee_id', employeeId)
     .maybeSingle();
   if (error) throw error;
-  if (!data) return null;
+  if (!data) {
+    USER_CACHE.delete(key);
+    return null;
+  }
   const entries = Object.entries(MEMBER_TABLES);
   const members = await Promise.all(entries.map(([, table]) => mx.from(table).select('role,status,department').eq('employee_id', employeeId).maybeSingle()));
   data.members = {};
@@ -26,6 +42,7 @@ export async function loadUser(employeeId) {
     else if (members[i].error) throw members[i].error;
     data.members[moduleId] = members[i].data || null;
   });
+  USER_CACHE.set(key, { row: data, expiresAt: Date.now() + USER_CACHE_TTL_MS });
   return data;
 }
 

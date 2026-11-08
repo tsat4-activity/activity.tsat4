@@ -3,7 +3,7 @@ import { mx, dbReady } from './db.js';
 import { fail, wrap } from './http.js';
 import { setSession } from './session.js';
 import { CREATOR_ID, MEMBER_TABLES } from './access.js';
-import { loadUser, publicUser, requireUser } from './users.js';
+import { clearUserCache, loadUser, publicUser, requireUser } from './users.js';
 
 export function mountAuth(app) {
   app.get('/api/health', (_req, res) => {
@@ -16,7 +16,7 @@ export function mountAuth(app) {
     if (!mx || !process.env.SESSION_SECRET) return fail(res, 503, 'ยังไม่ได้ตั้งค่าการเชื่อมฐานข้อมูล');
     const employeeId = String(req.body?.employeeId || '').trim();
     const password = String(req.body?.password || '');
-    const row = employeeId ? await loadUser(employeeId) : null;
+    const row = employeeId ? await loadUser(employeeId, { fresh: true }) : null;
     const match = row && await bcrypt.compare(password, row.password_hash);
     if (!row || row.status !== 'Active' || row.mt_main_employee?.status !== 'Active' || !match) {
       return fail(res, 401, 'รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
@@ -45,6 +45,7 @@ export function mountAuth(app) {
       password_changed_at: new Date().toISOString()
     }).eq('employee_id', req.user.employeeId);
     if (error) return fail(res, 400, 'เปลี่ยนรหัสผ่านไม่ได้');
+    clearUserCache(req.user.employeeId);
     res.json({ ok: true });
   }));
 }

@@ -23,26 +23,9 @@ function atxDate(iso) {
   return `${d.getDate()} ${ACT_MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// Problem / after photos: center crop to 16:9, 1280x720 JPEG.
+// Problem / after photos: center crop to 16:9, 1280x720 JPEG capped at ~250 KB.
 function atxWideJpeg(file) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    const url = URL.createObjectURL(file);
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1280;
-      canvas.height = 720;
-      const ratio = 16 / 9;
-      let w = image.width;
-      let h = w / ratio;
-      if (h > image.height) { h = image.height; w = h * ratio; }
-      canvas.getContext('2d').drawImage(image, (image.width - w) / 2, (image.height - h) / 2, w, h, 0, 0, 1280, 720);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', 0.75));
-    };
-    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('เปิดรูปไม่ได้')); };
-    image.src = url;
-  });
+  return cropJpeg(file, 1280, 720, 250000);
 }
 
 // File input + 16:9 preview; onPick(dataUrl).
