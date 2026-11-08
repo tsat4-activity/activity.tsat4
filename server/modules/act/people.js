@@ -5,7 +5,7 @@ import { ACTIVITIES, AUDIT_UNIT, accessOf, fetchIn, tablesOf, viewerOf, yearOf }
 
 // Access in one place (ผู้ใช้กำหนด 2026-11-04). Every activity (5S · CFO · SMF) checks its own team of the year, so one
 // person may be ผู้ดูแล of SMF, ผู้ตรวจ of 5S and ผู้ชม of CFO at once. The four levels, the same names everywhere:
-//   admin = ผู้ดูแล (Setting + everything) · committee = กรรมการ (ประธาน / รองประธาน / ที่ปรึกษา, ประธานทีมรอง of ทีมตรวจประเมิน)
+//   admin = ผู้ดูแล (Setting + everything) · committee = กรรมการ (ประธาน / รองประธาน / ที่ปรึกษา, หัวหน้าทีม of ทีมตรวจประเมิน)
 //   operator = ผู้ปฏิบัติ (สมาชิก / ผู้ตรวจ / ผู้รับผิดชอบพื้นที่ / ทีมย่อย: own scope)
 //   viewer = ผู้ชม (in the team of another activity that year, or ผู้บริหาร: read only) · none
 // GET /api/access = mine (the user menu and the sidebar) · GET /api/access/people = everyone's, for the creator.

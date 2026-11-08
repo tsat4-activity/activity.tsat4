@@ -944,8 +944,8 @@ async function aplDrawTeam(body, activity, admin) {
       unit: code,
       chair,
       vice,
-      chairEmpty: code === 'workflow' ? 'หัวหน้าทีมรอง' : 'ประธานทีมรอง',
-      viceEmpty: 'รองประธานทีมรอง',
+      chairEmpty: 'หัวหน้าทีม',
+      viceEmpty: 'รองหัวหน้าทีม',
       extraHtml: actDeckGrid(members, activity, code),
       extraCount: members.length
     });

@@ -5,12 +5,12 @@
 // roles. ผู้ประสานงาน = admin (manages Setting). Server roles: server/modules/act/audit.js ROLES.
 const ACT_TEAM_ROLES = { chairman: 'ประธาน', vice: 'รองประธาน', advisor: 'ที่ปรึกษา', admin: 'ผู้ประสานงาน', member: 'สมาชิก' };
 // Team of each activity (ผู้ใช้กำหนด 2026-11-05, the same in server audit.js rolesFor): คณะกรรมการ (no unit) = ประธาน · รองประธาน ·
-// ที่ปรึกษา · ผู้ประสานงาน · สมาชิกหลัก (CFO: สมาชิก) · a 5S team = ประธานทีมรอง · รองประธานทีมรอง · สมาชิกทีมรอง · ทีมตรวจประเมิน = ประธานทีมรอง ·
-// รองประธานทีมรอง · ผู้ตรวจประเมิน · ผู้รับผิดชอบพื้นที่ · SMF: ทีม SMF of a project, สมาชิกทีมรอง of Work Flow Automation · a row saved earlier
+// ที่ปรึกษา · ผู้ประสานงาน · สมาชิกหลัก (CFO: สมาชิก) · a 5S team = หัวหน้าทีม · รองหัวหน้าทีม · สมาชิกทีมรอง · ทีมตรวจประเมิน = หัวหน้าทีม ·
+// รองหัวหน้าทีม · ผู้ตรวจประเมิน · ผู้รับผิดชอบพื้นที่ · SMF: ทีม SMF of a project, สมาชิกทีมรอง of Work Flow Automation · a row saved earlier
 // in another place keeps its label
 const actRolesFor = (activity, unit) => (!unit ? ['chairman', 'vice', 'advisor', 'admin', 'member']
   : activity === 'smf' ? ['member'] : unit === 'audit' ? ['chairman', 'vice', 'auditor', 'owner'] : ['chairman', 'vice', 'member']);
-const ACT_SUB_ROLES = { chairman: 'ประธานทีมรอง', vice: 'รองประธานทีมรอง', member: 'สมาชิกทีมรอง' };
+const ACT_SUB_ROLES = { chairman: 'หัวหน้าทีม', vice: 'รองหัวหน้าทีม', member: 'สมาชิกทีมรอง' }; // ผู้ใช้กำหนด 2026-11-08 (เดิม ประธานทีมรอง / รองประธานทีมรอง)
 const actRoleLabel = (activity, role, unit) => (activity === 'smf' && unit && role === 'member' ? (unit === 'workflow' ? 'สมาชิกทีมรอง' : 'ทีม SMF') : null)
   || (unit ? ACT_SUB_ROLES[role] : role === 'member' && activity !== 'cfo' ? 'สมาชิกหลัก' : null)
   || { ...ACT_TEAM_ROLES, owner: 'ผู้รับผิดชอบพื้นที่', auditor: 'ผู้ตรวจประเมิน', smart: 'Smart Team' }[role] || role;
@@ -26,6 +26,10 @@ function actDeckCard(m, roleText, note = '') {
 
 function actDeckGrid(list, activity, unit, noteOf) {
   if (!list.length) return '<p class="sum-meta">ยังไม่มีรายชื่อ</p>';
+  // by rank: ประธาน → รองประธาน → ที่ปรึกษา → ผู้ประสานงาน → สมาชิก (actRolesFor order; same role keeps its order)
+  const order = actRolesFor(activity, unit);
+  const rank = (m) => (order.includes(m.role) ? order.indexOf(m.role) : order.length);
+  list = list.map((m, i) => [m, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([m]) => m);
   return `<div class="a5-deck-grid">${list.map((m) => actDeckCard(m, actRoleLabel(activity, m.role, unit), noteOf?.(m))).join('')}</div>`;
 }
 

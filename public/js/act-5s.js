@@ -560,8 +560,8 @@ async function a5DrawTeam(body, activity) {
         unit,
         chair,
         vice,
-        chairEmpty: 'ประธานทีมรอง',
-        viceEmpty: 'รองประธานทีมรอง',
+        chairEmpty: 'หัวหน้าทีม',
+        viceEmpty: 'รองหัวหน้าทีม',
         extraCount,
         expandBar: true
       })
