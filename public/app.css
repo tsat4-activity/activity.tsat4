@@ -1195,3 +1195,10 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 }
 /* pages drawn straight into .app-view (System Setting, ...) keep the same right gap as .view-body pages */
 .app-view:not(:has(> .view-body)){padding-right:calc(var(--content-gutter) + 15px)}
+/* ผู้ใช้กำหนด 2026-11-09 (2): the KPI row keeps its own height (only the charts / table row takes the spare height) */
+.a5-board{grid-template-rows:auto minmax(0,1fr)}
+/* sticky tab / filter rows: no strip of content shows through above or between them while scrolling
+   (each covers the gap below it; the filter row sits at the top when a page has no tabs) */
+.view-stack > .surface-nav:has(.tab-line){padding-bottom:var(--content-gutter);margin-bottom:calc(-1 * var(--content-gutter))}
+.view-stack > .surface-tools{top:calc(31px + var(--content-gutter));padding-bottom:var(--content-gutter);margin-bottom:calc(-1 * var(--content-gutter))}
+.view-stack > .surface-tools:first-child{top:0}
