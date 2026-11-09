@@ -78,7 +78,7 @@ async function photoValue(raw, { client, table, rowId }) {
   const ext = png ? 'png' : 'jpg';
   const key = `${table}/${String(rowId).replace(/[^A-Za-z0-9_-]/g, '_')}-${Date.now()}.${ext}`;
   const uploaded = await client.storage.from(PHOTO_BUCKET).upload(key, new Uint8Array(bytes), { contentType: png ? 'image/png' : 'image/jpeg', upsert: false });
-  if (uploaded.error) return { error: `อัปโหลดรูปไม่ได้ (ต้องมี bucket ${PHOTO_BUCKET}: รัน db/00_main.sql)` };
+  if (uploaded.error) return { error: `อัปโหลดรูปไม่ได้: ${uploaded.error.message}` };
   return client.storage.from(PHOTO_BUCKET).getPublicUrl(key).data.publicUrl;
 }
 
