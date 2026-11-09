@@ -59,14 +59,25 @@ function adminValue(column, raw, { insert, current, departments }) {
   return String(raw).trim();
 }
 
+// Logo PNG keeps a transparent background. JPEG cannot, so a transparent PNG turned black.
+function pngBytes(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return null;
+  const bytes = Buffer.from(match[1], 'base64');
+  if (bytes.length < 32 || bytes.length > 700000 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return null;
+  return bytes;
+}
+
 // New photo -> upload and return its link · '' -> null (remove) · not sent -> undefined (unchanged) · bad -> { error }.
 async function photoValue(raw, { client, table, rowId }) {
   if (raw === undefined) return undefined;
   if (raw === null || raw === '') return null;
-  const bytes = imageBytes(raw);
-  if (!bytes) return { error: 'รูปต้องเป็น JPEG ไม่เกิน 700 KB' };
-  const key = `${table}/${String(rowId).replace(/[^A-Za-z0-9_-]/g, '_')}-${Date.now()}.jpg`;
-  const uploaded = await client.storage.from(PHOTO_BUCKET).upload(key, new Uint8Array(bytes), { contentType: 'image/jpeg', upsert: false });
+  const png = String(raw).startsWith('data:image/png');
+  const bytes = png ? pngBytes(raw) : imageBytes(raw);
+  if (!bytes) return { error: png ? 'โลโก้ต้องเป็น PNG ไม่เกิน 700 KB' : 'รูปต้องเป็น JPEG ไม่เกิน 700 KB' };
+  const ext = png ? 'png' : 'jpg';
+  const key = `${table}/${String(rowId).replace(/[^A-Za-z0-9_-]/g, '_')}-${Date.now()}.${ext}`;
+  const uploaded = await client.storage.from(PHOTO_BUCKET).upload(key, new Uint8Array(bytes), { contentType: png ? 'image/png' : 'image/jpeg', upsert: false });
   if (uploaded.error) return { error: `อัปโหลดรูปไม่ได้ (ต้องมี bucket ${PHOTO_BUCKET}: รัน db/00_main.sql)` };
   return client.storage.from(PHOTO_BUCKET).getPublicUrl(key).data.publicUrl;
 }

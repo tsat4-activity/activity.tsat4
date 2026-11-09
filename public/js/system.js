@@ -43,7 +43,7 @@ function photoControl(id, label, value, shape = 'portrait') {
     <div class="sys-photo-actions">
       <input id="${id}" type="file" accept="image/*" data-new="" data-shape="${square ? 'square' : 'portrait'}">
       ${value ? `<label class="check"><input id="${id}-remove" type="checkbox"> ลบรูป</label>` : ''}
-      <span class="sum-meta">${square ? 'ครอปเป็น 1 : 1 อัตโนมัติ' : 'ครอปเป็น 2.5 : 3 อัตโนมัติ'}</span>
+      <span class="sum-meta">${square ? 'ครอปเป็น 1 : 1 และคงพื้นโปร่งของ PNG' : 'ครอปเป็น 2.5 : 3 อัตโนมัติ'}</span>
     </div>
   </div></div>`;
 }
@@ -57,7 +57,7 @@ function bindPhotoControl(id) {
     if (!file) return;
     try {
       const square = input.dataset.shape === 'square';
-      input.dataset.new = await cropJpeg(file, square ? 512 : 500, square ? 512 : 600);
+      input.dataset.new = await cropJpeg(file, square ? 512 : 500, square ? 512 : 600, 250000, square ? 'image/png' : 'image/jpeg');
       $(`${id}-view`).src = input.dataset.new;
       $(`${id}-view`).hidden = false;
       if ($(`${id}-remove`)) $(`${id}-remove`).checked = false;

@@ -62,8 +62,8 @@ alter table public.mt_main_employee add column if not exists photo text;
 do $$ begin
   if to_regclass('storage.buckets') is not null then
     insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-    values ('img_main', 'img_main', true, 716800, array['image/jpeg'])
-    on conflict (id) do nothing;
+    values ('img_main', 'img_main', true, 716800, array['image/jpeg', 'image/png'])
+    on conflict (id) do update set allowed_mime_types = array['image/jpeg', 'image/png'];
   end if;
 end $$;
 
