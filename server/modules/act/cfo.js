@@ -365,7 +365,9 @@ export function mountCfo(app) {
   // ---------- Setting > EF SAP: usage_ef (ผู้ใช้กำหนด 2026-11-09) ----------
   // Id_usage · Id_cfp · กลุ่ม · ชื่อ · Usage_ef (kgCO₂e ต่อ 1 หน่วย SAP เตรียมไว้แล้ว) · material = รหัส SAP ที่จับคู่ไฟล์ sap10
   const usageReady = async (t) => !(await tx.from(t.usageEf).select('id').limit(1)).error;
-  const usageNo = (n) => `Usage-${String(n).padStart(4, '0')}`;
+  // SAP Usage (ของใช้สิ้นเปลือง) = Usage-0001 … · SAP Mat'l (วัตถุดิบ) = Mat-0001 … (ผู้ใช้กำหนด 2026-11-09)
+  const USAGE_PREFIX = { usage: 'Usage', mat: 'Mat' };
+  const usageNo = (n, kind = 'usage') => `${USAGE_PREFIX[kind] || 'Usage'}-${String(n).padStart(4, '0')}`;
   // EF of a usage activity: a copy in mt_cfo_ef (code usage:<id>:<scope>) · a new value makes a new copy, old entries keep theirs
   const efUsage = async (t, item, scopeCode) => {
     const base = `usage:${item.id}:${scopeCode}`;
@@ -391,11 +393,14 @@ export function mountCfo(app) {
     if (!(await usageReady(t))) return fail(res, 400, 'ให้รัน db/act/cfo.sql ก่อน (ตาราง usage_ef)');
     const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
     if (!list.length) return fail(res, 400, 'ยังไม่มีข้อมูล');
+    const kind = USAGE_PREFIX[req.body?.kind] ? req.body.kind : 'usage';
+    const prefix = USAGE_PREFIX[kind];
     const [have, refList] = await Promise.all([fetchAll(() => tx.from(t.usageEf).select('*')), fetchAll(() => tx.from(t.efRef).select('id,code,name,unit,total').in('sheet', MAT_SHEETS))]);
     const refs = new Map(refList.filter((r) => r.code).map((r) => [String(r.code).toUpperCase(), r]));
     const byMat = new Map(have.map((r) => [r.material, r]));
     const byId = new Map(have.map((r) => [r.id, r]));
-    let next = Math.max(0, ...have.map((r) => Number(r.id.slice(6)) || 0));
+    const numOf = (id) => Number(String(id).split('-')[1]) || 0;
+    let next = Math.max(0, ...have.filter((r) => r.id.startsWith(`${prefix}-`)).map((r) => numOf(r.id)));
     const errors = [];
     const out = [];
     const seen = new Set();
@@ -411,12 +416,12 @@ export function mountCfo(app) {
       seen.add(material);
       if (!(value > 0)) { errors.push(`${at}: Usage_ef ต้องเป็นตัวเลขมากกว่า 0`); continue; }
       if (code && !ref) { errors.push(`${at}: ไม่พบ Id_cfp ${code} ในตาราง EF CFP (Import ชีต cfp ที่ Emission Factor ก่อน)`); continue; }
-      if (wantId && !/^Usage-\d+$/i.test(wantId)) { errors.push(`${at}: Id_usage ต้องเป็นแบบ Usage-0001`); continue; }
-      const old = byMat.get(material) || (wantId && byId.get(usageNo(Number(wantId.slice(6))))) || null;
-      const id = old?.id || (wantId ? usageNo(Number(wantId.slice(6))) : null);
+      if (wantId && !new RegExp(`^${prefix}-\\d+$`, 'i').test(wantId)) { errors.push(`${at}: Id ต้องเป็นแบบ ${usageNo(1, kind)}`); continue; }
+      const old = byMat.get(material) || (wantId && byId.get(usageNo(numOf(wantId), kind))) || null;
+      const id = old?.id || (wantId ? usageNo(numOf(wantId), kind) : null);
       if (id && byId.get(id) && byId.get(id).material !== material && !byMat.get(material)) { errors.push(`${at}: ${id} เป็นของ material ${byId.get(id).material}`); continue; }
       const row = { id, material, ref_id: ref ? ref.id : code === '' && old ? old.ref_id : null, grp: text(b.group, 120) || old?.grp || '', name: text(b.name, 300) || old?.name || material,
-        unit: text(b.unit, 20) || old?.unit || null, usage_ef: value, status: b.status === 'Inactive' ? 'Inactive' : 'Active' };
+        unit: text(b.unit, 20) || old?.unit || null, usage_ef: value, status: b.status === 'Inactive' ? 'Inactive' : 'Active', kind };
       if (!row.grp) { errors.push(`${at}: ระบุกลุ่ม`); continue; }
       out.push({ row, old, ref });
     }
@@ -428,7 +433,7 @@ export function mountCfo(app) {
       .map(({ row, ref }) => ({ material: row.material, name: row.name, unit: row.unit, value: row.usage_ef, ref: ref?.code || '', ef: ref ? Number(ref.total) : null, efUnit: ref?.unit || '' }));
     const noRef = out.filter((x) => !x.row.ref_id).length;
     if (req.body?.save === false) return res.json({ ok: true, saved: false, count: out.length, add, update: out.length - add, noRef, odd });
-    for (const x of out) if (!x.row.id) x.row.id = usageNo((next += 1));
+    for (const x of out) if (!x.row.id) x.row.id = usageNo((next += 1), kind);
     for (let i = 0; i < out.length; i += 500) must(await tx.from(t.usageEf).upsert(out.slice(i, i + 500).map((x) => x.row), { onConflict: 'id' }));
     await logRev(t, req, 'EF SAP (usage_ef)', out.length === 1 ? out[0].row.id : `${out.length} รายการ`, `บันทึก usage_ef เพิ่ม ${add} แก้ ${out.length - add}`);
     res.status(201).json({ ok: true, count: out.length, add });

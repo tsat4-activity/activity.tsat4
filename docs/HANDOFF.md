@@ -6,6 +6,7 @@
 
 ## SQL ที่รอผู้ใช้รัน
 
+- [CFO] `db/act/cfo.sql` (2026-11-09 รอบ 3): `mt_cfo_usage_ef.kind` (usage / mat) + id ขึ้นต้น Usage- หรือ Mat- (รันซ้ำได้)
 - [Main] `db/00_main.sql` (2026-11-09): เพิ่มคอลัมน์รายละเอียดองค์กรบน `mt_main_company` (ชื่อธุรกิจ สถานที่ พื้นที่ ประเภทธุรกิจ ลูกค้า พนักงาน วันที่ ลิงก์รูป) · รันใน Mx Data · รันซ้ำได้ · เปิดหน้า CFO ครั้งแรกหลังมีคอลัมน์ ระบบคัดลอกค่า `company_*` เดิมจาก `mt_cfo_setting` มาให้
 - [CFO] `inbox/import_cfo_usage_ef.sql` (2026-11-09, หลัง db/act/cfo.sql): EF CFP 83 (จับด้วยชื่อ + หน่วย + ค่า ไม่มี = id ใหม่ต่อท้าย) + usage_ef 82 + กิจกรรม Usage 69 (material × costcenter ที่เบิกจริงใน sap10) จาก `Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx` ชีต cfp / cal_ef · สร้างใหม่: `python -I scripts/import_cfo_usage_ef.py "<ไฟล์>"` · รันซ้ำได้ · ท้ายไฟล์มีตารางตรวจ
 - [CFO] `db/act/cfo.sql` (2026-11-09 รอบ 2): ตาราง `mt_cfo_usage_ef` + `mt_cfo_activity.usage_id` + calc `usage` (รันซ้ำได้)
@@ -45,6 +46,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-09 · Claude [CFO] · EF SAP: dropdown **ตาราง** = SAP Usage (kind usage, Usage-0001) / SAP Mat'l (kind mat, Mat-0001) คอลัมน์เดียวกัน · หัวตาราง 2 แถวแบบตาราง EF (Usage_ef / (kgCO₂e/unit)) · `.cfo-ue-table` พอดีหน้า
 - 2026-11-09 · ข้อมูลบริษัทของ CFO ย้ายไป `mt_main_company` · หน้า Setting > Company เหลือปีฐาน เป้าหมาย บ่อเกรอะ ปริมาณผลิต และ Fr-03.2 · Fr-01 อ่านและแก้แถว `id = main`
 
 - 2026-11-09 · Claude [CFO] · Setting **Export / Import**: Activities (`CFO_ACT_FILE` แถว 1 key แถว 2 ไทย · id = แก้ ว่าง = เพิ่ม · EF id หรือ Id_usage + costcenter · กิจกรรม sap ข้าม · ตรวจทุกแถวก่อน · EF เดิมหมวดเดิมใช้สำเนาเดิม · route `cfo/activities/import`) · EF SAP Export (คอลัมน์เดียวกับ Import) · popup ใช้ร่วม `cfoFileImport` · Emission Factor มีอยู่แล้ว · Team ใช้ร่วมกับทุกกิจกรรม ยังไม่ทำ

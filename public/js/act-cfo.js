@@ -1280,30 +1280,38 @@ function cfoSetRef(body, m, rerender, sheet) {
 // Setting > EF SAP (ผู้ใช้กำหนด 2026-11-09): ตาราง usage_ef = Id_usage · Id_cfp · กลุ่ม · material · ชื่อ · หน่วย · Usage_ef
 // (kgCO₂e ต่อ 1 หน่วย SAP ที่เตรียมไว้แล้ว รอคูณกับปริมาณ) · กิจกรรม Usage (Setting > Activities) = Id_usage × costcenter
 // · Edit data > Import SAP คูณ Qty in UnE × Usage_ef ลงกิจกรรมนั้น · Server: cfo/usage-ef, cfo/usage-import
-const cfoUsageFilter = { group: '', q: '' };
+// ตาราง (ผู้ใช้กำหนด 2026-11-09): SAP Usage = ของใช้สิ้นเปลือง (Usage-0001) · SAP Mat'l = วัตถุดิบ (Mat-0001) · คอลัมน์เดียวกัน
+const CFO_UE_KINDS = { usage: 'SAP Usage', mat: "SAP Mat'l" };
+const cfoUsageFilter = { kind: 'usage', group: '', q: '' };
 async function cfoSetUsageEf(body, m, rerender) {
   const d = await a5Api(CFO, 'cfo/usage-ef');
   if (!d.ready) { body.innerHTML = '<p class="empty">ให้รัน db/act/cfo.sql ก่อน (ตาราง usage_ef)</p>'; return; }
   const refs = new Map(m.refs.map((r) => [r.id, r]));
-  const groups = [...new Set(d.rows.map((r) => r.grp))].sort((x, y) => x.localeCompare(y, 'th'));
+  const kind = CFO_UE_KINDS[cfoUsageFilter.kind] ? cfoUsageFilter.kind : 'usage';
+  const all = d.rows.filter((r) => (r.kind || 'usage') === kind);
+  const groups = [...new Set(all.map((r) => r.grp))].sort((x, y) => x.localeCompare(y, 'th'));
+  if (!groups.includes(cfoUsageFilter.group)) cfoUsageFilter.group = '';
+  const idName = kind === 'mat' ? 'Id_mat' : 'Id_usage';
   let picked = null;
   const draw = () => {
     const term = cfoUsageFilter.q.trim().toLowerCase();
-    const list = d.rows.filter((r) => (!cfoUsageFilter.group || r.grp === cfoUsageFilter.group)
+    const list = all.filter((r) => (!cfoUsageFilter.group || r.grp === cfoUsageFilter.group)
       && (!term || `${r.id} ${r.material} ${r.name} ${r.grp} ${refs.get(r.ref_id)?.code || ''}`.toLowerCase().includes(term)));
-    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab"><thead><tr><th class="c-unit">Id_usage</th><th class="c-unit">Id_cfp</th><th class="c-formula">กลุ่ม</th><th class="c-unit">Material</th>
-      <th class="c-name">ชื่อ</th><th class="c-unit">หน่วย SAP</th><th class="num c-num">Usage_ef (kgCO₂e/หน่วย)</th><th class="num c-num">กิจกรรม</th><th class="c-unit">สถานะ</th></tr></thead>
+    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab cfo-ue-table"><thead><tr><th class="c-unit" rowspan="2">${idName}</th><th class="c-unit" rowspan="2">Id_cfp</th><th class="c-formula" rowspan="2">กลุ่ม</th>
+      <th class="c-unit" rowspan="2">Material</th><th class="c-name" rowspan="2">ชื่อ</th><th class="c-unit" rowspan="2">Units</th><th class="num c-num">Usage_ef</th><th class="num c-num" rowspan="2">กิจกรรม</th><th class="c-unit" rowspan="2">สถานะ</th></tr>
+      <tr><th class="num cfo-unit c-num">(kgCO₂e/unit)</th></tr></thead>
       <tbody>${list.map((r) => { const ref = refs.get(r.ref_id); return `<tr data-pick="${esc(r.id)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-unit"><b>${esc(r.id)}</b></td>
         <td class="c-unit"${ref ? ` title="${esc(`${ref.name} ${cfoRefNum(ref.total)} kgCO₂e/${ref.unit}`)}"` : ''}>${esc(ref?.code || '')}</td><td class="c-formula">${esc(r.grp)}</td><td class="c-unit">${esc(r.material)}</td>
         <td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.unit || '')}</td><td class="num c-num">${cfoRefNum(r.usage_ef)}</td><td class="num c-num">${r.activities || ''}</td><td class="c-unit">${esc(r.status)}</td></tr>`; }).join('')
-        || `<tr><td class="empty" colspan="9">${d.rows.length ? 'ไม่พบรายการ' : 'ยังไม่มี กด Import แล้วเลือกไฟล์ (ชีต usage_ef หรือ cal_ef)'}</td></tr>`}</tbody></table>`;
-    $('cfo-ue-count').textContent = `${list.length.toLocaleString()} รายการ · ยังไม่มี Id_cfp ${d.rows.filter((r) => !r.ref_id).length.toLocaleString()} · ใช้ในกิจกรรม ${d.rows.filter((r) => r.activities).length.toLocaleString()}`;
+        || `<tr><td class="empty" colspan="9">${all.length ? 'ไม่พบรายการ' : `ยังไม่มี ${CFO_UE_KINDS[kind]} กด Import แล้วเลือกไฟล์`}</td></tr>`}</tbody></table>`;
+    $('cfo-ue-count').textContent = `${CFO_UE_KINDS[kind]} ${list.length.toLocaleString()} รายการ · ยังไม่มี Id_cfp ${all.filter((r) => !r.ref_id).length.toLocaleString()} · ใช้ในกิจกรรม ${all.filter((r) => r.activities).length.toLocaleString()}`;
     picked = null;
     ['cfo-edit', 'cfo-del'].forEach((x) => { if ($(x)) $(x).disabled = true; });
-    bindRowSelect($('cfo-rows'), (id) => { picked = d.rows.find((r) => r.id === id); ['cfo-edit', 'cfo-del'].forEach((x) => { if ($(x)) $(x).disabled = !picked; }); });
+    bindRowSelect($('cfo-rows'), (id) => { picked = all.find((r) => r.id === id); ['cfo-edit', 'cfo-del'].forEach((x) => { if ($(x)) $(x).disabled = !picked; }); });
   };
   body.innerHTML = `
     <div class="toolbar a5-filters">
+      ${field('ตาราง', `<select id="cfo-ue-kind">${options(Object.keys(CFO_UE_KINDS), kind, (v) => CFO_UE_KINDS[v])}</select>`)}
       ${field('กลุ่ม', `<select id="cfo-ue-grp">${options(['', ...groups], cfoUsageFilter.group, (v) => v || 'ทั้งหมด')}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'Id_usage material ชื่อ กลุ่ม Id_cfp' })}
       <div class="action-bar">${button('cfo-ue-export', 'Export')}${d.admin ? `${button('cfo-import', 'Import', 'secondary', 'title="ไฟล์ Excel ชีต usage_ef (หรือ cal_ef): Id_usage · Id_cfp · group · material · material_description · bun · kgCO₂e/unit"')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}` : ''}</div>
@@ -1313,23 +1321,24 @@ async function cfoSetUsageEf(body, m, rerender) {
   $('cfo-f-q').value = cfoUsageFilter.q;
   draw();
   a5Lift(body);
+  $('cfo-ue-kind').onchange = () => { cfoUsageFilter.kind = $('cfo-ue-kind').value; cfoUsageFilter.group = ''; rerender(); };
   $('cfo-ue-grp').onchange = () => { cfoUsageFilter.group = $('cfo-ue-grp').value; draw(); };
   // Export = the same columns Import reads (row 1), so the file goes back in after editing
-  $('cfo-ue-export').onclick = () => cfoDownload(`usage_ef_${new Date().toISOString().slice(0, 10)}.csv`, [
+  $('cfo-ue-export').onclick = () => cfoDownload(`${kind === 'mat' ? 'sap_mat' : 'usage_ef'}_${new Date().toISOString().slice(0, 10)}.csv`, [
     ['Id_usage', 'Id_cfp', 'group', 'material', 'material_description', 'bun', 'kgCO₂e/unit', 'status', 'activities'],
-    ...d.rows.map((r) => [r.id, refs.get(r.ref_id)?.code || '', r.grp, r.material, r.name, r.unit || '', r.usage_ef, r.status, r.activities || 0])]);
+    ...all.map((r) => [r.id, refs.get(r.ref_id)?.code || '', r.grp, r.material, r.name, r.unit || '', r.usage_ef, r.status, r.activities || 0])]);
   const search = () => { cfoUsageFilter.q = $('cfo-f-q').value; draw(); };
   $('cfo-f-search').onclick = search;
   onEnter('cfo-f-q', search);
   if (!d.admin) return;
   const save = async (rows) => {
-    const r = await a5Api(CFO, 'cfo/usage-ef', { method: 'POST', body: { rows } });
+    const r = await a5Api(CFO, 'cfo/usage-ef', { method: 'POST', body: { rows, kind } });
     toast(`บันทึก ${r.count} รายการ`);
     closePopup();
     rerender();
   };
   const form = (r) => {
-    openPopup(r ? `แก้ไข ${esc(r.id)}` : 'เพิ่ม usage_ef', `
+    openPopup(r ? `แก้ไข ${esc(r.id)}` : `เพิ่ม ${CFO_UE_KINDS[kind]}`, `
       ${field('Material (รหัส SAP)', `<input id="cfo-ue-mat" maxlength="40" value="${esc(r?.material || '')}"${r ? ' disabled' : ''}>`)}
       ${field('กลุ่ม (ชื่อกิจกรรม)', `<input id="cfo-ue-group" maxlength="120" list="cfo-ue-groups" value="${esc(r?.grp || '')}"><datalist id="cfo-ue-groups">${groups.map((g) => `<option value="${esc(g)}">`).join('')}</datalist>`)}
       ${field('ชื่อ', `<input id="cfo-ue-name" maxlength="300" value="${esc(r?.name || '')}">`)}
@@ -1349,7 +1358,7 @@ async function cfoSetUsageEf(body, m, rerender) {
   // Import: sheet usage_ef (or cal_ef) · columns by name in row 1 · check first, then save
   $('cfo-import').onclick = () => {
     let rows = null;
-    openPopup('Import usage_ef', `
+    openPopup(`Import ${CFO_UE_KINDS[kind]}`, `
       ${field('ไฟล์ Excel (ชีต usage_ef หรือ cal_ef) หรือ CSV', '<input id="cfo-ue-file" type="file" accept=".xlsx,.xls,.csv">')}
       <p class="sum-meta">คอลัมน์: Id_usage (ว่าง = ระบบตั้งให้) · Id_cfp · group · material · material_description · bun · kgCO₂e/unit (= Usage_ef) · material ที่มีอยู่แล้ว = แก้ค่า</p>
       <div id="cfo-ue-result" class="sum-meta"></div>`, async () => {
@@ -1373,7 +1382,7 @@ async function cfoSetUsageEf(body, m, rerender) {
         rows = cells.slice(1).map((r, i) => ({ line: i + 2, id: cell(r, col.id), ref: cell(r, col.ref), group: cell(r, col.group), material: cell(r, col.material).replace(/\.0+$/, ''), name: cell(r, col.name),
           unit: cell(r, col.unit), usage_ef: cell(r, col.value), ...(col.status >= 0 && cell(r, col.status) ? { status: cell(r, col.status) } : {}) })).filter((r) => r.material);
         if (!rows.length) throw new Error('ไม่พบแถวข้อมูล');
-        const c = await a5Api(CFO, 'cfo/usage-ef', { method: 'POST', body: { rows, save: false } });
+        const c = await a5Api(CFO, 'cfo/usage-ef', { method: 'POST', body: { rows, kind, save: false } });
         $('cfo-ue-result').innerHTML = `<b>${c.count} รายการ: เพิ่ม ${c.add} · แก้ ${c.update}</b>${c.noRef ? `<br>ยังไม่มี Id_cfp ${c.noRef} รายการ (คิดได้ แต่ยังไม่บอกที่มาของค่า)` : ''}
           ${c.odd.length ? `<details open><summary>ค่าน่าสงสัย ${c.odd.length} รายการ (หน่วย kg / L แต่ค่าห่างจาก EF มาก) ตรวจก่อนบันทึก</summary><ul class="cfo-u-list">${c.odd.map((x) => `<li>${esc(x.material)} ${esc(x.name)} · ${cfoRefNum(x.value)} kgCO₂e/${esc(x.unit)}${x.ref ? ` · ${esc(x.ref)} = ${cfoRefNum(x.ef)}/${esc(x.efUnit)}` : ''}</li>`).join('')}</ul></details>` : ''}`;
       } catch (err) {

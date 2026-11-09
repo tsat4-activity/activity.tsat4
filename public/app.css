@@ -1214,3 +1214,9 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 .view-stack > .surface-nav:has(.tab-line){padding-bottom:var(--block-gap);margin-bottom:calc(-1 * var(--block-gap))}
 .view-stack > .surface-tools{top:calc(31px + var(--block-gap));padding-bottom:var(--block-gap);margin-bottom:calc(-1 * var(--block-gap))}
 .view-stack > .surface-tools:first-child{top:0}
+/* EF SAP (usage_ef): fits the page — ชื่อ takes what is left, ids / units / counts narrower than the EF tables */
+.cfo-efgrid .cfo-ue-table{width:100%}
+.cfo-efgrid .cfo-ue-table :is(td,th).c-name{width:auto;min-width:180px;max-width:none}
+.cfo-efgrid .cfo-ue-table :is(td,th).c-unit{width:90px;min-width:90px;max-width:90px}
+.cfo-efgrid .cfo-ue-table :is(td,th).c-formula{width:150px;min-width:150px;max-width:150px}
+.cfo-efgrid .cfo-ue-table :is(td,th).c-num{width:100px;min-width:100px;max-width:100px}

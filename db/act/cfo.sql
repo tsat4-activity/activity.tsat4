@@ -391,7 +391,7 @@ drop table mat_group_map;
 -- id = Id_usage (Usage-0001 …) · material = รหัส SAP ที่ใช้จับคู่ไฟล์ sap10 · ref_id = Id_cfp (EF CFP ที่มาของค่า) · grp = กลุ่ม
 -- กิจกรรม calc = usage: 1 กิจกรรม = Id_usage × costcenter · Edit data > Import SAP: Qty in UnE × usage_ef ลงเดือนของกิจกรรมนั้น
 create table if not exists public.mt_cfo_usage_ef (
-  id text primary key check (id ~ '^Usage-[0-9]+$'),
+  id text primary key check (id ~ '^(Usage|Mat)-[0-9]+$'),
   material text not null unique,
   ref_id bigint references public.mt_cfo_ef_ref (id) on delete set null,
   grp text not null,
@@ -400,6 +400,11 @@ create table if not exists public.mt_cfo_usage_ef (
   usage_ef numeric not null check (usage_ef > 0),
   status text not null default 'Active' check (status in ('Active', 'Inactive'))
 );
+-- kind (ผู้ใช้กำหนด 2026-11-09, EF SAP ตาราง): usage = SAP Usage ของใช้สิ้นเปลือง (Usage-0001 …) · mat = SAP Mat'l วัตถุดิบ (Mat-0001 …)
+alter table public.mt_cfo_usage_ef add column if not exists kind text not null default 'usage';
+alter table public.mt_cfo_usage_ef drop constraint if exists mt_cfo_usage_ef_kind, drop constraint if exists mt_cfo_usage_ef_id_check;
+alter table public.mt_cfo_usage_ef add constraint mt_cfo_usage_ef_kind check (kind in ('usage', 'mat')),
+  add constraint mt_cfo_usage_ef_id_check check (id ~ '^(Usage|Mat)-[0-9]+$');
 alter table public.mt_cfo_activity add column if not exists usage_id text references public.mt_cfo_usage_ef (id) on update cascade;
 create unique index if not exists mt_cfo_activity_usage on public.mt_cfo_activity (usage_id, costcenter) where usage_id is not null;
 
