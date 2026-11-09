@@ -175,7 +175,8 @@ function aplRow(task, code, color, g, lines, canEdit, phase, canUp = false, canD
   // Light bar = plan (start → end, the one you drag). Dark bar = actual, from the start to the day it was done,
   // or to today while open — so it stops short when done early and runs past the end when late (ผู้ใช้กำหนด 2026-10-29).
   const act = pos ? aplPlace({ start_date: task.start_date, end_date: aplActualEnd(task) }, g) : null;
-  const tip = `${esc(task.title)} · ${span} · ${task.progress}%`;
+  const when = task.start_date ? `${actShort(task.start_date)} – ${actShort(task.end_date)}` : '';
+  const tip = [esc(task.title), when ? `ช่วง: ${esc(when)}` : '', plan.text ? `สถานะ: ${esc(plan.text)}` : '', `ความคืบหน้า: ${task.progress}%`].filter(Boolean).join(' · ');
   const bar = pos ? `<div class="apl-bar${canEdit ? ' is-editable' : ''}" data-bar="${task.id}" data-a="${pos.a}" data-b="${pos.b}" style="left:${aplPct(pos.a, g)};width:${aplPct(pos.b - pos.a + 1, g)};--bar:${color}" title="${tip}">
       ${canEdit && !task.derived ? '<div class="apl-handle is-l" data-h="l"></div><div class="apl-handle is-r" data-h="r"></div>' : ''}</div>
     ${act ? `<div class="apl-act" style="left:${aplPct(act.a, g)};width:${aplPct(Math.min(act.b, pos.b) - act.a + 1, g)};--bar:${color}"></div>

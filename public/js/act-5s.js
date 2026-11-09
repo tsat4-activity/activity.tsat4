@@ -349,7 +349,7 @@ async function a5DrawAuditors(body, activity) {
         const isPass = stat.percent >= passTarget;
         const clr = stat.percent >= 100 ? 'var(--mo-success)' : isPass ? 'var(--mo-info)' : 'var(--mo-danger)';
         const tag = isPass ? 'ผ่าน' : 'ไม่ผ่าน';
-        return `<td class="num" title="แผน ${stat.planned} ครั้ง · ตรวจจริง ${stat.actual} ครั้ง (${tag})">${stat.actual}/${stat.planned} <b style="color:${clr}">(${stat.percent}%)</b></td>`;
+        return `<td class="num" title="${esc(`การมีส่วนร่วม · แผน: ${stat.planned} ครั้ง · ตรวจจริง: ${stat.actual} ครั้ง · ผล: ${tag}`)}">${stat.actual}/${stat.planned} <b style="color:${clr}">(${stat.percent}%)</b></td>`;
       }).join('');
 
       const teamColor = a5TeamColor(a.team);
@@ -487,12 +487,12 @@ function a5Dot(year, plan, audit, today) {
   const color = a5TeamColor(team);
   if (audit) {
     const fixed = audit.issues > 0 && audit.openIssues === 0;
-    const title = `${audit.auditNo} · ทีม ${team || '-'} · ${audit.percent}%${audit.issues ? ` · Issue ${audit.issues - audit.openIssues}/${audit.issues} แก้แล้ว` : ''}`;
+    const title = [audit.auditNo, `ทีม: ${team || '-'}`, `Score: ${audit.percent}%`, audit.issues ? `Issue: ${audit.issues - audit.openIssues}/${audit.issues} แก้แล้ว` : ''].filter(Boolean).join(' · ');
     return `<span class="a5-dot is-done${fixed ? ' is-fixed' : ''}" style="--team:${color}" title="${esc(title)}"></span>`;
   }
   if (plan) {
     const missed = a5WeekEnd(year, plan.month, plan.week) < today;
-    const title = `แผน ทีม ${team}${plan.round ? ` ครั้งที่ ${plan.round}` : ''}${missed ? ' · ไม่ได้ตรวจตามช่วงแผน' : ' · รอตรวจ'}`;
+    const title = ['แผนตรวจ', `ทีม: ${team || '-'}`, plan.round ? `ครั้งที่: ${plan.round}` : '', `สถานะ: ${missed ? 'ไม่ได้ตรวจตามช่วงแผน' : 'รอตรวจ'}`].filter(Boolean).join(' · ');
     return `<span class="a5-dot ${missed ? 'is-missed' : 'is-plan'}" style="--team:${color}" title="${esc(title)}">${missed ? '' : esc(team)}</span>`;
   }
   return '<span class="a5-dot"></span>';

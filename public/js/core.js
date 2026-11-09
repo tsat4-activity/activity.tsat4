@@ -878,9 +878,23 @@ const DASH_ROW_MAX = 44;
   new MutationObserver((list) => { if (list.some((m) => !m.target.closest?.('.ch-tip'))) now(); }).observe(view, { childList: true, subtree: true });
 })();
 
-// Text cut off with … shows in full on hover (ผู้ใช้กำหนด 2026-10-29, ย้ำ 2026-11-01): one floating box for the whole app,
-// next to the cut-off text, at once. A cut-off element's title becomes the box text (the browser's slow tooltip is
-// turned off for it); an element that is not cut off keeps its own title.
+// One light hover card for the whole app (ผู้ใช้กำหนด 2026-11-09): the same surface, border and rows as a chart tip.
+// A title, or text cut off with …, shows here at once. " · " splits a heading from the rows; "ชื่อ: ค่า" becomes a row.
+// The browser tooltip is turned off for that element so the two do not stack.
+function ovTipHtml(text) {
+  const parts = text.split(/\s*·\s*/).map((s) => s.trim()).filter(Boolean);
+  if (parts.length < 2) return esc(text);
+  let head = '';
+  const rows = [];
+  parts.forEach((part) => {
+    const named = /^([^:]{1,24}):\s*(.+)$/.exec(part);
+    if (named) rows.push([named[1], named[2]]);
+    else if (!head) head = part;
+    else rows.push(['', part]);
+  });
+  if (!rows.length) return esc(text);
+  return `${head ? `<strong>${esc(head)}</strong>` : ''}${rows.map(([k, v]) => `<div class="ch-tip-row">${k ? `<span>${esc(k)}</span>` : ''}<b>${esc(v)}</b></div>`).join('')}`;
+}
 const OVERFLOW_TIP = (() => {
   if (!window.matchMedia('(hover: hover)').matches) return null;
   const tip = document.createElement('div');
@@ -888,27 +902,44 @@ const OVERFLOW_TIP = (() => {
   tip.hidden = true;
   document.body.append(tip);
   let shown = null;
-  const clipped = (el) => {
-    for (let node = el, k = 0; node && k < 4 && node !== document.body; node = node.parentElement, k += 1) {
-      if (node.matches('input, select, textarea, .ov-tip')) return null;
+  const source = (el) => {
+    for (let node = el, k = 0; node && k < 5 && node !== document.body; node = node.parentElement, k += 1) {
+      if (node.matches('input, select, textarea, .ov-tip, .ch-tip')) return null;
+      if ((node.dataset.tip || node.getAttribute('title') || '').trim()) return node;
       const style = getComputedStyle(node);
       const oneLine = style.textOverflow === 'ellipsis' || (style.overflow === 'hidden' && style.whiteSpace === 'nowrap');
       if (oneLine && node.scrollWidth > node.clientWidth + 1 && node.textContent.trim() && node.textContent.length < 400) return node;
-      if (node.title) return null;
     }
     return null;
   };
-  document.addEventListener('mouseover', (e) => {
-    const node = e.target instanceof Element ? clipped(e.target) : null;
+  const place = (node) => {
+    const r = node.getBoundingClientRect();
+    const w = tip.offsetWidth;
+    const h = tip.offsetHeight;
+    tip.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+    tip.style.top = `${r.bottom + 6 + h > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  };
+  const show = (node) => {
     if (node === shown) return;
     shown = node;
     tip.hidden = !node;
     if (!node) return;
-    if (node.title) { node.dataset.tip = node.title; node.removeAttribute('title'); }
-    tip.textContent = (node.dataset.tip || node.textContent).trim().replace(/\s+/g, ' ').slice(0, 500);
-    const r = node.getBoundingClientRect();
-    tip.style.left = `${Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`;
-    tip.style.top = `${r.bottom + 4 + tip.offsetHeight > innerHeight ? r.top - tip.offsetHeight - 4 : r.bottom + 4}px`;
+    if (node.title) {
+      node.dataset.tip = node.title;
+      if (!node.getAttribute('aria-label')) node.setAttribute('aria-label', node.title);
+      node.removeAttribute('title');
+    }
+    const text = (node.dataset.tip || node.textContent).trim().replace(/\s+/g, ' ').slice(0, 500);
+    tip.innerHTML = ovTipHtml(text);
+    tip.classList.toggle('is-plain', !tip.querySelector('strong'));
+    place(node);
+  };
+  document.addEventListener('mouseover', (e) => { show(e.target instanceof Element ? source(e.target) : null); });
+  document.addEventListener('mouseout', (e) => {
+    if (!shown) return;
+    const to = e.relatedTarget;
+    if (to instanceof Element && (to === shown || shown.contains(to))) return;
+    show(null);
   });
   return tip;
 })();
