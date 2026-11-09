@@ -25,7 +25,7 @@ export async function loadUser(employeeId, { fresh = false } = {}) {
   const { data, error } = await mx
     .from('mt_main_user')
     // '*' so executive / admin_of read as missing (not an error) before db/06_main_user_access.sql is run.
-    .select('*,mt_main_employee!mt_main_user_employee_id_fkey(prefix,first_name,last_name,department,position,status)')
+    .select('*,mt_main_employee!mt_main_user_employee_id_fkey(prefix,first_name,last_name,department,position,status,photo)')
     .eq('employee_id', employeeId)
     .maybeSingle();
   if (error) throw error;
@@ -75,6 +75,7 @@ export function publicUser(row) {
     name: nameOf(employee),
     department: row.department || employee.department || '',
     position: employee.position || '',
+    photo: employee.photo || '',
     passwordExpiresAt: row.password_expires_at,
     passwordExpired: new Date(row.password_expires_at).getTime() <= Date.now()
   };

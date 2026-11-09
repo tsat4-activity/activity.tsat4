@@ -644,6 +644,19 @@ function showShell() {
   if ($('header-user-name')) $('header-user-name').textContent = name;
   if ($('header-user-id')) $('header-user-id').textContent = me.employeeId;
   if ($('header-user-role')) $('header-user-role').textContent = access;
+  const avatarBtn = $('user-menu-btn');
+  const avatarImg = $('header-user-photo');
+  if (avatarBtn && avatarImg) {
+    if (me.photo) {
+      avatarImg.src = me.photo;
+      avatarImg.hidden = false;
+      avatarBtn.classList.add('has-photo');
+    } else {
+      avatarImg.removeAttribute('src');
+      avatarImg.hidden = true;
+      avatarBtn.classList.remove('has-photo');
+    }
+  }
   $('header-user').textContent = name;
   $('header-role').textContent = `${access} · ${me.employeeId}`;
   document.querySelectorAll('[data-system]').forEach((node) => node.classList.toggle('d-none', !me.creator));

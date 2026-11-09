@@ -49,8 +49,10 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.d-none{display:
 .theme-toggle,.icon-btn{width:28px;height:28px;border:0;border-radius:50%;background:transparent;color:var(--mo-text-muted);display:grid;place-items:center}
 .theme-toggle:hover,.icon-btn:hover{background:var(--mo-surface-2);color:var(--mo-primary)}
 .user-menu{position:relative}
-.user-avatar{width:28px;height:28px;border-radius:50%;border:1px solid var(--mo-border);background:var(--mo-surface-2);color:var(--mo-text);display:grid;place-items:center;padding:0}
+.user-avatar{position:relative;width:28px;height:28px;border-radius:50%;border:1px solid var(--mo-border);background:var(--mo-surface-2);color:var(--mo-text);display:grid;place-items:center;padding:0;overflow:hidden}
 .user-avatar .material-symbols-rounded{font-size:18px}
+.user-avatar-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.user-avatar.has-photo .user-avatar-fallback{display:none}
 html[data-theme="dark"] .user-avatar{background:#fafafa;color:#171717;border-color:#fafafa}
 .user-pop{display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:168px;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:var(--mo-radius);padding:8px 10px;z-index:30;text-align:right;box-shadow:0 8px 24px rgba(0,0,0,.18)}
 .user-menu:hover .user-pop,.user-menu:focus-within .user-pop,.user-menu.open .user-pop{display:block}
@@ -59,8 +61,10 @@ html[data-theme="dark"] .user-avatar{background:#fafafa;color:#171717;border-col
 .user-pop span{font-size:10.5px;color:var(--mo-text-muted)}
 .user-pop .btn{width:100%;margin-top:8px}
 .sidebar{position:fixed;top:var(--drive-header);bottom:0;left:0;width:var(--drive-sidebar);background:var(--mo-surface);border-right:1px solid var(--mo-border);padding:6px 8px 8px;overflow:auto;z-index:15;transition:width .2s ease;display:flex;flex-direction:column;gap:2px}
-.sidebar-top{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:2px 4px 8px;margin-bottom:2px;border-bottom:1px solid var(--mo-line)}
-.sidebar-top-title{font-size:11px;font-weight:600;color:var(--mo-text-muted);letter-spacing:.02em;text-transform:uppercase;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-home{display:flex;align-items:center;gap:4px;margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--mo-line)}
+.nav-home .nav-home-btn{flex:1 1 auto;min-width:0;margin:0}
+.nav-home .sidebar-toggle{flex:0 0 auto;width:28px;height:28px;color:var(--mo-text-muted)}
+.nav-home .sidebar-toggle:hover{color:var(--mo-text)}
 .nav-system{margin-top:auto;padding-top:8px;border-top:1px solid var(--mo-border)}
 .nav-btn{width:100%;height:28px;border:0;background:transparent;display:flex;align-items:center;gap:6px;padding:0 8px;margin:1px 0;border-radius:var(--mo-radius);color:var(--mo-text-muted);text-align:left;font-size:12px;font-weight:400}
 .nav-btn > span:not(.material-symbols-rounded){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -270,8 +274,10 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
   body.sidebar-collapsed{--drive-sidebar:52px}
   body.sidebar-collapsed .sidebar{padding:12px 8px;overflow-x:hidden}
   body.sidebar-collapsed .nav-split{display:block}
-  body.sidebar-collapsed .nav-btn span:not(.material-symbols-rounded),body.sidebar-collapsed .nav-caret,body.sidebar-collapsed .nav-caret-btn,body.sidebar-collapsed .sidebar-top-title{display:none}
-  body.sidebar-collapsed .sidebar-top{justify-content:center;padding-bottom:6px}
+  body.sidebar-collapsed .nav-btn span:not(.material-symbols-rounded),body.sidebar-collapsed .nav-caret,body.sidebar-collapsed .nav-caret-btn{display:none}
+  body.sidebar-collapsed .nav-home{flex-direction:column;align-items:center;gap:4px;padding-bottom:8px}
+  body.sidebar-collapsed .nav-home .nav-home-btn{justify-content:center;padding:0;width:32px;margin:0 auto}
+  body.sidebar-collapsed .nav-home .sidebar-toggle{width:32px;height:32px}
   body.sidebar-collapsed .nav-btn{justify-content:center;padding:0;width:32px;margin:1px auto}
   body.sidebar-collapsed .nav-sub{padding-left:0}
   body.sidebar-collapsed .nav-acc.is-collapsed .nav-sub{display:none}

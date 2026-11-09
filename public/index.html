@@ -88,7 +88,8 @@
         </button>
         <div class="user-menu" id="user-menu">
           <button class="user-avatar" type="button" id="user-menu-btn" aria-label="ผู้ใช้">
-            <span class="material-symbols-rounded">person</span>
+            <img id="header-user-photo" class="user-avatar-img" alt="" width="28" height="28" hidden>
+            <span class="material-symbols-rounded user-avatar-fallback" aria-hidden="true">person</span>
           </button>
           <div class="user-pop">
             <strong id="header-user"></strong>
@@ -101,13 +102,12 @@
       </div>
     </header>
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-top">
+      <div class="nav-home">
         <button class="icon-btn sidebar-toggle" type="button" id="sidebar-toggle" aria-label="ย่อ/ขยายเมนู" title="ย่อ/ขยายเมนู">
           <span id="sidebar-toggle-icon" class="material-symbols-rounded">left_panel_close</span>
         </button>
-        <span class="sidebar-top-title">เมนู</span>
+        <button class="nav-btn nav-home-btn" data-view="main" title="หน้าหลัก"><span class="material-symbols-rounded">home</span><span>หน้าหลัก</span></button>
       </div>
-      <button class="nav-btn" data-view="main" title="TSAT4 Activity"><span class="material-symbols-rounded">home</span><span>หน้าหลัก</span></button>
       <div class="nav-acc" data-nav-acc="activity">
         <div class="nav-split">
           <button class="nav-btn nav-parent" type="button" data-view="activity" title="Activity">

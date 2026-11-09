@@ -1380,8 +1380,8 @@ async function aplHome(target) {
   const now = new Date().getFullYear();
   const years = [...new Set([now - 2, now - 1, now, now + 1, a5Year])].filter((y) => y >= 2000 && y <= 2100).sort();
   target.innerHTML = viewShellPageBar(
-    '<strong class="plan-label">ภาพรวมกิจกรรมในโรงงาน</strong>',
-    field('ปี', `<select id="ov-year">${options(years, a5Year)}</select>`),
+    '',
+    `<div class="a5-year">${field('ปี', `<select id="ov-year">${options(years, a5Year)}</select>`)}</div>`,
     '<div class="empty">กำลังโหลด...</div>',
     'ov',
     { mainId: 'ov-body' },
