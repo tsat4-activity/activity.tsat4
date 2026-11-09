@@ -87,12 +87,49 @@ def main(path):
             "  (select m.ref_id from x_map m where upper(m.file_code) = upper(x.ref)), x.grp, x.name, x.unit, x.usage_ef, 'Active'",
             'from x_ue x',
             'on conflict (material) do update set ref_id = excluded.ref_id, grp = excluded.grp, name = excluded.name, unit = excluded.unit, usage_ef = excluded.usage_ef;',
-            '',
-            '-- ผล: Id_cfp ในไฟล์ → id ในระบบ (ไม่พบ = ควรไม่มี) · EF CFP ที่เพิ่มใหม่รอบนี้',
+            '']
+
+    # 3) activities: every material of usage_ef × costcenter issued in sheet sap10 (net qty > 0) = 1 activity (calc usage)
+    pairs = []
+    if 'sap10' in wb.sheetnames:
+        head, rows = rows_of(wb['sap10'])
+        at = lambda *k: next((head.index(x) for x in k if x in head), -1)
+        mi, ci, qi = at('material'), at('costctr', 'costcenter'), at('qtyinune', 'qty')
+        mats = {str(r[c['mat']]).strip().removesuffix('.0').lstrip('0') for r in items}
+        net = {}
+        for r in rows:
+            if mi < 0 or not r[mi] or r[ci] in (None, '') or r[qi] in (None, ''):
+                continue
+            mat = str(r[mi]).strip().removesuffix('.0').lstrip('0')
+            if mat in mats:
+                key = (mat, str(r[ci]).strip().removesuffix('.0').upper())
+                net[key] = net.get(key, 0) - float(r[qi])  # SAP issue = minus
+        pairs = sorted(k for k, v in net.items() if v > 0)
+    if pairs:
+        out += [f'-- 3) กิจกรรม Usage {len(pairs)} รายการ = material ใน usage_ef × costcenter ที่เบิกจริงในชีต sap10 (Id_usage × costcenter, Scope 3-1)',
+                '--    หน่วยงาน = department ของ costcenter (mt_main_costcenter) · ชื่อ = กลุ่ม · มีอยู่แล้วไม่สร้างซ้ำ · EF = สำเนา Usage_ef (usage:<Id_usage>:3-1)',
+                'create temp table x_act (material text, costcenter text) on commit drop;',
+                'insert into x_act values', ',\n'.join(f'  ({q(m)}, {q(cc)})' for m, cc in pairs) + ';',
+                'insert into public.mt_cfo_ef (code, scope_code, kind, name, detail, unit, kgco2e, ref_id, reference, year, status)',
+                "select case when exists (select 1 from public.mt_cfo_ef f where f.code = 'usage:' || u.id || ':3-1') then 'usage:' || u.id || ':3-1:' || ((select count(*) from public.mt_cfo_ef f where f.code ~ ('^usage:' || u.id || ':3-1(:[0-9]+)?$')) + 1) else 'usage:' || u.id || ':3-1' end,",
+                "  '3-1', u.grp, u.name, u.id || ' · material ' || u.material, coalesce(u.unit, 'unit'), u.usage_ef, u.ref_id, 'Setting > EF SAP (usage_ef)', extract(year from now())::int, 'Active'",
+                'from public.mt_cfo_usage_ef u where u.material in (select material from x_act)',
+                "  and not exists (select 1 from public.mt_cfo_ef f where f.code ~ ('^usage:' || u.id || ':3-1(:[0-9]+)?$') and f.kgco2e = u.usage_ef and f.unit = coalesce(u.unit, 'unit') and f.ref_id is not distinct from u.ref_id);",
+                'insert into public.mt_cfo_activity (ef_id, gwp_code, department, name, detail, calc, status, usage_id, costcenter)',
+                "select (select f.id from public.mt_cfo_ef f where f.code ~ ('^usage:' || u.id || ':3-1(:[0-9]+)?$') and f.kgco2e = u.usage_ef order by f.id desc limit 1),",
+                "  coalesce((select code from public.mt_cfo_gwp where code = 'AR5'), (select code from public.mt_cfo_gwp order by code limit 1)),",
+                "  coalesce(c.department, x.costcenter), u.grp, coalesce(c.department, x.costcenter) || ' : ' || x.costcenter || coalesce(' ' || c.object_name, ''), 'usage', 'Active', u.id, x.costcenter",
+                'from x_act x join public.mt_cfo_usage_ef u on u.material = x.material',
+                'left join public.mt_main_costcenter c on upper(trim(c.costcenter::text)) = x.costcenter',
+                'where not exists (select 1 from public.mt_cfo_activity a where a.usage_id = u.id and upper(a.costcenter) = x.costcenter);',
+                '']
+    out += ['-- ผล: Id_cfp ในไฟล์ → id ในระบบ (ไม่พบ = ควรไม่มี) · EF CFP ที่เพิ่มใหม่รอบนี้ · จำนวนกิจกรรม Usage',
             "select case when m.db_code is null then 'ไม่พบ' else 'Id_cfp ในไฟล์ → id ในระบบ' end as check, x.material, x.ref as file_id, m.db_code, x.name",
             'from x_ue x left join x_map m on upper(m.file_code) = upper(x.ref) where x.ref is not null',
             'union all',
-            "select 'EF CFP เพิ่มใหม่', null, x.code, m.db_code, x.name from x_new x join x_map m on m.file_code = x.code;",
+            "select 'EF CFP เพิ่มใหม่', null, x.code, m.db_code, x.name from x_new x join x_map m on m.file_code = x.code",
+            'union all',
+            "select 'กิจกรรม Usage ทั้งหมด', null, null, count(*)::text, null from public.mt_cfo_activity where calc = 'usage';",
             '', 'commit;', '', "notify pgrst, 'reload schema';", '']
     target = ROOT / 'inbox' / 'import_cfo_usage_ef.sql'
     target.write_text('\n'.join(out), encoding='utf-8')

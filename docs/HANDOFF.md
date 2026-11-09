@@ -6,7 +6,7 @@
 
 ## SQL ที่รอผู้ใช้รัน
 
-- [CFO] `inbox/import_cfo_usage_ef.sql` (2026-11-09, หลัง db/act/cfo.sql): EF CFP 83 (CFP-0726…0808, เพิ่มเฉพาะที่ยังไม่มี) + usage_ef 82 จาก `Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx` ชีต cfp / cal_ef · สร้างใหม่: `python -I scripts/import_cfo_usage_ef.py "<ไฟล์>"` · รันซ้ำได้ · ท้ายไฟล์มีตารางตรวจ
+- [CFO] `inbox/import_cfo_usage_ef.sql` (2026-11-09, หลัง db/act/cfo.sql): EF CFP 83 (จับด้วยชื่อ + หน่วย + ค่า ไม่มี = id ใหม่ต่อท้าย) + usage_ef 82 + กิจกรรม Usage 69 (material × costcenter ที่เบิกจริงใน sap10) จาก `Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx` ชีต cfp / cal_ef · สร้างใหม่: `python -I scripts/import_cfo_usage_ef.py "<ไฟล์>"` · รันซ้ำได้ · ท้ายไฟล์มีตารางตรวจ
 - [CFO] `db/act/cfo.sql` (2026-11-09 รอบ 2): ตาราง `mt_cfo_usage_ef` + `mt_cfo_activity.usage_id` + calc `usage` (รันซ้ำได้)
 - [CFO] `inbox/clear_cfo_ef_sap.sql` (2026-11-09, ไม่บังคับ · ลบถาวร): ผู้ใช้สั่งล้างหน้า EF SAP ทั้งหมด (กลุ่ม · วัสดุ · Usage · กิจกรรม calc = sap + ปริมาณรายเดือน) · ขั้น 1 ดูจำนวน ขั้น 2 begin…commit
 - [CFO] `db/act/cfo.sql` (2026-11-09): คอลัมน์ `mt_cfo_material.kgco2e_unit` สำหรับ Import cal_ef (รันซ้ำได้ เพิ่มแค่คอลัมน์)
