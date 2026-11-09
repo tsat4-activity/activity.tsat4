@@ -1353,12 +1353,12 @@ async function cfoSetUsageEf(body, m, rerender) {
     const term = cfoUsageFilter.q.trim().toLowerCase();
     const list = all.filter((r) => (!cfoUsageFilter.group || r.grp === cfoUsageFilter.group)
       && (!term || `${r.id} ${r.material} ${r.name} ${r.grp} ${refs.get(r.ref_id)?.code || ''}`.toLowerCase().includes(term)));
-    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab cfo-ue-table"><thead><tr><th class="c-unit" rowspan="2">${idName}</th><th class="c-unit" rowspan="2">Id_cfp</th><th class="c-formula" rowspan="2">กลุ่ม</th>
-      <th class="c-unit" rowspan="2">Material</th><th class="c-name" rowspan="2">ชื่อ</th><th class="c-unit" rowspan="2">Units</th><th class="num c-num">Usage_ef</th><th class="num c-num" rowspan="2">กิจกรรม</th><th class="c-unit" rowspan="2">สถานะ</th></tr>
-      <tr><th class="num cfo-unit c-num">(kgCO₂e/unit)</th></tr></thead>
-      <tbody>${list.map((r) => { const ref = refs.get(r.ref_id); return `<tr data-pick="${esc(r.id)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-unit"><b>${esc(r.id)}</b></td>
+    $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab cfo-ue-table"><thead><tr><th class="c-id" rowspan="2">${idName}</th><th class="c-unit" rowspan="2">Id_cfp</th><th class="c-formula" rowspan="2">กลุ่ม</th>
+      <th class="c-unit" rowspan="2">Material</th><th class="c-name" rowspan="2">ชื่อ</th><th class="c-unit" rowspan="2">Units</th><th class="num c-num">Usage_ef</th><th class="num c-act">กิจกรรม</th><th class="c-unit" rowspan="2">สถานะ</th></tr>
+      <tr><th class="num cfo-unit c-num">(kgCO₂e/unit)</th><th class="num c-act">จำนวน</th></tr></thead>
+      <tbody>${list.map((r) => { const ref = refs.get(r.ref_id); const n = r.activities || 0; return `<tr data-pick="${esc(r.id)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-id"><b>${esc(r.id)}</b></td>
         <td class="c-unit"${ref ? ` title="${esc(`${ref.name} ${cfoRefNum(ref.total)} kgCO₂e/${ref.unit}`)}"` : ''}>${esc(ref?.code || '')}</td><td class="c-formula">${esc(r.grp)}</td><td class="c-unit">${esc(r.material)}</td>
-        <td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.unit || '')}</td><td class="num c-num">${cfoRefNum(r.usage_ef)}</td><td class="num c-num">${r.activities || ''}</td><td class="c-unit">${esc(r.status)}</td></tr>`; }).join('')
+        <td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.unit || '')}</td><td class="num c-num">${cfoRefNum(r.usage_ef)}</td><td class="num c-act" title="กิจกรรมใน Setting > Activities ที่ใช้ ${esc(r.id)}">${n}</td><td class="c-unit">${esc(r.status)}</td></tr>`; }).join('')
         || `<tr><td class="empty" colspan="9">${all.length ? 'ไม่พบรายการ' : `ยังไม่มี ${CFO_UE_KINDS[kind]} กด Import แล้วเลือกไฟล์`}</td></tr>`}</tbody></table>`;
     $('cfo-ue-count').textContent = `${CFO_UE_KINDS[kind]} ${list.length.toLocaleString()} รายการ · ยังไม่มี Id_cfp ${all.filter((r) => !r.ref_id).length.toLocaleString()} · ใช้ในกิจกรรม ${all.filter((r) => r.activities).length.toLocaleString()}`;
     picked = null;
