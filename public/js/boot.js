@@ -66,9 +66,7 @@ function updateSidebarIcon() {
   const icon = $('sidebar-toggle-icon');
   if (icon) icon.textContent = document.body.classList.contains('sidebar-collapsed') ? 'left_panel_open' : 'left_panel_close';
 }
-if (localStorage.getItem('smf-sidebar') === 'collapsed') document.body.classList.add('sidebar-collapsed');
-updateSidebarIcon();
-$('sidebar-toggle').onclick = () => {
+function toggleSidebar() {
   if (window.matchMedia('(max-width:650px)').matches) {
     document.body.classList.toggle('sidebar-open');
     return;
@@ -76,7 +74,11 @@ $('sidebar-toggle').onclick = () => {
   document.body.classList.toggle('sidebar-collapsed');
   localStorage.setItem('smf-sidebar', document.body.classList.contains('sidebar-collapsed') ? 'collapsed' : 'expanded');
   updateSidebarIcon();
-};
+}
+if (localStorage.getItem('smf-sidebar') === 'collapsed') document.body.classList.add('sidebar-collapsed');
+updateSidebarIcon();
+$('sidebar-toggle').onclick = toggleSidebar;
+if ($('sidebar-open-mobile')) $('sidebar-open-mobile').onclick = toggleSidebar;
 $('sidebar-backdrop').onclick = () => document.body.classList.remove('sidebar-open');
 $('user-menu-btn').onclick = (event) => {
   event.stopPropagation();

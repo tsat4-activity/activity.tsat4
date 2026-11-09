@@ -515,6 +515,14 @@ function setHeaderMeta(content = '') {
   node.innerHTML = content ? String(content) : '';
 }
 
+// Shell chrome: logo + company names in the fixed header (System Setting can call after load)
+function setAppBranding({ logo, companyEn, companyTh } = {}) {
+  const box = $('header-logo');
+  if (logo && box) box.style.backgroundImage = `url("${String(logo).replace(/"/g, '')}")`;
+  if (companyEn && $('header-company-en')) $('header-company-en').textContent = companyEn;
+  if (companyTh && $('header-company-th')) $('header-company-th').textContent = companyTh;
+}
+
 function openChangePassword() {
   const fields = `
     <div class="field">
@@ -614,8 +622,12 @@ function showShell() {
   $('login').classList.add('d-none');
   $('password-gate').classList.add('d-none');
   $('shell').classList.remove('d-none');
-  $('header-user').textContent = me.name || me.employeeId;
+  const name = me.name || me.employeeId;
   const access = me.founder ? 'ผู้สร้างระบบ' : me.creator ? 'ผู้ช่วยดูแลระบบ' : me.executive ? 'ผู้บริหาร' : me.adminOf?.length ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน';
+  if ($('header-user-name')) $('header-user-name').textContent = name;
+  if ($('header-user-id')) $('header-user-id').textContent = me.employeeId;
+  if ($('header-user-role')) $('header-user-role').textContent = access;
+  $('header-user').textContent = name;
   $('header-role').textContent = `${access} · ${me.employeeId}`;
   document.querySelectorAll('[data-system]').forEach((node) => node.classList.toggle('d-none', !me.creator));
   if (typeof accessNav === 'function') accessNav(); // access.js: level badges + Setting only for ผู้ดูแล

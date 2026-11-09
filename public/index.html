@@ -63,11 +63,12 @@
 
   <div class="d-none" id="shell">
     <header class="app-header">
-      <div class="header-left">
-        <button class="icon-btn sidebar-toggle" type="button" id="sidebar-toggle" aria-label="ย่อ/ขยายเมนู" title="ย่อ/ขยายเมนู">
-          <span id="sidebar-toggle-icon" class="material-symbols-rounded">left_panel_close</span>
-        </button>
-        <div class="brand"><span>TSAT4 Activity</span></div>
+      <div class="header-brand">
+        <div class="header-logo" id="header-logo" aria-hidden="true"></div>
+        <div class="header-company">
+          <strong id="header-company-en" class="header-company-en">TSAT4 Activity</strong>
+          <span id="header-company-th" class="header-company-th">ชื่อบริษัท (ภาษาไทย)</span>
+        </div>
       </div>
       <div class="header-page">
         <strong id="header-page-title">ภาพรวม</strong>
@@ -75,6 +76,13 @@
       </div>
       <div class="header-right">
         <div class="header-meta" id="header-meta"></div>
+        <div class="header-user-block">
+          <strong id="header-user-name" class="header-user-name"></strong>
+          <span class="header-user-meta"><span id="header-user-id"></span> · <span id="header-user-role"></span></span>
+        </div>
+        <button class="icon-btn sidebar-open-mobile" type="button" id="sidebar-open-mobile" aria-label="เปิดเมนู" title="เมนู">
+          <span class="material-symbols-rounded">menu</span>
+        </button>
         <button class="theme-toggle" type="button" id="theme-toggle" title="สลับโหมดมืด/สว่าง" aria-label="สลับธีม">
           <span id="theme-icon" class="material-symbols-rounded">light_mode</span>
         </button>
@@ -93,6 +101,12 @@
       </div>
     </header>
     <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <button class="icon-btn sidebar-toggle" type="button" id="sidebar-toggle" aria-label="ย่อ/ขยายเมนู" title="ย่อ/ขยายเมนู">
+          <span id="sidebar-toggle-icon" class="material-symbols-rounded">left_panel_close</span>
+        </button>
+        <span class="sidebar-top-title">เมนู</span>
+      </div>
       <button class="nav-btn" data-view="main" title="TSAT4 Activity"><span class="material-symbols-rounded">home</span><span>หน้าหลัก</span></button>
       <div class="nav-acc" data-nav-acc="activity">
         <div class="nav-split">
