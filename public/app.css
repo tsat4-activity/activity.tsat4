@@ -1202,3 +1202,14 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 .view-stack > .surface-nav:has(.tab-line){padding-bottom:var(--content-gutter);margin-bottom:calc(-1 * var(--content-gutter))}
 .view-stack > .surface-tools{top:calc(31px + var(--content-gutter));padding-bottom:var(--content-gutter);margin-bottom:calc(-1 * var(--content-gutter))}
 .view-stack > .surface-tools:first-child{top:0}
+/* ผู้ใช้กำหนด 2026-11-09 (3): tabs start level with the sidebar's first item, and every vertical gap between blocks
+   (tabs · filters · tiles · chart · table) is one smaller measure, --block-gap · columns keep --content-gutter */
+:root{--block-gap:10px}
+.main{padding-top:calc(var(--drive-header) + 6px)}
+.view-body,.view-body.view-stack,.view-stack > .surface-main{gap:var(--block-gap)}
+.view-stack > .surface-main > .ch-card,.a5-board > .a5-charts > .ch-card{margin-bottom:0}
+.a5-board{row-gap:var(--block-gap)}
+.a5-charts{gap:var(--block-gap)}
+.view-stack > .surface-nav:has(.tab-line){padding-bottom:var(--block-gap);margin-bottom:calc(-1 * var(--block-gap))}
+.view-stack > .surface-tools{top:calc(31px + var(--block-gap));padding-bottom:var(--block-gap);margin-bottom:calc(-1 * var(--block-gap))}
+.view-stack > .surface-tools:first-child{top:0}
