@@ -832,7 +832,7 @@ async function aplDrawOverview(body) {
       + (p.plan ? row('แผนเลยกำหนด', `<span class="${p.plan.overdue ? 'ov-bad' : ''}">${ovNum(p.plan.overdue)}</span>`) : '') + list || '<p class="sum-meta">ไม่มี</p>';
   };
   const cards = ps.map((p) => `<article class="card ov-card" style="--ov:${actColor(p.activity)}">
-      <div class="ov-head"><strong>${esc(actLabel(p.activity))}</strong><span class="sum-meta">${p.activity === 'smf' ? 'Smart Factory' : p.activity === 'cfo' ? 'Carbon Footprint for Organization' : '5ส'}</span>${button('', 'เปิด Dashboard', 'secondary', `data-ov-go="${p.activity}-home"`)}</div>
+      <div class="ov-head"><strong>${esc(actLabel(p.activity))}</strong><span class="sum-meta">${p.activity === 'smf' ? 'Smart Factory' : p.activity === 'cfo' ? 'Carbon Footprint for Organization' : '5ส'}</span>${button('', 'เปิดกิจกรรม', 'secondary', `data-ov-go="${p.activity}-home"`)}</div>
       ${section('ความคืบหน้าแผนงาน', planHtml(p))}${projectHtml(p) ? section(`โครงการปี ${data.year}`, projectHtml(p)) : ''}${section('ผลลัพธ์หลัก', resultHtml(p))}${section('ทีม', teamHtml(p))}${section('ปัญหา / เลยกำหนด', problemHtml(p))}
     </article>`).join('');
   body.innerHTML = `<div class="ch-kpis">${kpis}</div><div class="ov-grid">${cards}</div><p class="sum-meta">ข้อมูล ณ ${actShort(data.today)} ${data.year}</p>`;

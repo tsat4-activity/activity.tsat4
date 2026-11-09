@@ -631,19 +631,23 @@ function zoneOf(name) {
 
 let viewRun = 0;
 let viewDrawn = 0;
-// Bare activity id (e.g. 5s) → *-home so header says Dashboard and body[data-dash] applies (AGENTS.md)
+// Bare activity id (e.g. 5s) → *-home (ภาพรวม — คลิกชื่อกิจกรรมในเมนู)
 function plantDefaultHome(name) {
   if (typeof plantOf !== 'function') return name;
   const unit = plantOf(name);
   return unit && name === unit.row[0] ? `${name}-home` : name;
+}
+function plantHomeView(name) {
+  const unit = typeof plantOf === 'function' ? plantOf(name) : null;
+  return Boolean(unit && name.endsWith('-home'));
 }
 function openView(name) {
   setHeaderMeta('');
   if ((name === 'system' || name === 'access') && !me.creator) name = 'main';
   name = plantDefaultHome(name);
   view = name;
-  // Dashboard pages use the compact sizes (body[data-dash] in app.css).
-  if (TITLES[name]?.[0] === 'Dashboard') document.body.dataset.dash = '1';
+  // Activity overview (*-home) uses compact Dashboard layout (body[data-dash] in app.css).
+  if (plantHomeView(name)) document.body.dataset.dash = '1';
   else delete document.body.dataset.dash;
   const zone = zoneOf(view);
   if (zone) document.body.dataset.zone = zone;
@@ -651,7 +655,7 @@ function openView(name) {
   const [title, subtitle] = TITLES[name] || [name, ''];
   $('header-page-title').textContent = title;
   $('header-page-subtitle').textContent = subtitle;
-  document.querySelectorAll('.nav-btn').forEach((node) => node.classList.toggle('active', node.dataset.view === name && !node.classList.contains('nav-parent')));
+  document.querySelectorAll('.nav-btn').forEach((node) => node.classList.toggle('active', node.dataset.view === name));
   document.querySelectorAll('.nav-acc').forEach((acc) => {
     if (!acc.querySelector(`.nav-btn[data-view="${name}"]`)) return;
     acc.classList.remove('is-collapsed');
