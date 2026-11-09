@@ -9,7 +9,7 @@ const ACT_TEAM_ROLES = { chairman: 'ประธาน', vice: 'รองปร�
 // รองหัวหน้าทีม · ผู้ตรวจประเมิน · ผู้รับผิดชอบพื้นที่ · SMF: ทีม SMF of a project, สมาชิกทีมรอง of Work Flow Automation · a row saved earlier
 // in another place keeps its label
 const actRolesFor = (activity, unit) => (!unit ? ['chairman', 'vice', 'advisor', 'admin', 'member']
-  : activity === 'smf' ? ['member'] : unit === 'audit' ? ['chairman', 'vice', 'auditor', 'owner'] : ['chairman', 'vice', 'member']);
+  : activity === 'smf' ? ['chairman', 'vice', 'member'] : unit === 'audit' ? ['chairman', 'vice', 'auditor', 'owner'] : ['chairman', 'vice', 'member']);
 const ACT_SUB_ROLES = { chairman: 'หัวหน้าทีม', vice: 'รองหัวหน้าทีม', member: 'สมาชิกทีมรอง' }; // ผู้ใช้กำหนด 2026-11-08 (เดิม ประธานทีมรอง / รองประธานทีมรอง)
 const actRoleLabel = (activity, role, unit) => (activity === 'smf' && unit && role === 'member' ? (unit === 'workflow' ? 'สมาชิกทีมรอง' : 'ทีม SMF') : null)
   || (unit ? ACT_SUB_ROLES[role] : role === 'member' && activity !== 'cfo' ? 'สมาชิกหลัก' : null)

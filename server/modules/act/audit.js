@@ -14,7 +14,7 @@ const AUDIT_ONLY = ['owner', 'auditor'];
 // Who may sit where (ผู้ใช้กำหนด 2026-11-05, the same in act.js actRolesFor): the committee of every activity · a 5S team ·
 // ทีมตรวจประเมิน · an SMF project. A row saved earlier in another place keeps it until it is moved.
 const rolesFor = (activity, unit) => (!unit ? ['chairman', 'vice', 'advisor', 'admin', 'member']
-  : PROJECT_ON.includes(activity) ? ['member']
+  : PROJECT_ON.includes(activity) ? ['chairman', 'vice', 'member'] // SMF project: หัวหน้าทีม · รองหัวหน้าทีม · สมาชิก (ผู้ใช้กำหนด 2026-11-09)
     : unit === AUDIT_UNIT ? ['chairman', 'vice', 'auditor', 'owner'] : ['chairman', 'vice', 'member']);
 const AUDIT_TYPES = ['SELF', 'COMMITTEE'];
 

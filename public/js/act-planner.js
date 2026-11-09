@@ -1314,7 +1314,7 @@ async function aplDrawSmfOverview(body, activity) {
     // a project measured by count (ผู้ใช้กำหนด 2026-11-05): the chairman holds the total, each member one project of their own in
     // the plan: every member of the team with their projects, who has none yet first · an owner outside the team is listed too
     const subs = plan?.subtasks || [];
-    const members = teamData.members.filter((m) => m.unit === u.code && m.role === 'member' && m.status === 'Active');
+    const members = teamData.members.filter((m) => m.unit === u.code && ['chairman', 'vice', 'member'].includes(m.role) && m.status === 'Active');
     const mine = (m) => subs.filter((st) => (st.owner_id && st.owner_id === String(m.employee_id)) || (st.owner_name && st.owner_name === m.name));
     const others = [...new Set(subs.filter((st) => st.owner_name && !members.some((m) => mine(m).includes(st))).map((st) => st.owner_name))]
       .map((name) => ({ name, department: 'นอกทีม', list: subs.filter((st) => st.owner_name === name) }));
