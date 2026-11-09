@@ -252,6 +252,13 @@ function listQuery(rows, head, valueOf) {
   return [...filtered].sort((a, b) => dir * compare(valueOf(a, head.sort), valueOf(b, head.sort)));
 }
 
+// Vertical scrollbar starts under the real header (two-line headers are taller than the 34px default).
+function syncTableHead(wrap) {
+  if (!wrap?.classList?.contains('table-wrap')) return;
+  const head = wrap.querySelector('thead');
+  const h = head ? Math.round(head.getBoundingClientRect().height) : 0;
+  if (h > 0) wrap.style.setProperty('--table-head', `${h}px`);
+}
 function fillTable(id, headers, rows, emptyText, head) {
   const cells = headers.map((header) => {
     const label = typeof header === 'string' ? header : header.label;
@@ -268,6 +275,7 @@ function fillTable(id, headers, rows, emptyText, head) {
     return;
   }
   node.innerHTML = `<table class="mo-data-table"><thead><tr>${cells}</tr></thead><tbody>${body}</tbody></table>`;
+  syncTableHead(node);
   if (!head) return;
   node.querySelectorAll('[data-col-sort]').forEach((btn) => {
     btn.onclick = (event) => {
@@ -994,4 +1002,16 @@ const ZOOM_THUMBS = 'img.img-zoom';
   });
   document.addEventListener('mouseout', (event) => { if (event.target.closest?.(ZOOM_THUMBS)) box.hidden = true; });
   window.addEventListener('scroll', () => { box.hidden = true; }, true);
+})();
+
+// Tables painted with innerHTML (not only fillTable) still need the scrollbar under the header.
+(() => {
+  let frame = 0;
+  const kick = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => { frame = 0; document.querySelectorAll('.table-wrap').forEach(syncTableHead); });
+  };
+  new MutationObserver(kick).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('resize', kick);
+  kick();
 })();

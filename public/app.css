@@ -218,7 +218,7 @@ th,td{padding:0 8px;height:30px;border-bottom:1px solid var(--mo-line);text-alig
 :root{--th-bg:var(--mo-surface-2);--th-ink:var(--mo-text-muted);--th-line:var(--mo-line)}
 body[data-zone]{--th-bg:color-mix(in srgb,var(--zone) 18%,var(--mo-surface));--th-ink:var(--zone-ink);--th-line:color-mix(in srgb,var(--zone) 55%,var(--mo-surface))}
 th{background:var(--th-bg);color:var(--th-ink);font-weight:500;font-size:11px}
-table.mo-data-table thead th{position:sticky;top:0;z-index:5;height:34px;background:var(--th-bg);color:var(--th-ink);box-shadow:inset 0 -1px 0 var(--th-line)}
+table.mo-data-table thead th{position:sticky;top:0;z-index:5;height:34px;background:var(--th-bg);color:var(--th-ink);border-bottom:0;box-shadow:inset 0 -1px 0 var(--th-line)}
 table.mo-data-table thead th.has-menu{height:38px}
 /* every table (ผู้ใช้กำหนด 2026-11-02): a text cell stays within 320px and ends in … — the full text shows on hover
    (core.js OVERFLOW_TIP) · group / band rows (colspan) keep the full width · a page may set its own column widths */
@@ -713,7 +713,7 @@ body[data-zone] .plan-col.is-today{border-color:var(--zone)}
 .fr01-building{display:block;width:100%;height:auto;border-radius:var(--mo-radius);border:1px solid var(--mo-border)}
 .fr01-info{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:13px}.fr01-info li{padding-left:2px}.fr01-info span{display:inline-block;min-width:110px;font-weight:600}.fr01-info b{font-weight:400}
 .fr01-more{display:grid;grid-template-columns:130px 1fr;gap:4px 8px;margin:4px 0 0;font-size:13px;border-top:1px solid var(--mo-line);padding-top:8px}.fr01-more dt{font-weight:600}.fr01-more dd{margin:0;font-weight:400}
-.fr01-scope{padding:0;overflow:hidden}
+.fr01-scope{padding:0;overflow:hidden;border:0;box-shadow:none}
 .fr01-table{width:100%;border-collapse:collapse;font-size:13px}
 .fr01-table th,.fr01-table td{height:auto;padding:7px 10px;border:1px solid var(--th-line);white-space:normal;overflow:visible;vertical-align:middle}
 .fr01-table thead th{background:var(--th-bg);color:var(--th-ink);font-size:14px;font-weight:600;text-align:left}
@@ -741,11 +741,12 @@ td.cfo-ref{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:no
 .cfo-efgrid :is(td,th).c-unit{width:100px;min-width:100px;max-width:100px}.cfo-efgrid :is(td,th).c-num{width:120px;min-width:120px;max-width:120px}
 .cfo-efgrid :is(td,th).c-reference{width:340px;min-width:340px;max-width:340px}.cfo-efgrid :is(td,th).c-remark{width:240px;min-width:240px;max-width:240px}
 .cfo-efgrid td:is(.c-name,.c-formula,.c-unit,.c-reference,.c-remark){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cfo-efgrid table.mo-data-table{border-collapse:separate;border-spacing:0}
-/* separate borders (right + bottom only, the frame is the table-wrap): lines stay sharp under the sticky header */
-.cfo-efgrid table.mo-data-table :is(td,th){border:0;border-right:1px solid color-mix(in srgb,var(--mo-line) 55%,transparent);border-bottom:1px solid color-mix(in srgb,var(--mo-line) 55%,transparent)}
-.cfo-efgrid table.mo-data-table thead th{box-shadow:none;border-bottom-color:var(--th-line)}
-.cfo-efgrid{--table-head:54px}
+/* one shared stroke (collapse). The table-wrap frame is off so it does not sit beside the cell line. */
+.cfo-efgrid > .table-wrap,.table-wrap.cfo-efgrid{border:0;border-radius:0;box-shadow:none}
+.cfo-efgrid table.mo-data-table{border-collapse:collapse;border-spacing:0}
+.cfo-efgrid table.mo-data-table :is(td,th){border:1px solid color-mix(in srgb,var(--mo-line) 70%,transparent)}
+.cfo-efgrid table.mo-data-table thead th{box-shadow:none;border-color:var(--th-line);border-bottom:1px solid var(--th-line)}
+.cfo-efgrid > .table-wrap.sheet,.table-wrap.sheet.cfo-efgrid{--table-head:52px}
 .cfo-reftab thead{position:sticky;top:0;z-index:5}table.cfo-reftab.mo-data-table thead th{position:static;height:26px;padding:2px 8px;line-height:1.2;text-align:center;white-space:nowrap}
 .cfo-reftab thead th.cfo-unit{font-size:11px;font-weight:500}
 /* Setting > วัสดุ (SAP): months saved + check result of a pasted Usage */
