@@ -497,14 +497,32 @@ export function mountCfo(app) {
   const sapReady = async (t) => !(await tx.from(t.matGroup).select('id').limit(1)).error;
   const unitKey = (u) => String(u || '').trim().toUpperCase();
   const r6 = (v) => Math.round(v * 1e6) / 1e6;
-  // why a Usage line is not counted (null = counted): material → group → EF of the group + factor + same SAP unit
+  // why a Usage line is not counted (null = counted): material → group → EF of the group + factor + same SAP unit.
+  // cal_ef (ผู้ใช้กำหนด 2026-11-09): a material with its own kgCO₂e per SAP unit (kgco2e_unit) counts as Qty × kgco2e_unit,
+  // whatever EF the group has; its ef_ref_id is then the Ref (ที่มาของค่า in EF CFP), not the group's EF.
+  const directOf = (m) => (Number(m?.kgco2e_unit) > 0 ? Number(m.kgco2e_unit) : 0);
   const sapWhy = (l, m, g, e) => {
     if (!m) return 'nomat';
     if (!g) return 'nogroup';
-    if (!e || e.total == null || g.status === 'Inactive') return 'noef';
-    if (!(Number(m.factor) > 0) || m.status === 'Inactive') return 'nofactor';
+    if (g.status === 'Inactive') return 'noef';
+    if (!directOf(m)) {
+      if (!e || e.total == null) return 'noef';
+      if (!(Number(m.factor) > 0)) return 'nofactor';
+    }
+    if (m.status === 'Inactive') return 'nofactor';
     if (l.unit && m.sap_unit && unitKey(l.unit) !== unitKey(m.sap_unit)) return 'unit';
     return null;
+  };
+  // kgCO₂e of one Usage line
+  const lineKg = (l, m, e) => (directOf(m) ? Number(l.qty) * directOf(m) : Number(l.qty) * Number(m.factor) * Number(e.total));
+  // the EF of an activity whose quantity is already kgCO₂e (its lines carry their own kgCO₂e per unit)
+  const efKg = async (t, scopeCode) => {
+    const code = `sapkg:${scopeCode}`;
+    const found = must(await tx.from(t.ef).select('id').eq('code', code).maybeSingle());
+    if (found) return { id: found.id };
+    const made = must(await tx.from(t.ef).insert({ code, scope_code: scopeCode, name: 'รวม kgCO₂e ของวัสดุ (Qty SAP × kgCO₂e/หน่วย)', unit: 'kgCO2e', kgco2e: 1,
+      reference: 'Setting > Materials (SAP): kgCO₂e/หน่วย และ Ref ของแต่ละวัสดุ', year: thisYear(), status: 'Active' }).select('id'));
+    return { id: made[0].id };
   };
   const sapMaster = async (t) => {
     const [mats, groups, refs, centers] = await Promise.all([
@@ -536,35 +554,55 @@ export function mountCfo(app) {
       const lines = given || await fetchAll(() => tx.from(t.materialUse).select('*').eq('month', month).order('id'));
       const out = [];
       const sums = new Map();
+      const keys = new Map(); // group × costcenter → { g, cc, department, detail, direct, rows: [[row, efQty, kg]] }
       for (const l of lines) {
         const m = master.mat.get(l.material);
         const g = m?.group_id ? master.group.get(m.group_id) : null;
         const e = g?.ef_ref_id ? master.ref.get(g.ef_ref_id) : null;
         const { id, ...row } = l;
         Object.assign(row, { month, grp: g?.name ?? null, group_id: 0, activity_id: null, factor: 0, ef_ref_id: null, source: '', ef_unit: null, kgco2e: 0, tco2e: 0, name: m?.name || l.name });
-        if (sapWhy(l, m, g, e)) { out.push(row); continue; }
-        if (!efOf.has(g.id)) efOf.set(g.id, (await efFromRef(t, g.ef_ref_id, g.scope_code)).id || null);
-        const efId = efOf.get(g.id);
-        if (!efId) { out.push(row); continue; }
+        out.push(row);
+        if (sapWhy(l, m, g, e)) continue;
         const cc = l.costcenter || l.department || '(ไม่ระบุ)';
         const c = master.center.get(unitKey(cc));
         const department = c?.department || l.department || cc;
-        const want = { name: g.name, department, detail: `${department} : ${cc}${c?.object_name ? ` ${c.object_name}` : ''}`.slice(0, 500), ef_id: efId };
-        let a = actOf.get(`${g.id}|${cc}`);
+        const key = `${g.id}|${cc}`;
+        const k = keys.get(key) || { g, cc, department, detail: `${department} : ${cc}${c?.object_name ? ` ${c.object_name}` : ''}`.slice(0, 500), direct: false, rows: [] };
+        keys.set(key, k);
+        const kg = lineKg(l, m, e);
+        if (directOf(m)) {
+          const ref = m.ef_ref_id ? master.ref.get(m.ef_ref_id) : null;
+          Object.assign(row, { department, group_id: g.id, factor: 1, ef_ref_id: ref?.id ?? null, source: ref ? ref.name.replace(/^-\s*/, '') : 'kgCO₂e/หน่วย (cal_ef)',
+            ef_unit: m.sap_unit || l.unit || null, kgco2e: directOf(m), scope_code: g.scope_code, kind: g.kind, tco2e: r6(kg / 1000) });
+          k.direct = true;
+          k.rows.push([row, 0, kg]);
+        } else {
+          Object.assign(row, { department, group_id: g.id, factor: Number(m.factor), ef_ref_id: e.id, source: e.name.replace(/^-\s*/, ''), ef_unit: e.unit,
+            kgco2e: Number(e.total), scope_code: g.scope_code, kind: g.kind, tco2e: r6(kg / 1000) });
+          k.rows.push([row, Number(l.qty) * Number(m.factor), kg]);
+        }
+      }
+      for (const [key, k] of keys) {
+        const ef = k.direct ? await efKg(t, k.g.scope_code) : null;
+        if (!k.direct && !efOf.has(k.g.id)) efOf.set(k.g.id, (await efFromRef(t, k.g.ef_ref_id, k.g.scope_code)).id || null);
+        const efId = k.direct ? ef.id : efOf.get(k.g.id);
+        if (!efId) { k.rows.forEach(([row]) => Object.assign(row, { group_id: 0, tco2e: 0 })); continue; }
+        const want = { name: k.g.name, department: k.department, detail: k.detail, ef_id: efId };
+        let a = actOf.get(key);
         if (!a) {
-          a = must(await tx.from(t.activity).insert({ ...want, gwp_code: 'AR5', calc: 'sap', status: 'Active', mat_group_id: g.id, costcenter: cc }).select('*'))[0];
-          actOf.set(`${g.id}|${cc}`, a);
+          a = must(await tx.from(t.activity).insert({ ...want, gwp_code: 'AR5', calc: 'sap', status: 'Active', mat_group_id: k.g.id, costcenter: k.cc }).select('*'))[0];
+          actOf.set(key, a);
           acts.push(a);
-        } else if (['name', 'department', 'detail', 'ef_id'].some((k) => a[k] !== want[k])) {
+        } else if (['name', 'department', 'detail', 'ef_id'].some((x) => a[x] !== want[x])) {
           must(await tx.from(t.activity).update(want).eq('id', a.id));
           Object.assign(a, want);
         }
-        const qty = Number(l.qty) * Number(m.factor);
-        Object.assign(row, { department, group_id: g.id, activity_id: a.id, factor: Number(m.factor), ef_ref_id: e.id, source: e.name.replace(/^-\s*/, ''), ef_unit: e.unit,
-          kgco2e: Number(e.total), scope_code: g.scope_code, kind: g.kind, tco2e: r6((qty * Number(e.total)) / 1000) });
-        sums.set(a.id, (sums.get(a.id) || 0) + qty);
-        total += row.tco2e;
-        out.push(row);
+        // quantity of the month: kgCO₂e (cal_ef, EF = 1) or the units of the group's EF
+        for (const [row, efQty, kg] of k.rows) {
+          row.activity_id = a.id;
+          sums.set(a.id, (sums.get(a.id) || 0) + (k.direct ? kg : efQty));
+          total += row.tco2e;
+        }
       }
       // a month confirmed before stays confirmed
       const ids = acts.map((a) => a.id);
@@ -618,7 +656,7 @@ export function mountCfo(app) {
       m.tco2e += Number(u.tco2e);
       return acc;
     }, {})).map((m) => ({ ...m, tco2e: Math.round(m.tco2e * 1000) / 1000 }));
-    const count = (id, ok) => rows.filter((r) => r.group_id === id && (!ok || Number(r.factor) > 0)).length;
+    const count = (id, ok) => rows.filter((r) => r.group_id === id && (!ok || Number(r.factor) > 0 || directOf(r))).length;
     res.json({ admin: access.admin || await adminNext(req, activity), ready: groups.length > 0 || (await sapReady(t)), rows, months, sections,
       groups: groups.map((g) => ({ ...g, items: count(g.id), counted: count(g.id, true) })) });
   });
@@ -664,7 +702,11 @@ export function mountCfo(app) {
     if (row.name !== current.name && must(await tx.from(t.matGroup).select('id').eq('name', row.name).limit(1)).length) return fail(res, 400, `มีกลุ่ม "${row.name}" แล้ว`);
     must(await tx.from(t.matGroup).update(row).eq('id', current.id));
     const codes = must(await tx.from(t.material).select('material').eq('group_id', current.id)).map((m) => m.material);
-    if (codes.length) must(await tx.from(t.material).update({ grp: row.name, ef_ref_id: row.ef_ref_id, scope_code: row.scope_code, kind: row.kind }).eq('group_id', current.id));
+    if (codes.length) {
+      must(await tx.from(t.material).update({ grp: row.name, scope_code: row.scope_code, kind: row.kind }).eq('group_id', current.id));
+      const plain = await tx.from(t.material).update({ ef_ref_id: row.ef_ref_id }).eq('group_id', current.id).is('kgco2e_unit', null);
+      if (plain.error) must(await tx.from(t.material).update({ ef_ref_id: row.ef_ref_id }).eq('group_id', current.id)); // before db/act/cfo.sql 2026-11-09
+    }
     if (row.status === 'Inactive') must(await tx.from(t.activity).update({ status: 'Inactive' }).eq('mat_group_id', current.id));
     await resyncSap(t, req, codes);
     await logRev(t, req, 'กลุ่มวัสดุ', current.name, changes(current, row, Object.keys(row)));
@@ -680,7 +722,7 @@ export function mountCfo(app) {
   });
 
   // partial (grid paste): a blank cell keeps what the material already has · the group decides EF, Scope and ประเภท
-  const matInput = (b, groups, partial = false) => {
+  const matInput = (b, groups, partial = false, refs = null) => {
     const given = (k) => b[k] !== undefined && !(partial && String(b[k] ?? '').trim() === '');
     const row = { material: matCode(b.material) };
     if (!row.material) return { error: 'ระบุรหัสวัสดุ' };
@@ -697,6 +739,17 @@ export function mountCfo(app) {
       row.factor = numOrNull(b.factor);
       if (Number.isNaN(row.factor) || (row.factor != null && row.factor <= 0)) return { error: 'ตัวแปลงต้องเป็นตัวเลขมากกว่า 0' };
     }
+    // cal_ef (ผู้ใช้กำหนด 2026-11-09): kgCO₂e per SAP unit used as is · Ref = EF CFP id where the value comes from
+    if (given('kgco2e_unit')) {
+      row.kgco2e_unit = numOrNull(b.kgco2e_unit);
+      if (Number.isNaN(row.kgco2e_unit) || (row.kgco2e_unit != null && row.kgco2e_unit <= 0)) return { error: 'kgCO₂e/หน่วย ต้องเป็นตัวเลขมากกว่า 0' };
+    }
+    if (given('ref')) {
+      const code = String(b.ref ?? '').trim().toUpperCase();
+      const ref = code ? refs?.get(code) : null;
+      if (code && !ref) return { error: `ไม่พบ Ref ${code} ในตาราง EF (เพิ่ม EF CFP ก่อน)` };
+      row.ef_ref_id = ref ? ref.id : null;
+    }
     return { row };
   };
   const groupMap = async (t) => new Map((await fetchAll(() => tx.from(t.matGroup).select('*')).catch(() => [])).map((g) => [g.id, g]));
@@ -704,19 +757,42 @@ export function mountCfo(app) {
   route('post', '/api/act/:activity/cfo/materials', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
     if (!(await sapReady(t))) return fail(res, 400, 'ให้รัน db/act/cfo.sql ก่อน (ตารางกลุ่มวัสดุ)');
-    const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [req.body || {}];
-    const [groups, existingList] = await Promise.all([groupMap(t), fetchIn(() => tx.from(t.material).select('material'), 'material', list.map((b) => matCode(b.material)))]);
-    const existing = new Set(existingList.map((r) => r.material));
+    const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [req.body || {}];
+    const direct = list.some((b) => String(b.kgco2e_unit ?? '').trim() !== '' || String(b.ref ?? '').trim() !== '');
+    if (direct && (await tx.from(t.material).select('kgco2e_unit').limit(1)).error) return fail(res, 400, 'ให้รัน db/act/cfo.sql อีกครั้งก่อน (คอลัมน์ kgCO₂e/หน่วย ของวัสดุ)');
+    const [groups, existingList, refList] = await Promise.all([groupMap(t), fetchIn(() => tx.from(t.material).select('*'), 'material', list.map((b) => matCode(b.material))),
+      direct ? fetchAll(() => tx.from(t.efRef).select('id,code,name,unit,total').in('sheet', MAT_SHEETS)) : []]);
+    const refs = new Map(refList.filter((r) => r.code).map((r) => [String(r.code).toUpperCase(), r]));
+    // cal_ef (makeGroups): a group named in the file and not there yet is made (no EF: its materials count by kgCO₂e/หน่วย)
+    const wantGroups = req.body?.makeGroups ? [...new Set(list.map((b) => String(b.group ?? '').trim()).filter(Boolean))]
+      .filter((name) => ![...groups.values()].some((g) => g.name.toLowerCase() === name.toLowerCase())) : [];
+    wantGroups.forEach((name, i) => groups.set(-1 - i, { id: -1 - i, name, scope_code: '3-1', kind: 'usage', status: 'Active' })); // made after the check
+    const existing = new Map(existingList.map((r) => [r.material, r]));
     const toInsert = [];
     const toUpdate = [];
+    const errors = [];
+    const odd = []; // kgCO₂e/หน่วย far from the Ref EF on a weight / volume unit (kg, L): 1 unit should be about 1 × EF
     for (const [i, b] of list.entries()) {
-      const { row, error } = matInput(b, groups, true);
-      if (error) return fail(res, 400, list.length > 1 ? `แถว ${i + 1}: ${error}` : error);
+      const { row, error } = matInput(b, groups, true, refs);
+      if (error) { errors.push(list.length > 1 ? `แถว ${b.line || i + 1}: ${error}` : error); continue; }
+      const ref = row.ef_ref_id ? refList.find((r) => r.id === row.ef_ref_id) : null;
+      const unit = String(row.sap_unit || existing.get(row.material)?.sap_unit || '').toUpperCase();
+      const sameUnit = ref && String(ref.unit || '').toUpperCase() === unit;
+      if (row.kgco2e_unit && ['KG', 'L'].includes(unit) && (sameUnit ? Math.abs(row.kgco2e_unit / Number(ref.total) - 1) > 0.5 : row.kgco2e_unit > 50)) {
+        odd.push({ material: row.material, name: row.name || existing.get(row.material)?.name || '', unit, value: row.kgco2e_unit, ref: ref?.code || '', ef: ref ? Number(ref.total) : null, efUnit: ref?.unit || '' });
+      }
       if (existing.has(row.material)) toUpdate.push(row);
       else {
-        existing.add(row.material);
+        existing.set(row.material, row);
         toInsert.push({ name: row.material, ...row });
       }
+    }
+    if (errors.length) return fail(res, 400, list.length > 1 ? `ไม่ได้บันทึก มี ${errors.length} แถวที่ผิด: ${errors.slice(0, 5).join(' · ')}${errors.length > 5 ? ' …' : ''}` : errors[0]);
+    if (req.body?.save === false) return res.json({ ok: true, saved: false, count: list.length, add: toInsert.length, update: toUpdate.length, newGroups: wantGroups, odd });
+    if (wantGroups.length) {
+      const made = must(await tx.from(t.matGroup).insert(wantGroups.map((name) => ({ name: name.slice(0, 120), scope_code: '3-1', kind: 'usage', status: 'Active' }))).select('id,name'));
+      const real = new Map(wantGroups.map((name, i) => [-1 - i, made.find((g) => g.name === name.slice(0, 120))?.id]));
+      [...toInsert, ...toUpdate].forEach((row) => { if (row.group_id < 0) row.group_id = real.get(row.group_id); });
     }
     await Promise.all([
       toInsert.length ? tx.from(t.material).insert(toInsert).then(must) : null,
@@ -730,7 +806,8 @@ export function mountCfo(app) {
     if (!(await requireAdminNow(req, res, activity))) return;
     const current = must(await tx.from(t.material).select('*').eq('material', req.params.material).maybeSingle());
     if (!current) return fail(res, 404, 'ไม่พบวัสดุ');
-    const { row, error } = matInput({ ...req.body, material: current.material }, await groupMap(t));
+    const refs = req.body?.ref !== undefined ? new Map((await fetchAll(() => tx.from(t.efRef).select('id,code').in('sheet', MAT_SHEETS))).filter((r) => r.code).map((r) => [String(r.code).toUpperCase(), r])) : null;
+    const { row, error } = matInput({ ...req.body, material: current.material }, await groupMap(t), false, refs);
     if (error) return fail(res, 400, error);
     if (!row.name) row.name = current.name;
     must(await tx.from(t.material).update(row).eq('material', current.material));
@@ -789,7 +866,7 @@ export function mountCfo(app) {
       if (why) { groups[why].push({ ...l, name: m?.name || l.name, sap_unit: m?.sap_unit, group: g?.name }); continue; }
       counted += 1;
       acts.add(`${g.id}|${l.costcenter}`);
-      tco2e += (l.qty * Number(m.factor) * Number(e.total)) / 1000;
+      tco2e += lineKg(l, m, e) / 1000;
     }
     tco2e = Math.round(tco2e * 1000) / 1000;
     if (req.body?.save === true) {

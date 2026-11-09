@@ -1257,7 +1257,8 @@ async function cfoSetMaterial(body, m, rerender) {
   const s3 = m.scopes.filter((sc) => sc.scope === 3).sort((x, y) => Number(x.code.split('-')[1]) - Number(y.code.split('-')[1]));
   const scopeOpts = s3.map((sc) => [sc.code, `${sc.code} ${sc.name_th || sc.name}`]);
   const efOf = (row) => refs.get(groups.get(row.group_id)?.ef_ref_id);
-  const counted = (r) => Boolean(efOf(r) && Number(r.factor) > 0);
+  const counted = (r) => Boolean(groups.has(r.group_id) && (Number(r.kgco2e_unit) > 0 || (efOf(r) && Number(r.factor) > 0)));
+  const refCode = (r) => (Number(r.kgco2e_unit) > 0 ? refs.get(r.ef_ref_id)?.code || '' : '');
   let picked = null;
   let pickedGroup = null;
   const draw = () => {
@@ -1267,14 +1268,15 @@ async function cfoSetMaterial(body, m, rerender) {
       && (!term || `${r.material} ${r.name} ${groups.get(r.group_id)?.name || ''} ${efOf(r)?.name || ''}`.toLowerCase().includes(term)));
     const shown = list.slice(0, 500);
     $('cfo-rows').innerHTML = `<table class="mo-data-table cfo-reftab"><thead><tr><th class="c-unit">Material</th><th class="c-formula">กลุ่ม (กิจกรรม)</th><th class="c-name">รายละเอียด</th><th class="c-unit">หน่วย SAP</th>
-      <th class="num c-num">ตัวแปลง</th><th class="c-unit">หน่วย EF</th><th class="num c-num">kgCO₂e / หน่วย SAP</th><th class="c-unit">สถานะ</th></tr></thead>
+      <th class="num c-num">ตัวแปลง</th><th class="c-unit">หน่วย EF</th><th class="num c-num">kgCO₂e / หน่วย SAP</th><th class="c-unit">Ref</th><th class="c-unit">สถานะ</th></tr></thead>
       <tbody>${shown.map((r) => {
         const e = efOf(r);
         const g = groups.get(r.group_id);
         return `<tr data-pick="${esc(r.material)}"${r.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-unit">${esc(r.material)}</td><td class="c-formula">${g ? esc(g.name) : '<span class="sum-meta">รอจัดกลุ่ม</span>'}</td><td class="c-name">${esc(r.name)}</td><td class="c-unit">${esc(r.sap_unit || '')}</td>
-          <td class="num c-num">${r.factor == null ? '' : cfoRefNum(r.factor)}</td><td class="c-unit">${esc(e?.unit || '')}</td>
-          <td class="num c-num">${e && r.factor ? cfoRefNum(Number(r.factor) * Number(e.total)) : ''}</td><td class="c-unit">${esc(r.status)}</td></tr>`;
-      }).join('') || '<tr><td class="empty" colspan="8">ไม่มีรายการ</td></tr>'}</tbody></table>`;
+          <td class="num c-num">${Number(r.kgco2e_unit) > 0 || r.factor == null ? '' : cfoRefNum(r.factor)}</td><td class="c-unit">${Number(r.kgco2e_unit) > 0 ? '' : esc(e?.unit || '')}</td>
+          <td class="num c-num">${Number(r.kgco2e_unit) > 0 ? `<b title="ค่าจาก cal_ef ใช้คิดตรง">${cfoRefNum(r.kgco2e_unit)}</b>` : e && r.factor ? cfoRefNum(Number(r.factor) * Number(e.total)) : ''}</td>
+          <td class="c-unit">${esc(refCode(r))}</td><td class="c-unit">${esc(r.status)}</td></tr>`;
+      }).join('') || '<tr><td class="empty" colspan="9">ไม่มีรายการ</td></tr>'}</tbody></table>`;
     $('cfo-mat-count').textContent = `${list.length.toLocaleString()} รายการ${list.length > shown.length ? ` (แสดง ${shown.length} แรก พิมพ์ค้นหาเพื่อดูเพิ่ม)` : ''} · คิดได้ ${d.rows.filter(counted).length.toLocaleString()} จาก ${d.rows.length.toLocaleString()} · รอจัดกลุ่ม ${d.rows.filter((r) => !groups.has(r.group_id)).length.toLocaleString()}`;
     picked = null;
     ['cfo-edit', 'cfo-del'].forEach((b) => { if ($(b)) $(b).disabled = true; });
@@ -1285,7 +1287,7 @@ async function cfoSetMaterial(body, m, rerender) {
       <th class="c-unit">หมวด</th><th class="num c-num">วัสดุ</th><th class="num c-num">คิดได้</th><th class="c-unit">สถานะ</th></tr></thead>
       <tbody>${d.groups.map((g) => {
         const e = refs.get(g.ef_ref_id);
-        return `<tr data-pick="${g.id}"${g.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-formula">${esc(g.name)}</td><td class="c-unit"><b>${esc(e?.code || '')}</b></td><td class="c-name">${e ? esc(e.name.replace(/^-\s*/, '')) : '<span class="sum-meta">ยังไม่มี EF (ไม่คิด)</span>'}</td>
+        return `<tr data-pick="${g.id}"${g.status === 'Inactive' ? ' class="is-muted"' : ''}><td class="c-formula">${esc(g.name)}</td><td class="c-unit"><b>${esc(e?.code || '')}</b></td><td class="c-name">${e ? esc(e.name.replace(/^-\s*/, '')) : g.counted ? '<span class="sum-meta">ใช้ kgCO₂e/หน่วย ของแต่ละวัสดุ (cal_ef)</span>' : '<span class="sum-meta">ยังไม่มี EF (ไม่คิด)</span>'}</td>
           <td class="num c-num">${e ? `${cfoRefNum(e.total)} / ${esc(e.unit)}` : ''}</td><td class="c-unit">${esc(g.scope_code)}</td><td class="num c-num">${g.items}</td><td class="num c-num">${g.counted}</td><td class="c-unit">${esc(g.status)}</td></tr>`;
       }).join('') || `<tr><td class="empty" colspan="8">${d.ready ? 'ยังไม่มีกลุ่ม กด เพิ่มกลุ่ม' : 'ให้รัน db/act/cfo.sql ก่อน (ตารางกลุ่มวัสดุ)'}</td></tr>`}</tbody></table>`;
     pickedGroup = null;
@@ -1301,7 +1303,7 @@ async function cfoSetMaterial(body, m, rerender) {
       ${field('กลุ่ม', `<select id="cfo-f-matgrp">${options(['', 'none', ...d.groups.map((g) => String(g.id))], cfoMatFilter.group, (v) => (v === 'none' ? 'รอจัดกลุ่ม' : v ? groups.get(Number(v)).name : 'ทั้งหมด'))}</select>`)}
       ${field('คิดค่า', `<select id="cfo-f-matef">${options(['', 'yes', 'no'], cfoMatFilter.ef, (v) => ({ '': 'ทั้งหมด', yes: 'คิดได้', no: 'ยังไม่คิด' })[v])}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'รหัส ชื่อวัสดุ กลุ่ม หรือ EF' })}
-      ${d.admin ? `<div class="action-bar">${button('cfo-usage', 'วาง Usage', 'primary')}${button('cfo-add', 'เพิ่ม', 'secondary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
+      ${d.admin ? `<div class="action-bar">${button('cfo-usage', 'วาง Usage', 'primary')}${button('cfo-calef', 'Import cal_ef', 'secondary', 'title="ไฟล์ Excel ชีต cal_ef: Id_cfp · group · material · material_description · bun · kgCO₂e/unit"')}${button('cfo-add', 'เพิ่ม', 'secondary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
     </div>
     <div class="table-wrap sheet cfo-efgrid" id="cfo-rows"></div>
     <p class="sum-meta" id="cfo-mat-count"></p>
@@ -1359,8 +1361,9 @@ async function cfoSetMaterial(body, m, rerender) {
   $('cfo-add').onclick = () => {
     openPopup('เพิ่ม / จัดกลุ่มวัสดุ', gridField('cfo-grid', [
       { key: 'material', label: 'Material', width: '110px' }, { key: 'group', label: 'กลุ่ม', type: 'select', options: [['', '-'], ...d.groups.map((g) => [g.name, g.name])], width: '200px' },
-      { key: 'name', label: 'รายละเอียด' }, { key: 'sap_unit', label: 'หน่วย SAP', width: '90px' }, { key: 'factor', label: 'ตัวแปลง', type: 'number', width: '100px' }
-    ], 5, 'วางหลายแถวจาก Excel ได้ · รหัสที่มีอยู่แล้ว = แก้กลุ่ม / ตัวแปลง · ตัวแปลง = 1 หน่วย SAP เท่ากับกี่หน่วยของ EF ของกลุ่ม · แถวว่างไม่บันทึก'), async () => {
+      { key: 'name', label: 'รายละเอียด' }, { key: 'sap_unit', label: 'หน่วย SAP', width: '90px' }, { key: 'factor', label: 'ตัวแปลง', type: 'number', width: '100px' },
+      { key: 'kgco2e_unit', label: 'kgCO₂e/หน่วย', type: 'number', width: '110px' }, { key: 'ref', label: 'Ref (CFP id)', width: '100px' }
+    ], 5, 'วางหลายแถวจาก Excel ได้ · รหัสที่มีอยู่แล้ว = แก้กลุ่ม / ตัวแปลง · ตัวแปลง = 1 หน่วย SAP เท่ากับกี่หน่วยของ EF ของกลุ่ม · ใส่ kgCO₂e/หน่วย = คิด Qty × ค่านี้ตรง ๆ (Ref = EF ที่มาของค่า) · แถวว่างไม่บันทึก'), async () => {
       const rows = grid.rows().map(({ values }) => values);
       if (!rows.length) throw new Error('ยังไม่มีข้อมูลในตาราง');
       const r = await a5Api(CFO, 'cfo/materials', { method: 'POST', body: { rows } });
@@ -1378,13 +1381,15 @@ async function cfoSetMaterial(body, m, rerender) {
       ${field('รายละเอียด', `<input id="cfo-m-name" maxlength="300" value="${esc(r.name)}">`)}
       ${field('หน่วย SAP', `<input id="cfo-m-unit" maxlength="20" value="${esc(r.sap_unit || '')}">`)}
       ${field('ตัวแปลง: 1 หน่วย SAP = ? หน่วย EF', `<input id="cfo-m-factor" type="number" step="any" value="${esc(r.factor ?? '')}">`)}
+      ${field('kgCO₂e / หน่วย SAP (cal_ef: ใส่แล้วคิด Qty × ค่านี้ ไม่ใช้ตัวแปลง)', `<input id="cfo-m-kg" type="number" step="any" value="${esc(r.kgco2e_unit ?? '')}">`)}
+      ${field('Ref ที่มาของค่า (EF CFP id เช่น CFP-0746)', `<input id="cfo-m-ref" maxlength="20" value="${esc(refCode(r))}">`)}
       <p class="sum-meta" id="cfo-m-hint"></p>
       <details class="cfo-paper"><summary>ตัวช่วยคิดกระดาษ (แกรม × ขนาด × จำนวนแผ่น → kg)</summary>
         <div class="cfo-gas">${field('แกรม (g/m²)', '<input id="cfo-p-gsm" type="number" step="any" value="80">')}${field('ขนาด', `<select id="cfo-p-size">${options(Object.keys(CFO_PAPER), 'A4')}</select>`)}${field('แผ่นต่อหน่วย SAP', '<input id="cfo-p-sheets" type="number" value="500">')}</div>
         ${button('cfo-p-calc', 'ใส่ค่าตัวแปลง')}</details>
       ${field('สถานะ', `<select id="cfo-m-status">${options(['Active', 'Inactive'], r.status)}</select>`)}`, async () => {
       await a5Api(CFO, `cfo/materials/${encodeURIComponent(r.material)}`, { method: 'PATCH', body: { group_id: $('cfo-m-grp').value, name: $('cfo-m-name').value, sap_unit: $('cfo-m-unit').value,
-        factor: $('cfo-m-factor').value, status: $('cfo-m-status').value } });
+        factor: $('cfo-m-factor').value, kgco2e_unit: $('cfo-m-kg').value, ...(Number($('cfo-m-kg').value) > 0 ? { ref: $('cfo-m-ref').value } : {}), status: $('cfo-m-status').value } });
       toast('บันทึกแล้ว · เดือนที่วาง Usage ไว้คิดใหม่ให้แล้ว');
       closePopup();
       rerender();
@@ -1392,14 +1397,58 @@ async function cfoSetMaterial(body, m, rerender) {
     const hint = () => {
       const e = refs.get(groups.get(Number($('cfo-m-grp').value))?.ef_ref_id);
       const f = Number($('cfo-m-factor').value);
+      const kg = Number($('cfo-m-kg').value);
+      if (kg > 0) { $('cfo-m-hint').textContent = `1 ${$('cfo-m-unit').value || 'หน่วย SAP'} = ${cfoRefNum(kg)} kgCO₂e (ค่าของวัสดุเอง ไม่ใช้ EF ของกลุ่ม)`; return; }
       $('cfo-m-hint').textContent = e ? `1 ${$('cfo-m-unit').value || 'หน่วย SAP'} = ${f || '?'} ${e.unit} × ${cfoRefNum(e.total)} kgCO₂e/${e.unit} = ${f ? cfoRefNum(f * Number(e.total)) : '?'} kgCO₂e` : 'ยังไม่มีกลุ่มที่มี EF: วัสดุนี้จะไม่ถูกคิด';
     };
-    ['cfo-m-grp', 'cfo-m-factor', 'cfo-m-unit'].forEach((id) => { $(id).oninput = hint; $(id).onchange = hint; });
+    ['cfo-m-grp', 'cfo-m-factor', 'cfo-m-unit', 'cfo-m-kg'].forEach((id) => { $(id).oninput = hint; $(id).onchange = hint; });
     $('cfo-p-calc').onclick = () => {
       $('cfo-m-factor').value = Number(((Number($('cfo-p-gsm').value) * CFO_PAPER[$('cfo-p-size').value] * Number($('cfo-p-sheets').value)) / 1000).toPrecision(6));
       hint();
     };
     hint();
+  };
+  // cal_ef (ผู้ใช้กำหนด 2026-11-09): Id_cfp · group · material · material_description · bun · kgCO₂e/unit → กลุ่ม (ชื่อกิจกรรม) + วัสดุ
+  // ที่มี kgCO₂e/หน่วย ของตัวเอง · กลุ่มที่ยังไม่มีสร้างให้ · Id_cfp = Ref (ว่าง = ยังไม่ระบุ) · ตรวจก่อน แล้วค่อยบันทึก
+  $('cfo-calef').onclick = () => {
+    let rows = null;
+    openPopup('Import cal_ef', `
+      ${field('ไฟล์ Excel (ชีต cal_ef) หรือ CSV', '<input id="cfo-ce-file" type="file" accept=".xlsx,.xls,.csv">')}
+      <p class="sum-meta">คอลัมน์: Id_cfp · group · material · material_description · bun · kgCO₂e/unit · group = ชื่อกิจกรรม (กลุ่ม) · วัสดุที่มีอยู่แล้ว = แก้ค่า · บันทึกแล้วทุกเดือนที่วาง Usage ไว้คิดใหม่ให้</p>
+      <div id="cfo-ce-result" class="sum-meta"></div>`, async () => {
+      if (!rows) throw new Error('เลือกไฟล์ก่อน');
+      const r = await a5Api(CFO, 'cfo/materials', { method: 'POST', body: { rows, makeGroups: true } });
+      toast(`บันทึก ${r.count} วัสดุ · คิด Usage ใหม่แล้ว`);
+      closePopup();
+      rerender();
+    }, 'บันทึก');
+    $('cfo-ce-file').onchange = async () => {
+      const file = $('cfo-ce-file').files[0];
+      rows = null;
+      if (!file) return;
+      $('cfo-ce-result').textContent = 'กำลังอ่านไฟล์...';
+      try {
+        const cells = (await cfoReadSheetFile(file, ['cal_ef'])).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
+        const name = (h) => String(h ?? '').trim().toLowerCase().replace(/₂/g, '2').replace(/\s+/g, '');
+        const head = (cells[0] || []).map(name);
+        const at = (...keys) => head.findIndex((h) => keys.includes(h));
+        const col = { ref: at('id_cfp', 'ref', 'efid'), group: at('group', 'กลุ่ม'), material: at('material'), name: at('material_description', 'materialdescription', 'รายละเอียด'),
+          unit: at('bun', 'eun', 'unit', 'หน่วยsap'), kg: head.findIndex((h) => h.startsWith('kgco2e')) };
+        if (col.material < 0 || col.kg < 0) throw new Error('ไม่พบคอลัมน์ material หรือ kgCO₂e/unit ในแถวแรกของชีต cal_ef');
+        const cell = (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '');
+        rows = cells.slice(1).map((r, i) => ({ line: i + 2, material: cell(r, col.material).replace(/\.0+$/, ''), group: cell(r, col.group), name: cell(r, col.name), sap_unit: cell(r, col.unit),
+          kgco2e_unit: cell(r, col.kg), ref: cell(r, col.ref) })).filter((r) => r.material);
+        if (!rows.length) throw new Error('ไม่พบแถวข้อมูล');
+        const c = await a5Api(CFO, 'cfo/materials', { method: 'POST', body: { rows, makeGroups: true, save: false } });
+        const noRef = rows.filter((r) => !r.ref).length;
+        $('cfo-ce-result').innerHTML = `<b>${c.count} วัสดุ: เพิ่ม ${c.add} · แก้ ${c.update}</b>${c.newGroups.length ? ` · กลุ่มใหม่ ${c.newGroups.length}: ${c.newGroups.map(esc).join(', ')}` : ''}
+          ${noRef ? `<br>ยังไม่มี Ref (Id_cfp) ${noRef} แถว: คิดได้ แต่ยังไม่บอกที่มาของค่า` : ''}
+          ${c.odd.length ? `<details open><summary>ค่าน่าสงสัย ${c.odd.length} แถว (หน่วย kg / L แต่ค่าห่างจาก EF มาก) ตรวจก่อนบันทึก</summary><ul class="cfo-u-list">${c.odd.map((x) => `<li>${esc(x.material)} ${esc(x.name)} · ${cfoRefNum(x.value)} kgCO₂e/${esc(x.unit)}${x.ref ? ` · ${esc(x.ref)} = ${cfoRefNum(x.ef)}/${esc(x.efUnit)}` : ''}</li>`).join('')}</ul></details>` : ''}`;
+      } catch (err) {
+        rows = null;
+        $('cfo-ce-result').textContent = err.message;
+      }
+    };
   };
   $('cfo-del').onclick = () => picked && confirmPopup('ลบวัสดุ', `ลบ ${esc(picked.material)} ${esc(picked.name)}`, async () => {
     await a5Api(CFO, `cfo/materials/${encodeURIComponent(picked.material)}`, { method: 'DELETE' });
@@ -1454,7 +1503,7 @@ async function cfoSetMaterial(body, m, rerender) {
       fileRows = null;
       if (!file) return;
       try {
-        fileRows = (await cfoReadSheetFile(file)).map((r) => r.map((v) => (typeof v === 'number' ? String(v) : v)));
+        fileRows = (await cfoReadSheetFile(file, ['sap10', 'sap', 'usage'])).map((r) => r.map((v) => (typeof v === 'number' ? String(v) : v)));
         $('cfo-u-result').textContent = `อ่านไฟล์ ${file.name} ${fileRows.length.toLocaleString()} แถว กด ตรวจ`;
       } catch (err) { onErr(err); }
     };
@@ -1505,11 +1554,14 @@ const cfoLoadXlsx = () => cfoXlsx || (cfoXlsx = new Promise((resolve, reject) =>
   document.head.append(tag);
 }));
 
-async function cfoReadSheetFile(file) {
+// want: sheet names to take first (one workbook may hold sap10 · cfp · cal_ef · activity, ผู้ใช้กำหนด 2026-11-09), else the first sheet
+async function cfoReadSheetFile(file, want = []) {
   if (/\.csv$/i.test(file.name)) return cfoCsv((await file.text()).replace(/^﻿/, ''));
   const XLSX = await cfoLoadXlsx();
   const book = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-  return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { header: 1, raw: true, defval: '' });
+  const names = want.map((w) => String(w).toLowerCase());
+  const pick = names.map((w) => book.SheetNames.find((n) => n.trim().toLowerCase() === w)).find(Boolean) || book.SheetNames[0];
+  return XLSX.utils.sheet_to_json(book.Sheets[pick], { header: 1, raw: true, defval: '' });
 }
 
 // Import popup: choose the file → check (counts of new / updated rows) → save. Columns are found by the key or Thai label
@@ -1531,7 +1583,7 @@ function cfoRefImport(sheet, spec, rerender) {
     rows = null;
     $('cfo-imp-result').textContent = 'กำลังอ่านไฟล์...';
     try {
-      const cells = (await cfoReadSheetFile(file)).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
+      const cells = (await cfoReadSheetFile(file, [sheet])).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
       const name = (h) => String(h ?? '').trim().toLowerCase();
       const head = (cells[0] || []).map(name);
       const cols = spec.file || CFO_REF_FILE;

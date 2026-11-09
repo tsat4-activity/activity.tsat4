@@ -674,6 +674,9 @@ create table if not exists public.mt_cfo_mat_group (
   status text not null default 'Active' check (status in ('Active', 'Inactive'))
 );
 alter table public.mt_cfo_material add column if not exists group_id bigint references public.mt_cfo_mat_group (id) on delete set null;
+-- cal_ef (ผู้ใช้กำหนด 2026-11-09): kgCO₂e ต่อ 1 หน่วย SAP ของวัสดุ ใช้คิดตรง (Qty × ค่านี้) ไม่ต้องใช้ EF ของกลุ่ม / ตัวแปลง
+-- ef_ref_id ของวัสดุที่มีค่านี้ = Ref ที่มาของค่า (EF CFP) · กิจกรรมที่มีวัสดุแบบนี้ เก็บปริมาณเป็น kgCO₂e (EF sapkg = 1)
+alter table public.mt_cfo_material add column if not exists kgco2e_unit numeric check (kgco2e_unit > 0);
 create index if not exists mt_cfo_material_group on public.mt_cfo_material (group_id);
 alter table public.mt_cfo_activity add column if not exists mat_group_id bigint references public.mt_cfo_mat_group (id);
 alter table public.mt_cfo_activity add column if not exists costcenter text;
