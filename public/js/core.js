@@ -535,9 +535,16 @@ function setHeaderMeta(content = '') {
 // Shell chrome: logo + company names in the fixed header (System Setting can call after load)
 function setAppBranding({ logo, companyEn, companyTh } = {}) {
   const box = $('header-logo');
-  if (logo && box) box.style.backgroundImage = `url("${String(logo).replace(/"/g, '')}")`;
+  if (box) {
+    if (logo) box.style.backgroundImage = `url("${String(logo).replace(/"/g, '')}")`;
+    else box.style.removeProperty('background-image');
+  }
   if (companyEn && $('header-company-en')) $('header-company-en').textContent = companyEn;
-  if (companyTh && $('header-company-th')) $('header-company-th').textContent = companyTh;
+  if ($('header-company-th') && companyTh != null) $('header-company-th').textContent = companyTh;
+}
+
+function loadAppBranding() {
+  api('/api/company').then((row) => setAppBranding({ logo: row.logo, companyEn: row.nameEn, companyTh: row.nameTh })).catch(() => {});
 }
 
 function openChangePassword() {
@@ -661,6 +668,7 @@ function showShell() {
   $('header-role').textContent = `${access} · ${me.employeeId}`;
   document.querySelectorAll('[data-system]').forEach((node) => node.classList.toggle('d-none', !me.creator));
   if (typeof accessNav === 'function') accessNav(); // access.js: level badges + Setting only for ผู้ดูแล
+  if (typeof loadAppBranding === 'function') loadAppBranding();
   openView(view);
 }
 

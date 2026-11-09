@@ -83,7 +83,7 @@ async function adminPayload(spec, body, { insert, current = null, photo = null }
       if (password && !insert) out.password_changed_at = new Date().toISOString();
       continue;
     }
-    if (column.type === 'photo') {
+    if (column.type === 'photo' || column.type === 'logo') {
       const value = photo ? await photoValue(body[column.name], photo) : undefined;
       if (value?.error) return value;
       if (value !== undefined) out[column.name] = value;

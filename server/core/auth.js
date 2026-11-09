@@ -34,6 +34,13 @@ export function mountAuth(app) {
     res.json({ user: req.user });
   }));
 
+  // Header brand: one row in mt_main_company (System > Setting). Missing table must not block login.
+  app.get('/api/company', wrap(requireUser), wrap(async (_req, res) => {
+    const { data, error } = await mx.from('mt_main_company').select('logo,name_en,name_th').eq('id', 'main').maybeSingle();
+    if (error || !data) return res.json({ logo: '', nameEn: '', nameTh: '' });
+    res.json({ logo: data.logo || '', nameEn: data.name_en || '', nameTh: data.name_th || '' });
+  }));
+
   app.post('/api/password', wrap(requireUser), wrap(async (req, res) => {
     const current = String(req.body?.current || '');
     const next = String(req.body?.password || '');

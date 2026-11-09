@@ -45,6 +45,7 @@ GET /api/act/:activity/tasks auth
 GET /api/act/:activity/team auth
 GET /api/act/calendar auth
 GET /api/act/overview auth
+GET /api/company auth
 GET /api/health
 GET /api/me auth
 GET /api/system/choices auth creator

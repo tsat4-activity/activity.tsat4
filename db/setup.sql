@@ -71,9 +71,22 @@ do $$ begin
 end $$;
 
 -- Only the server (service key) reads these tables; the browser never does.
+-- ข้อมูลบริษัท 1 แถว (id = main): โลโก้ 1:1 + ชื่ออังกฤษ/ไทย แสดงที่ header (ผู้ใช้กำหนด 2026-11-09)
+create table if not exists public.mt_main_company (
+  id text primary key,
+  logo text,
+  name_en text not null default '',
+  name_th text not null default '',
+  updated_at timestamptz not null default now()
+);
+insert into public.mt_main_company (id, name_en, name_th)
+values ('main', 'TSAT4 Activity', '')
+on conflict (id) do nothing;
+
 alter table public.mt_main_costcenter enable row level security;
 alter table public.mt_main_employee enable row level security;
 alter table public.mt_main_user enable row level security;
+alter table public.mt_main_company enable row level security;
 
 -- ผู้ดูแลระบบคนแรก (รหัส 2102899 = ผู้สร้างระบบ, CREATOR_ID) · แก้ชื่อ-หน่วยงานภายหลังได้ที่ Setting
 -- บัญชีเข้าสู่ระบบสร้างเองตอนเซิร์ฟเวอร์เริ่ม จาก BOOTSTRAP_EMPLOYEE_ID / BOOTSTRAP_PASSWORD ใน Render

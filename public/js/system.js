@@ -15,8 +15,10 @@ let sysDepts = null; // department choices = departments in mt_main_costcenter (
 const SYS_SCOPES = ACTIVITIES.map(([id, label]) => [id, label]);
 const SYS_USER_LABELS = { creator: 'จัดการได้ทั้งหมด', executive: 'ผู้บริหาร', admin_of: 'ผู้ดูแลระบบ' };
 
+const SYS_COMPANY_LABELS = { id: 'รหัส', logo: 'โลโก้ (1:1)', name_en: 'ชื่อบริษัท (อังกฤษ)', name_th: 'ชื่อบริษัท (ไทย)' };
 function columnLabel(table, column) {
   if (table?.name === 'mt_main_user' && SYS_USER_LABELS[column.name]) return SYS_USER_LABELS[column.name];
+  if (table?.name === 'mt_main_company' && SYS_COMPANY_LABELS[column.name]) return SYS_COMPANY_LABELS[column.name];
   return column.name;
 }
 
@@ -28,19 +30,20 @@ function cellText(column, value) {
 
 // Table cell: a photo column shows its thumbnail (hover zooms, ZOOM_THUMBS), the rest plain text.
 function cellHtml(column, value) {
-  if (column.type === 'photo') return value ? `<img class="sys-photo img-zoom" src="${esc(value)}" alt="" loading="lazy">` : '';
+  if (column.type === 'photo' || column.type === 'logo') return value ? `<img class="sys-photo img-zoom${column.type === 'logo' ? ' is-square' : ''}" src="${esc(value)}" alt="" loading="lazy">` : '';
   return esc(cellText(column, value));
 }
 
 // Photo field (mt_main_employee.photo, ผู้ใช้กำหนด 2026-10-30: อัตราส่วน 2.5:3): the picked file is cropped in the
 // browser to 500×600 JPEG and kept in data-new until save; the server uploads it (Storage img_main) and stores the link.
-function photoControl(id, label, value) {
+function photoControl(id, label, value, shape = 'portrait') {
+  const square = shape === 'square';
   return `<div class="field">${label}<div class="sys-photo-edit">
-    <img id="${id}-view" class="sys-photo is-large" src="${esc(value || '')}" alt=""${value ? '' : ' hidden'}>
+    <img id="${id}-view" class="sys-photo is-large${square ? ' is-square' : ''}" src="${esc(value || '')}" alt=""${value ? '' : ' hidden'}>
     <div class="sys-photo-actions">
-      <input id="${id}" type="file" accept="image/*" data-new="">
+      <input id="${id}" type="file" accept="image/*" data-new="" data-shape="${square ? 'square' : 'portrait'}">
       ${value ? `<label class="check"><input id="${id}-remove" type="checkbox"> ลบรูป</label>` : ''}
-      <span class="sum-meta">ครอปเป็น 2.5 : 3 อัตโนมัติ</span>
+      <span class="sum-meta">${square ? 'ครอปเป็น 1 : 1 อัตโนมัติ' : 'ครอปเป็น 2.5 : 3 อัตโนมัติ'}</span>
     </div>
   </div></div>`;
 }
@@ -53,7 +56,8 @@ function bindPhotoControl(id) {
     input.dataset.new = '';
     if (!file) return;
     try {
-      input.dataset.new = await cropJpeg(file, 500, 600);
+      const square = input.dataset.shape === 'square';
+      input.dataset.new = await cropJpeg(file, square ? 512 : 500, square ? 512 : 600);
       $(`${id}-view`).src = input.dataset.new;
       $(`${id}-view`).hidden = false;
       if ($(`${id}-remove`)) $(`${id}-remove`).checked = false;
@@ -65,7 +69,7 @@ function columnControl(table, column, value) {
   const id = `sys-${column.name}`;
   const label = columnLabel(table, column);
   if (column.type === 'password') return field(label, `<input id="${id}" type="password" autocomplete="new-password">`);
-  if (column.type === 'photo') return photoControl(id, label, value);
+  if (column.type === 'photo' || column.type === 'logo') return photoControl(id, label, value, column.type === 'logo' ? 'square' : 'portrait');
   if (column.type === 'bool') return field(label, `<select id="${id}"><option value="false">false</option><option value="true"${value ? ' selected' : ''}>true</option></select>`);
   if (column.type === 'scopes') {
     const on = Array.isArray(value) ? value : [];
@@ -164,7 +168,7 @@ async function renderSystem(target) {
       if (column.type === 'password') { if (input.value) values.password = input.value; continue; }
       if (column.type === 'scopes') { values[column.name] = [...input.querySelectorAll('input:checked')].map((box) => box.value); continue; }
       // photo: a new picture (data URL) or '' to remove; untouched = not sent
-      if (column.type === 'photo') {
+      if (column.type === 'photo' || column.type === 'logo') {
         if (input.dataset.new) values[column.name] = input.dataset.new;
         else if ($(`sys-${column.name}-remove`)?.checked) values[column.name] = '';
         continue;
@@ -179,6 +183,7 @@ async function renderSystem(target) {
       await api(`/api/system/tables/${encodeURIComponent(table.name)}`, { method: 'POST', body: values });
     }
     toast('บันทึกแล้ว');
+    if (table.name === 'mt_main_company' && typeof loadAppBranding === 'function') loadAppBranding();
     state.editing = null;
     closePopup();
     await loadRows();
@@ -194,7 +199,7 @@ async function renderSystem(target) {
       ? (state.editing ? 'แก้ไขสิทธิ์จัดการระบบ' : 'เพิ่มสิทธิ์จัดการระบบ')
       : `${state.editing ? 'แก้ไขแถว' : 'เพิ่มแถว'} ${esc(table.name)}`;
     openPopup(title, fields, saveRow);
-    table.columns.filter((column) => column.type === 'photo').forEach((column) => bindPhotoControl(`sys-${column.name}`));
+    table.columns.filter((column) => column.type === 'photo' || column.type === 'logo').forEach((column) => bindPhotoControl(`sys-${column.name}`));
   };
   const reset = () => { state.offset = 0; head.sort = ''; head.dir = 'asc'; head.filters = {}; state.editing = null; closePopup(); loadRows().catch(onErr); };
   $('sys-group').onchange = () => { sysPick.group = $('sys-group').value; fillUnits(); fillTables(); reset(); };
