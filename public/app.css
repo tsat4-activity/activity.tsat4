@@ -365,8 +365,10 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .a5-charts{display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0}
 .a5-charts > .card{flex:1 1 auto;min-height:0}
 .a5-charts > .card{min-width:0}
-/* Self / Committee table headers carry their chart colour (ชุดสี A / B) */
-.a5-side th.a5-type-head{text-align:center;color:var(--team);border-bottom:3px solid var(--team)}
+/* Self / Committee table headers use the same tint as that chart's bars */
+.a5-side th.a5-type-head,.a5-sum-table table.mo-data-table thead th.a5-type-head,.a5-sum-table table.mo-data-table thead th.a5-type-sub{text-align:center;background:color-mix(in srgb,var(--team) 40%,var(--mo-surface));color:var(--mo-text);box-shadow:inset 0 -2px 0 var(--team)}
+.a5-sum-table table.mo-data-table thead th.a5-type-head{font-weight:600;color:var(--team)}
+.a5-charts .ch-val{color:#dc2626;font-weight:700}
 .a5-side .mo-data-table{table-layout:fixed;width:100%}
 .a5-side .mo-data-table th,.a5-side .mo-data-table td{text-align:center;padding:4px 2px;white-space:nowrap}
 .a5-side .mo-data-table th:first-child,.a5-side .mo-data-table td:first-child{text-align:left;padding-left:10px}

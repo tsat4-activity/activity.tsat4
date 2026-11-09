@@ -124,6 +124,7 @@ async function a5Dashboard(target, activity) {
 // 5S Summary (ผู้ใช้กำหนด 2026-10-30): left = Self Audit chart over Committee chart, right = one table with both;
 // Self = ชุดสี A, Committee = ชุดสี B, the same colours on the charts and the table headers.
 const A5_TYPE_SETS = [['SELF', 'Self Audit', 1], ['COMMITTEE', 'Committee Audit', 2]]; // [type, label, CHART.series index]
+const A5_TARGET = '#dc2626'; // target line and its numbers (ผู้ใช้กำหนด 2026-11-09)
 
 async function a5DrawSummary(body, activity, me) {
   if (!me) me = await a5Api(activity, `me?year=${a5Year}`).catch(() => ({ access: {} }));
@@ -149,13 +150,14 @@ async function a5DrawSummary(body, activity, me) {
     left: 'Score (%)',
     leftMax: 100,
     bars: [{ values: set.months.map((m) => m.percent), colors: [set.color], unit: '%', inner: set.months.map((m) => (m.audits ? `${m.audits} ใบ` : '')) }],
-    lines: [{ values: set.months.map(() => set.pass), color: CHART.target, dash: true, dots: false, unit: '%' }],
+    lines: [{ values: set.months.map(() => set.pass), color: A5_TARGET, dash: true, dots: false, unit: '%' }],
     legend: [
       { box: set.color, label: `${set.label} % เฉลี่ยของเดือน` },
-      { line: CHART.target, dash: true, label: `เกณฑ์ผ่าน ${set.label} ${set.pass}%` }
+      { line: A5_TARGET, dash: true, label: `เกณฑ์ผ่าน ${set.label} ${set.pass}%` }
     ]
   }));
   const head = sets.map((set) => `<th colspan="2" class="a5-type-head" style="--team:${set.color}">${esc(set.label)}</th>`).join('');
+  const sub = sets.map((set) => `<th class="a5-type-sub" style="--team:${set.color}">%</th><th class="a5-type-sub" style="--team:${set.color}">ครั้ง</th>`).join('');
   const row = (i) => `<tr><td>${ACT_MONTHS[i]}</td>${sets.map((set) => `<td>${a5Pct(set.months[i].percent)}</td><td>${set.months[i].audits}</td>`).join('')}</tr>`;
   const kpiPass = a5Summary.type === 'SELF' ? passSelf : passCommittee;
   const targetOptions = [
@@ -181,7 +183,7 @@ async function a5DrawSummary(body, activity, me) {
     <div class="a5-charts">${sets.map(chart).join('')}</div>
     <section class="card a5-sum-table"><div class="table-wrap sheet"><table class="mo-data-table">
         <colgroup><col style="width:22%"><col style="width:19%"><col style="width:19%"><col style="width:20%"><col style="width:20%"></colgroup>
-        <thead><tr><th rowspan="2">เดือน</th>${head}</tr><tr>${sets.map(() => '<th>%</th><th>ครั้ง</th>').join('')}</tr></thead>
+        <thead><tr><th rowspan="2">เดือน</th>${head}</tr><tr>${sub}</tr></thead>
         <tbody>${ACT_MONTHS.map((_, i) => row(i)).join('')}</tbody>
       </table></div></section>
     </div>`;
