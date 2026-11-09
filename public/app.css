@@ -863,8 +863,8 @@ body[data-zone="work"]{--ch-1:#ea580c}
 /* Hover preview of a list thumbnail (core.js ZOOM_THUMBS) */
 .img-zoom-box{position:fixed;z-index:200;padding:6px;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.22);pointer-events:none}
 /* mt_main_employee.photo 2.5:3 (System Setting) */
-.sys-photo{width:30px;aspect-ratio:2.5/3;object-fit:cover;border-radius:4px;border:1px solid var(--mo-border);vertical-align:middle;display:block}
-.sys-photo.is-square{aspect-ratio:1/1;width:32px}
+.sys-photo{width:18px;height:22px;aspect-ratio:2.5/3;object-fit:cover;border-radius:3px;border:1px solid var(--mo-border);vertical-align:middle;display:block}
+.sys-photo.is-square{aspect-ratio:1/1;width:22px;height:22px}
 .sys-photo.is-large{width:100px}
 .sys-photo.is-large.is-square{width:96px;height:96px}
 .sys-photo-edit{display:flex;gap:12px;align-items:flex-start}
