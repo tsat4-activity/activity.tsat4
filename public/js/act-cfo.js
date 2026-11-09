@@ -1370,7 +1370,7 @@ async function cfoSetUsageEf(body, m, rerender) {
       ${field('ตาราง', `<select id="cfo-ue-kind">${options(Object.keys(CFO_UE_KINDS), kind, (v) => CFO_UE_KINDS[v])}</select>`)}
       ${field('กลุ่ม', `<select id="cfo-ue-grp">${options(['', ...groups], cfoUsageFilter.group, (v) => v || 'ทั้งหมด')}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'Id_usage material ชื่อ กลุ่ม Id_cfp' })}
-      <div class="action-bar">${button('cfo-ue-export', 'Export')}${d.admin ? `${button('cfo-import', 'Import', 'secondary', 'title="ไฟล์ Excel ชีต usage_ef (หรือ cal_ef): Id_usage · Id_cfp · group · material · material_description · bun · kgCO₂e/unit"')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}` : ''}</div>
+      <div class="action-bar">${button('cfo-ue-export', 'Export')}${d.admin ? `${button('cfo-import', 'Import', 'secondary', 'title="ไฟล์ Excel ชีต usage_ef (หรือ cal_ef): Id_usage · Id_cfp · group · material · material_description · bun · kgCO₂e/unit"')}${button('cfo-ue-acts', 'สร้างกิจกรรม', 'secondary', 'title="สร้างกิจกรรม Scope 3 ของรายการที่แสดงอยู่ × costcenter (จากไฟล์ SAP หรือพิมพ์เอง)"')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}` : ''}</div>
     </div>
     <div class="table-wrap sheet cfo-efgrid" id="cfo-rows"></div>
     <p class="sum-meta" id="cfo-ue-count"></p>`;
@@ -1406,6 +1406,65 @@ async function cfoSetUsageEf(body, m, rerender) {
   };
   $('cfo-add').onclick = () => form(null);
   $('cfo-edit').onclick = () => picked && form(picked);
+  // สร้างกิจกรรม (ผู้ใช้กำหนด 2026-11-09): the rows shown (ตาราง · กลุ่ม · ค้นหา) × costcenter → กิจกรรม Usage ที่ยังไม่มี
+  // costcenter from a SAP file (every material of these rows with a Cost Ctr in the file) or typed (every row × each one)
+  $('cfo-ue-acts').onclick = () => {
+    const term = cfoUsageFilter.q.trim().toLowerCase();
+    const shown = all.filter((r) => r.status === 'Active' && (!cfoUsageFilter.group || r.grp === cfoUsageFilter.group)
+      && (!term || `${r.id} ${r.material} ${r.name} ${r.grp} ${refs.get(r.ref_id)?.code || ''}`.toLowerCase().includes(term)));
+    const s3 = m.scopes.filter((sc) => sc.scope === 3).sort((x, y) => Number(x.code.split('-')[1]) - Number(y.code.split('-')[1]));
+    let filePairs = null;
+    openPopup(`สร้างกิจกรรม ${CFO_UE_KINDS[kind]}`, `
+      <p class="sum-meta">รายการที่แสดงอยู่ ${shown.length.toLocaleString()} รายการ (Active)${cfoUsageFilter.group ? ` · กลุ่ม ${esc(cfoUsageFilter.group)}` : ''} · 1 กิจกรรม = รายการ × costcenter · ชื่อกิจกรรม = กลุ่ม · ที่มีอยู่แล้วไม่สร้างซ้ำ</p>
+      ${field('หมวด', `<select id="cfo-ua-scope">${s3.map((sc) => `<option value="${sc.code}"${sc.code === '3-1' ? ' selected' : ''}>${esc(`${sc.code} ${sc.name_th || sc.name}`)}</option>`).join('')}</select>`)}
+      ${field('costcenter จากไฟล์ SAP (ชีต sap10: Material · Cost Ctr) · เฉพาะ material ที่มีในไฟล์', '<input id="cfo-ua-file" type="file" accept=".xlsx,.xls,.csv">')}
+      ${field('หรือพิมพ์ costcenter (คั่นด้วย , หรือขึ้นบรรทัดใหม่) · ใช้กับทุกรายการที่แสดง', '<textarea id="cfo-ua-cc" rows="2" placeholder="2140662201, 2140360000"></textarea>')}
+      ${field('หน่วยงาน (ใช้เมื่อไม่พบ costcenter ในตาราง costcenter)', '<input id="cfo-ua-dept" maxlength="80" placeholder="เช่น PD3">')}
+      ${button('cfo-ua-check', 'ตรวจ')}
+      <div id="cfo-ua-result" class="sum-meta"></div>`, async () => {
+      const r = await send(true);
+      toast(`สร้างกิจกรรม ${r.add} รายการ${r.exists ? ` · มีอยู่แล้ว ${r.exists}` : ''}`);
+      closePopup();
+      rerender();
+    }, 'สร้างกิจกรรม');
+    const pairs = () => {
+      const typed = $('cfo-ua-cc').value.split(/[,\n\s]+/).map((x) => x.trim()).filter(Boolean);
+      if (typed.length) return shown.flatMap((r) => typed.map((cc) => ({ id: r.id, costcenter: cc })));
+      if (filePairs) return filePairs;
+      throw new Error('เลือกไฟล์ SAP หรือพิมพ์ costcenter');
+    };
+    const send = (save) => a5Api(CFO, 'cfo/usage-ef/activities', { method: 'POST', body: { pairs: pairs(), scope_code: $('cfo-ua-scope').value, department: $('cfo-ua-dept').value, save } });
+    $('cfo-ua-file').onchange = async () => {
+      const file = $('cfo-ua-file').files[0];
+      filePairs = null;
+      if (!file) return;
+      try {
+        const lines = (await cfoReadSheetFile(file, ['sap10', 'sap'])).map((c) => c.map((v) => String(v ?? '').trim()));
+        const name = (h) => h.toLowerCase().replace(/\s+/g, ' ').replace(/\.$/, '');
+        const headAt = lines.slice(0, 20).findIndex((c) => c.some((h) => name(h) === 'material'));
+        if (headAt < 0) throw new Error('ไม่พบหัวคอลัมน์ Material ในไฟล์');
+        const head = lines[headAt].map(name);
+        const mi = head.indexOf('material');
+        const ci = head.findIndex((h) => ['cost ctr', 'costcenter', 'cost center'].includes(h));
+        if (ci < 0) throw new Error('ไม่พบคอลัมน์ Cost Ctr ในไฟล์');
+        const byMat = new Map(shown.map((r) => [r.material, r.id]));
+        const seen = new Set();
+        filePairs = [];
+        for (const c of lines.slice(headAt + 1)) {
+          const mat = String(c[mi] || '').replace(/\.0+$/, '').replace(/^0+(?=\d)/, '');
+          const cc = String(c[ci] || '').replace(/\.0+$/, '');
+          const id = byMat.get(mat);
+          if (!id || !cc || seen.has(`${id}|${cc}`)) continue;
+          seen.add(`${id}|${cc}`);
+          filePairs.push({ id, costcenter: cc });
+        }
+        $('cfo-ua-result').textContent = `อ่านไฟล์ ${file.name}: พบ ${filePairs.length.toLocaleString()} คู่ รายการ × costcenter กด ตรวจ`;
+      } catch (err) { filePairs = null; $('cfo-ua-result').textContent = err.message; }
+    };
+    $('cfo-ua-check').onclick = () => send(false).then((r) => {
+      $('cfo-ua-result').innerHTML = `<b>จะสร้าง ${r.add.toLocaleString()} กิจกรรม</b>${r.exists ? ` · มีอยู่แล้ว ${r.exists.toLocaleString()} (ข้าม)` : ''}${r.noCenter.length ? `<br>ไม่พบ costcenter ในตาราง costcenter ${r.noCenter.length}: ${r.noCenter.slice(0, 20).map(esc).join(', ')} (หน่วยงาน = ช่องด้านบน หรือเลข costcenter)` : ''}`;
+    }).catch(onErr);
+  };
   $('cfo-del').onclick = () => picked && confirmPopup('ลบ usage_ef', `ลบ ${esc(picked.id)} ${esc(picked.name)}`, async () => {
     await a5Api(CFO, `cfo/usage-ef/${encodeURIComponent(picked.id)}`, { method: 'DELETE' });
     toast('ลบแล้ว');

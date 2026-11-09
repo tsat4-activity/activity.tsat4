@@ -438,6 +438,52 @@ export function mountCfo(app) {
     await logRev(t, req, 'EF SAP (usage_ef)', out.length === 1 ? out[0].row.id : `${out.length} รายการ`, `บันทึก usage_ef เพิ่ม ${add} แก้ ${out.length - add}`);
     res.status(201).json({ ok: true, count: out.length, add });
   });
+  // EF SAP > สร้างกิจกรรม (ผู้ใช้กำหนด 2026-11-09, ไม่ต้องพิมพ์ทีละกิจกรรม): pairs [{ id, costcenter }] → กิจกรรม Usage
+  // (Id × costcenter) ที่ยังไม่มี · หมวด Scope 3 ที่เลือก · หน่วยงาน = department ของ costcenter (mt_main_costcenter, ไม่พบ = ที่กรอก
+  // หรือเลข costcenter) · ชื่อ = กลุ่ม · save false = นับก่อน
+  route('post', '/api/act/:activity/cfo/usage-ef/activities', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    const scopeCode = text(req.body?.scope_code, 10) || '3-1';
+    if (!/^3-\d{1,2}$/.test(scopeCode)) return fail(res, 400, 'เลือกหมวด Scope 3');
+    const ccKey = (v) => String(v ?? '').trim().replace(/\.0+$/, '').toUpperCase();
+    const pairs = (Array.isArray(req.body?.pairs) ? req.body.pairs : []).map((p) => ({ id: String(p.id || '').trim(), cc: ccKey(p.costcenter) })).filter((p) => p.id && p.cc).slice(0, 5000);
+    if (!pairs.length) return fail(res, 400, 'ยังไม่มีรายการ × costcenter');
+    const [items, acts, centers] = await Promise.all([
+      fetchAll(() => tx.from(t.usageEf).select('*')),
+      fetchAll(() => tx.from(t.activity).select('usage_id,costcenter').not('usage_id', 'is', null)),
+      fetchAll(() => mx.from('mt_main_costcenter').select('costcenter,object_name,department')).catch(() => [])
+    ]);
+    const itemOf = new Map(items.map((x) => [x.id, x]));
+    const have = new Set(acts.map((a) => `${a.usage_id}|${ccKey(a.costcenter)}`));
+    const centerOf = new Map(centers.map((c) => [ccKey(c.costcenter), c]));
+    const fallback = text(req.body?.department, 80);
+    const seen = new Set();
+    const make = [];
+    let exists = 0;
+    const unknown = new Set();
+    for (const p of pairs) {
+      const key = `${p.id}|${p.cc}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (have.has(key)) { exists += 1; continue; }
+      const item = itemOf.get(p.id);
+      if (!item) { unknown.add(p.id); continue; }
+      const c = centerOf.get(p.cc);
+      const department = c?.department || fallback || p.cc;
+      make.push({ item, cc: p.cc, department, detail: `${department} : ${p.cc}${c?.object_name ? ` ${c.object_name}` : ''}`.slice(0, 500), noCenter: !c });
+    }
+    const noCenter = [...new Set(make.filter((x) => x.noCenter).map((x) => x.cc))];
+    if (req.body?.save === false) return res.json({ ok: true, add: make.length, exists, unknown: [...unknown], noCenter });
+    const efOf = new Map();
+    const rows = [];
+    for (const x of make) {
+      if (!efOf.has(x.item.id)) efOf.set(x.item.id, await efUsage(t, x.item, scopeCode));
+      rows.push({ ef_id: efOf.get(x.item.id), gwp_code: 'AR5', department: x.department, name: x.item.grp, detail: x.detail, calc: 'usage', status: 'Active', usage_id: x.item.id, costcenter: x.cc });
+    }
+    for (let i = 0; i < rows.length; i += 500) must(await tx.from(t.activity).insert(rows.slice(i, i + 500)));
+    await logRev(t, req, 'กิจกรรม', `EF SAP สร้างกิจกรรม ${rows.length}`, `หมวด ${scopeCode} · มีแล้ว ${exists}`);
+    res.status(201).json({ ok: true, add: rows.length, exists, unknown: [...unknown], noCenter });
+  });
   route('delete', '/api/act/:activity/cfo/usage-ef/:id', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;
     if (must(await tx.from(t.activity).select('id').eq('usage_id', req.params.id).limit(1)).length) return fail(res, 400, 'มีกิจกรรมใช้ Id_usage นี้แล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
