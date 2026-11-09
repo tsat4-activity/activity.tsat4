@@ -3,10 +3,13 @@
     python -I scripts/import_cfo_usage_ef.py "C:/Work/projects/Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx"
 
 Writes inbox/import_cfo_usage_ef.sql (not in git), run after db/act/cfo.sql:
-1) sheet cfp    -> mt_cfo_ef_ref (sheet cfp): the EF Std rows whose id (CFP-0726 …) is not there yet
-2) sheet cal_ef -> mt_cfo_usage_ef: Id_usage (sheet usage_ef column Id_usage, else Usage-0001 … in sheet order) ·
-   Id_cfp → ref_id · group · material · material_description · bun · kgCO₂e/unit = usage_ef. Same material = updated.
-Safe to re-run. Ends with checks: Id_cfp not found, and ids already used by another EF name.
+1) sheet cfp    -> mt_cfo_ef_ref (sheet cfp). The ids of the sheet (CFP-0726 …) are the workbook's own numbering, not the
+   ones in the database (live CFP-0795 = Polyurethane, sheet CFP-0795 = Presta RT, ผู้ใช้รัน 2026-11-09): a row is found by
+   name + unit + value, else added under the next free CFP id. x_map = sheet id → database row.
+2) sheet usage_ef (or cal_ef) -> mt_cfo_usage_ef: Id_usage (column Id_usage, else Usage-0001 … in sheet order) · Id_cfp of the
+   sheet → its database row through x_map · group · material · material_description · bun · kgCO₂e/unit = usage_ef.
+   Same material = updated (its Id_usage kept).
+Safe to re-run. Ends with a table: sheet Id_cfp → database id, and the EF rows added.
 """
 import sys
 import warnings
@@ -16,12 +19,18 @@ import openpyxl
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# same EF = same name (spaces ignored, any case) + unit + value
+SAME = ("lower(regexp_replace(r.name, '\\s+', '', 'g')) = lower(regexp_replace(x.name, '\\s+', '', 'g')) "
+        "and lower(coalesce(r.unit, '')) = lower(coalesce(x.unit, '')) and round(r.total, 4) is not distinct from round(x.total, 4)")
+
 
 def q(v):
     if v is None or (isinstance(v, str) and not v.strip()):
         return 'null'
-    if isinstance(v, (int, float)):
-        return repr(float(v)) if isinstance(v, float) else str(v)
+    if isinstance(v, float):
+        return repr(v)
+    if isinstance(v, int):
+        return str(v)
     return "'" + str(v).strip().replace("'", "''") + "'"
 
 
@@ -35,24 +44,28 @@ def main(path):
     warnings.filterwarnings('ignore')
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     out = ['-- EF CFP (ชีต cfp) + usage_ef (ชีต usage_ef / cal_ef) จาก ' + Path(path).name + ' · scripts/import_cfo_usage_ef.py · ผู้ใช้กำหนด 2026-11-09',
-           '-- รันใน activity01 หลัง db/act/cfo.sql · รันซ้ำได้ · ท้ายไฟล์มีตารางตรวจ (ควรว่าง)', 'begin;', '']
+           '-- รันใน activity01 หลัง db/act/cfo.sql · รันซ้ำได้ · ท้ายไฟล์มีตาราง id ในไฟล์ → id ในระบบ', 'begin;', '']
 
     # 1) EF CFP
     head, rows = rows_of(wb['cfp'])
     at = lambda *k: next((head.index(x) for x in k if x in head), -1)
     c = {'code': at('id'), 'grp': at('กลุ่ม'), 'item': at('ลำดับ'), 'name': at('ชื่อ'), 'formula': at('รายละเอียด'), 'unit': at('หน่วย'),
          'total': next((i for i, h in enumerate(head) if h.startswith('ค่าแฟคเตอร์')), -1), 'ref': at('ข้อมูลอ้างอิง'), 'remark': at('วันที่อัพเดท')}
-    cfp = [r for r in rows if r[c['code']] and r[c['name']]]
     get = lambda r, k: r[c[k]] if c[k] >= 0 else None
-    out += ['-- 1) EF CFP ' + str(len(cfp)) + ' รายการ: เพิ่มเฉพาะ id ที่ยังไม่มี',
+    cfp = [r for r in rows if get(r, 'code') and get(r, 'name')]
+    values = [f"  ({q(get(r, 'code'))}, {q(get(r, 'grp'))}, {q(get(r, 'item'))}, {q(get(r, 'name'))}, {q(get(r, 'formula'))}, {q(get(r, 'unit'))}, "
+              f"{q(get(r, 'total'))}, {q(get(r, 'ref'))}, {q(get(r, 'remark'))})" for r in cfp]
+    out += [f'-- 1) EF CFP {len(cfp)} รายการ: id ในชีตเป็นเลขของไฟล์ ไม่ใช่เลขในระบบ · หาแถวเดิมด้วย ชื่อ + หน่วย + ค่า · ไม่มี = เพิ่มด้วย id ใหม่ต่อท้าย',
             'create temp table x_cfp (code text, grp text, item_no text, name text, formula text, unit text, total numeric, reference text, remark text) on commit drop;',
-            'insert into x_cfp values']
-    out.append(',\n'.join(f"  ({q(get(r, 'code'))}, {q(get(r, 'grp'))}, {q(get(r, 'item'))}, {q(get(r, 'name'))}, {q(get(r, 'formula'))}, {q(get(r, 'unit'))}, "
-                          f"{q(get(r, 'total'))}, {q(get(r, 'ref'))}, {q(get(r, 'remark'))})" for r in cfp) + ';')
-    out += ['insert into public.mt_cfo_ef_ref (sheet, code, grp, item_no, name, formula, unit, total, reference, remark, sort_no, status)',
-            "select 'cfp', x.code, x.grp, x.item_no, x.name, x.formula, x.unit, x.total, x.reference, x.remark,",
+            'insert into x_cfp values', ',\n'.join(values) + ';',
+            f"create temp table x_new on commit drop as select x.* from x_cfp x where not exists (select 1 from public.mt_cfo_ef_ref r where r.sheet = 'cfp' and {SAME});",
+            'insert into public.mt_cfo_ef_ref (sheet, code, grp, item_no, name, formula, unit, total, reference, remark, sort_no, status)',
+            "select 'cfp', 'CFP-' || lpad((b.base + row_number() over (order by x.code))::text, 4, '0'), x.grp, x.item_no, x.name, x.formula, x.unit, x.total, x.reference, x.remark,",
             "  100000 + coalesce((select max(sort_no) - 100000 from public.mt_cfo_ef_ref where sheet = 'cfp' and sort_no >= 100000), 0) + row_number() over (order by x.code), 'Active'",
-            'from x_cfp x where not exists (select 1 from public.mt_cfo_ef_ref r where upper(r.code) = upper(x.code));', '']
+            "from x_new x cross join (select coalesce(max(substring(code from 5)::int), 0) as base from public.mt_cfo_ef_ref where code ~ '^CFP-[0-9]+$') b;",
+            '-- id ในไฟล์ → แถวในระบบ',
+            'create temp table x_map on commit drop as select distinct on (x.code) x.code as file_code, r.id as ref_id, r.code as db_code, x.name',
+            f"from x_cfp x join public.mt_cfo_ef_ref r on r.sheet = 'cfp' and {SAME} order by x.code, r.id;", '']
 
     # 2) usage_ef
     sheet = 'usage_ef' if 'usage_ef' in wb.sheetnames else 'cal_ef'
@@ -66,23 +79,24 @@ def main(path):
         mat = str(r[c['mat']]).strip().removesuffix('.0').lstrip('0') or '0'
         uid = str(r[c['id']]).strip() if c['id'] >= 0 and r[c['id']] else f'Usage-{n:04d}'
         lines.append(f"  ({q(uid)}, {q(mat)}, {q(r[c['ref']] if c['ref'] >= 0 else None)}, {q(r[c['grp']])}, {q(r[c['name']] or mat)}, {q(r[c['unit']])}, {q(r[c['ef']])})")
-    out += [f'-- 2) usage_ef {len(items)} รายการ (ชีต {sheet}) · kgCO₂e/unit = Usage_ef · material เดิม = แก้ค่า (Id_usage เดิมคงไว้)',
+    out += [f'-- 2) usage_ef {len(items)} รายการ (ชีต {sheet}) · kgCO₂e/unit = Usage_ef · Id_cfp ของไฟล์ → แถวในระบบผ่าน x_map · material เดิม = แก้ค่า (Id_usage เดิมคงไว้)',
             'create temp table x_ue (id text, material text, ref text, grp text, name text, unit text, usage_ef numeric) on commit drop;',
             'insert into x_ue values', ',\n'.join(lines) + ';',
             'insert into public.mt_cfo_usage_ef as u (id, material, ref_id, grp, name, unit, usage_ef, status)',
-            "select coalesce((select id from public.mt_cfo_usage_ef where material = x.material), x.id), x.material,",
-            "  (select id from public.mt_cfo_ef_ref r where upper(r.code) = upper(x.ref) limit 1), x.grp, x.name, x.unit, x.usage_ef, 'Active'",
+            'select coalesce((select id from public.mt_cfo_usage_ef where material = x.material), x.id), x.material,',
+            "  (select m.ref_id from x_map m where upper(m.file_code) = upper(x.ref)), x.grp, x.name, x.unit, x.usage_ef, 'Active'",
             'from x_ue x',
             'on conflict (material) do update set ref_id = excluded.ref_id, grp = excluded.grp, name = excluded.name, unit = excluded.unit, usage_ef = excluded.usage_ef;',
             '',
-            '-- ตรวจ (ควรว่าง): Id_cfp ที่ไม่พบในตาราง EF · id EF CFP ที่มีอยู่แล้วแต่ชื่อไม่ตรงกับไฟล์ (ไม่ได้เขียนทับ ให้ตรวจเอง)',
-            "select 'ไม่พบ Id_cfp' as check, x.material, x.ref as id, x.name from x_ue x where x.ref is not null and not exists (select 1 from public.mt_cfo_ef_ref r where upper(r.code) = upper(x.ref))",
+            '-- ผล: Id_cfp ในไฟล์ → id ในระบบ (ไม่พบ = ควรไม่มี) · EF CFP ที่เพิ่มใหม่รอบนี้',
+            "select case when m.db_code is null then 'ไม่พบ' else 'Id_cfp ในไฟล์ → id ในระบบ' end as check, x.material, x.ref as file_id, m.db_code, x.name",
+            'from x_ue x left join x_map m on upper(m.file_code) = upper(x.ref) where x.ref is not null',
             'union all',
-            "select 'id ซ้ำชื่อไม่ตรง', r.code, x.code, r.name || ' ≠ ' || x.name from x_cfp x join public.mt_cfo_ef_ref r on upper(r.code) = upper(x.code) where lower(trim(r.name)) <> lower(trim(x.name));",
+            "select 'EF CFP เพิ่มใหม่', null, x.code, m.db_code, x.name from x_new x join x_map m on m.file_code = x.code;",
             '', 'commit;', '', "notify pgrst, 'reload schema';", '']
     target = ROOT / 'inbox' / 'import_cfo_usage_ef.sql'
     target.write_text('\n'.join(out), encoding='utf-8')
-    print(f'wrote {target} · cfp {len(cfp)} · usage_ef {len(items)} (sheet {sheet})')
+    print(f'wrote inbox/import_cfo_usage_ef.sql: cfp {len(cfp)} · usage_ef {len(items)} (sheet {sheet})')
 
 
 if __name__ == '__main__':
