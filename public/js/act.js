@@ -38,10 +38,10 @@ function actDeckLeadSlot(m, activity, unit, emptyLabel) {
   return `<div class="a5-deck-lead-slot">${actDeckCard(m, actRoleLabel(activity, m.role, unit))}</div>`;
 }
 
-function actDeckTeamFrame({ deckId, headHtml, tone, activity, unit, chair, vice, chairEmpty, viceEmpty, extraHtml, extraCount, expandBar }) {
+function actDeckTeamFrame({ deckId, headHtml, tone, activity, unit, chair, vice, chairEmpty, viceEmpty, extraHtml, extraCount, expandBar, wide }) {
   const toggle = extraCount ? `<button class="btn a5-deck-toggle" type="button" data-a5-deck="${esc(deckId)}" data-a5-deck-tone="${esc(tone)}" aria-expanded="false">แสดงสมาชิก (${extraCount})</button>` : '';
   const more = expandBar ? '' : `<div class="a5-deck-more d-none" id="a5-deck-${esc(deckId)}">${extraHtml || '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>'}</div>`;
-  return `<div class="a5-team a5-team-deck" style="--team:${tone}">${headHtml}
+  return `<div class="a5-team a5-team-deck${wide ? ' is-wide' : ''}" style="--team:${tone}">${headHtml}
     <div class="a5-deck-leads-split">
       ${actDeckLeadSlot(chair, activity, unit, chairEmpty || 'ประธาน')}
       ${actDeckLeadSlot(vice, activity, unit, viceEmpty || 'รองประธาน')}
@@ -50,9 +50,7 @@ function actDeckTeamFrame({ deckId, headHtml, tone, activity, unit, chair, vice,
   </div>`;
 }
 
-function actDeckBindToggles(root, opts = {}) {
-  const bar = opts.bar ? root.querySelector(opts.bar) : null;
-  const store = opts.store ? root.querySelector(opts.store) : null;
+function actDeckBindToggles(root) {
   const setBtn = (btn, expanded) => {
     const n = btn.textContent.match(/\((\d+)\)/)?.[1] || '';
     btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
@@ -61,22 +59,26 @@ function actDeckBindToggles(root, opts = {}) {
   root.querySelectorAll('.a5-deck-toggle').forEach((btn) => {
     btn.onclick = () => {
       const key = btn.dataset.a5Deck;
+      const grid = btn.closest('.a5-team-grid');
+      const bar = grid?.querySelector(':scope > .a5-deck-expand-bar');
+      const store = grid?.querySelector(':scope > [data-a5-deck-store]');
       if (bar && store && key) {
         const src = store.querySelector(`[data-a5-deck-panel="${key}"]`);
         if (!src) return;
+        const toggles = [...grid.querySelectorAll('.a5-deck-toggle')];
         const open = bar.dataset.open === key && !bar.classList.contains('d-none');
         if (open) {
           bar.classList.add('d-none');
           bar.dataset.open = '';
           bar.innerHTML = '';
-          setBtn(btn, false);
+          toggles.forEach((b) => setBtn(b, false));
           return;
         }
         bar.innerHTML = src.innerHTML;
         bar.style.setProperty('--team', btn.dataset.a5DeckTone || '');
         bar.classList.remove('d-none');
         bar.dataset.open = key;
-        root.querySelectorAll('.a5-deck-toggle').forEach((b) => setBtn(b, b === btn));
+        toggles.forEach((b) => setBtn(b, b === btn));
         bar.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         return;
       }

@@ -939,23 +939,28 @@ async function aplDrawTeam(body, activity, admin) {
     const chair = list.find((m) => m.role === 'chairman');
     const vice = list.find((m) => m.role === 'vice');
     const members = list.filter((m) => !['chairman', 'vice'].includes(m.role));
-    return actDeckTeamFrame({
-      deckId: code,
-      headHtml: `<div class="a5-team-head">${esc(name)}<span>${list.length} คน</span></div>`,
-      tone,
-      activity,
-      unit: code,
-      chair,
-      vice,
-      chairEmpty: 'หัวหน้าทีม',
-      viceEmpty: 'รองหัวหน้าทีม',
-      extraHtml: actDeckGrid(members, activity, code),
-      extraCount: members.length
-    });
+    const extra = members.length ? actDeckGrid(members, activity, code) : '<p class="sum-meta">ยังไม่มีสมาชิกทีม</p>';
+    return {
+      frame: actDeckTeamFrame({
+        deckId: code,
+        headHtml: `<div class="a5-team-head">${esc(name)}<span>${list.length} คน</span></div>`,
+        tone,
+        activity,
+        unit: code,
+        chair,
+        vice,
+        chairEmpty: 'หัวหน้าทีม',
+        viceEmpty: 'รองหัวหน้าทีม',
+        extraCount: members.length,
+        expandBar: true
+      }),
+      panel: `<div data-a5-deck-panel="${esc(code)}">${extra}</div>`
+    };
   };
-  const cardsOf = (keep) => (units ? Object.entries(units).filter(([code]) => code && keep(code)).map(([code, name], i) => deckForUnit(code, name, CHART.series[(i + 2) % CHART.series.length])).join('') : '');
-  const projectCards = cardsOf((code) => code !== 'workflow');
-  const workflowCards = cardsOf((code) => code === 'workflow');
+  const panelsOf = (keep) => (units ? Object.entries(units).filter(([code]) => code && keep(code)).map(([code, name], i) => deckForUnit(code, name, CHART.series[(i + 2) % CHART.series.length])) : []);
+  const deckRow = (icon, title, panels) => (panels.length ? `<div class="a5-team-title"><span class="material-symbols-rounded">${icon}</span>${title}</div><div class="a5-team-grid a5-unit-grid a5-unit-grid--auto">${panels.map((p) => p.frame).join('')}<div class="a5-deck-expand-bar d-none"></div><div data-a5-deck-store hidden>${panels.map((p) => p.panel).join('')}</div></div>` : '');
+  const projectCards = deckRow('account_tree', `ทีม ${esc(actName)}`, panelsOf((code) => code !== 'workflow'));
+  const workflowCards = deckRow('group', 'สมาชิกทีมรอง', panelsOf((code) => code === 'workflow'));
   const top = units ? active.filter((m) => !m.unit) : active;
   const topChair = top.find((m) => m.role === 'chairman');
   const topVice = top.find((m) => m.role === 'vice');
@@ -971,13 +976,14 @@ async function aplDrawTeam(body, activity, admin) {
     chairEmpty: 'ประธาน',
     viceEmpty: 'รองประธาน',
     extraHtml: actDeckGrid(topRest, activity, ''),
-    extraCount: topRest.length
+    extraCount: topRest.length,
+    wide: true
   }) : (top.length ? `<div class="a5-team a5-team-deck is-wide">${actDeckGrid(top, activity, '')}</div>` : '');
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('apl-team-edit', 'แก้ไขทีม')}</div>` : ''}
     ${units ? `<div class="a5-team-title"><span class="material-symbols-rounded">groups</span>${esc(units[''])}</div><div class="a5-team-grid">${committeeBlock}</div>` : ''}
-    ${projectCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">account_tree</span>ทีม ${esc(actName)}</div><div class="a5-team-grid a5-unit-grid a5-unit-grid--auto">${projectCards}</div>` : ''}
-    ${workflowCards ? `<div class="a5-team-title"><span class="material-symbols-rounded">group</span>สมาชิกทีมรอง</div><div class="a5-team-grid a5-unit-grid a5-unit-grid--auto">${workflowCards}</div>` : ''}
+    ${projectCards}
+    ${workflowCards}
     <p class="sum-meta">โครงสร้างทีม ${esc(actName)} ปี ${a5Year} · ${active.length} รายชื่อ</p>`;
   actDeckBindToggles(body);
   a5Lift(body);

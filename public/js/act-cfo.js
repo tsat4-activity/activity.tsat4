@@ -731,7 +731,8 @@ async function cfoDrawTeam(body, admin) {
         chairEmpty: 'ประธาน',
         viceEmpty: 'รองประธาน',
         extraHtml: actDeckGrid(rest, CFO, ''),
-        extraCount: rest.length
+        extraCount: rest.length,
+        wide: true
       })}
     </section>`;
   actDeckBindToggles(body);

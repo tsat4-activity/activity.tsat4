@@ -475,6 +475,8 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .a5-team.is-wide .a5-people{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .a5-team-deck{gap:8px}
 .a5-deck-leads-split{display:flex;flex-direction:column;gap:6px;flex:1}
+.a5-team.a5-team-deck.is-wide .a5-deck-leads-split{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));flex:none}
+.a5-team.a5-team-deck.is-wide .a5-deck-lead-slot{flex:none}
 .a5-deck-lead-slot{flex:1;display:flex;align-items:center;min-height:58px;padding:4px 6px;border:1px dashed var(--mo-line);border-radius:var(--mo-radius);background:color-mix(in srgb,var(--team) 4%,var(--mo-surface))}
 .a5-deck-lead-slot.is-empty{justify-content:center;text-align:center}
 .a5-deck-lead-slot .a5-deck-card{width:100%;border:0;background:transparent;padding:2px 0;min-height:0}

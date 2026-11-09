@@ -580,10 +580,9 @@ async function a5DrawTeam(body, activity) {
     ${title('groups', `${A5_UNITS['']} ปี ${a5Year}`)}
     <div class="a5-team-grid"><div class="a5-team a5-team-deck is-wide" style="--team:${A5_UNIT_LOOK[''][0]}">${head('', top.length)}${actDeckGrid(top, activity, '')}</div></div>
     ${title('account_tree', 'ทีมย่อย')}
-    <div class="a5-team-grid a5-unit-grid">${deckPanels.map((p) => p.frame).join('')}<div class="a5-deck-expand-bar d-none" id="a5-deck-expand-bar"></div></div>
-    <div id="a5-deck-store" hidden>${deckPanels.map((p) => `<div data-a5-deck-panel="${esc(p.unit)}">${p.extra}</div>`).join('')}</div>
+    <div class="a5-team-grid a5-unit-grid">${deckPanels.map((p) => p.frame).join('')}<div class="a5-deck-expand-bar d-none"></div><div data-a5-deck-store hidden>${deckPanels.map((p) => `<div data-a5-deck-panel="${esc(p.unit)}">${p.extra}</div>`).join('')}</div></div>
     <p class="sum-meta">ปี ${a5Year} · ${active.length} รายชื่อ · ผู้รับผิดชอบพื้นที่ Self Audit 25 ข้อก่อนวันที่ 10 ทุกเดือน · ผู้ตรวจประเมิน Committee Audit ทุก 3 เดือน</p>`;
-  actDeckBindToggles(body, { bar: '#a5-deck-expand-bar', store: '#a5-deck-store' });
+  actDeckBindToggles(body);
   a5Lift(body);
 }
 
