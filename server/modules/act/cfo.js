@@ -1064,41 +1064,75 @@ export function mountCfo(app) {
     res.json({ ok: true, saved: req.body?.save === true, month, lines: lines.size, skipped, counted, tco2e, activities: acts.size,
       unknown: top(groups.nomat), noGroup: top(groups.nogroup), noEf: top([...groups.noef, ...groups.nofactor]), unitWrong: top(groups.unit) });
   });
-  // Dashboard > Usage (SAP) (ผู้ใช้กำหนด 2026-11-02): one month (or the year) of the SAP Usage —
-  // per costcenter tCO2e + เงิน (บาท) most first, and the Top 5 materials by tCO2e · money counts every line pasted
+  // Dashboard > Sap (ผู้ใช้กำหนด 2026-11-09): kind usage | mat, same split as Setting > EF SAP.
+  // Prefer activities calc = usage (Import SAP). Fall back to the old pasted Usage lines (kind usage / raw).
+  // months[] is always the 12 months of the year; costcenters and the top 10 follow the month filter.
   route('get', '/api/act/:activity/cfo/usage-report', async (req, res, activity, t) => {
     const year = yearOf(req.query.year);
     if (!year) return fail(res, 400, 'ปีไม่ถูกต้อง');
     const month = monthOf(req.query.month);
-    const [rows, centers] = await Promise.all([
-      fetchAll(() => tx.from(t.materialUse).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')).catch(() => []),
-      fetchAll(() => mx.from('mt_main_costcenter').select('costcenter,object_name,department')).catch(() => [])
-    ]);
-    const centerOf = new Map(centers.map((c) => [String(c.costcenter).trim().toUpperCase(), c]));
-    const months = [...new Set(rows.map((r) => r.month))].sort();
-    const list = month ? rows.filter((r) => r.month === month) : rows;
+    const kind = req.query.kind === 'mat' ? 'mat' : 'usage';
     const r2 = (v) => Math.round(v * 100) / 100;
-    const group = (keyOf, make) => Object.values(list.reduce((acc, r) => {
-      const key = keyOf(r);
-      const g = (acc[key] = acc[key] || { ...make(r), tco2e: 0, amount: 0, priced: 0, items: new Set() });
-      g.tco2e += Number(r.tco2e);
-      if (r.amount != null) { g.amount += Number(r.amount); g.priced += 1; }
-      if (Number(r.tco2e) > 0) g.items.add(r.material);
-      return acc;
-    }, {})).map((g) => ({ ...g, tco2e: r6(g.tco2e), amount: g.priced ? r2(g.amount) : null, items: g.items.size, priced: undefined }));
-    const ccs = group((r) => r.costcenter || r.department || '', (r) => {
-      const c = centerOf.get(String(r.costcenter || '').toUpperCase());
-      return { costcenter: r.costcenter || '', name: c?.object_name || '', department: r.department || c?.department || '' };
-    }).sort((a, b) => b.tco2e - a.tco2e || (b.amount || 0) - (a.amount || 0));
-    const top = group((r) => r.material, (r) => ({ material: r.material, name: r.name, unit: r.unit, qty: 0 })).filter((x) => x.tco2e > 0);
-    const qtyOf = list.reduce((acc, r) => acc.set(r.material, (acc.get(r.material) || 0) + Number(r.qty)), new Map());
-    const byMonth = months.map((m) => {
-      const of = rows.filter((r) => r.month === m);
-      return { month: m, tco2e: r6(of.reduce((s, r) => s + Number(r.tco2e), 0)), amount: r2(of.reduce((s, r) => s + Number(r.amount || 0), 0)) };
+    const centers = await fetchAll(() => mx.from('mt_main_costcenter').select('costcenter,object_name,department')).catch(() => []);
+    const centerOf = new Map(centers.map((c) => [String(c.costcenter).trim().toUpperCase(), c]));
+    let lines = [];
+    let source = 'material';
+    if (await usageReady(t)) {
+      const items = await fetchAll(() => tx.from(t.usageEf).select('id,material,name,grp,unit,kind').eq('kind', kind));
+      const itemOf = new Map(items.map((i) => [i.id, i]));
+      const acts = (await fetchAll(() => tx.from(t.activity).select('id,usage_id,costcenter,department,name').eq('calc', 'usage'))).filter((a) => itemOf.has(a.usage_id));
+      if (acts.length) {
+        source = 'usage';
+        const entries = await fetchIn(() => tx.from(t.entryView).select('activity_id,month,tco2e,qty').eq('part', 'main').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`), 'activity_id', acts.map((a) => a.id));
+        const actOf = new Map(acts.map((a) => [a.id, a]));
+        lines = entries.map((e) => {
+          const a = actOf.get(e.activity_id);
+          const item = itemOf.get(a?.usage_id);
+          const cc = a?.costcenter || '';
+          const c = centerOf.get(String(cc).toUpperCase());
+          return { month: e.month, costcenter: cc, department: a?.department || c?.department || '', ccName: c?.object_name || '',
+            material: item?.material || '', itemName: item?.name || a?.name || '', grp: item?.grp || '', unit: item?.unit || '',
+            qty: Number(e.qty) || 0, tco2e: Number(e.tco2e) || 0, amount: null };
+        });
+      }
+    }
+    // Activities with no imported month yet must not hide a Usage paste that already counts.
+    if (!(source === 'usage' && lines.some((l) => Number(l.tco2e) > 0))) {
+      const rows = await fetchAll(() => tx.from(t.materialUse).select('*').gte('month', `${year}-01-01`).lte('month', `${year}-12-01`).order('id')).catch(() => []);
+      const want = kind === 'mat' ? 'raw' : 'usage';
+      const next = rows.filter((r) => (r.kind || 'usage') === want);
+      if (next.some((r) => Number(r.tco2e) > 0) || source !== 'usage') {
+        lines = next.map((r) => ({ ...r, itemName: r.name, ccName: '' }));
+        source = 'material';
+      }
+    }
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const key = `${year}-${String(i + 1).padStart(2, '0')}`;
+      const of = lines.filter((r) => String(r.month).slice(0, 7) === key);
+      const money = of.some((r) => r.amount != null);
+      return { month: `${key}-01`, tco2e: r6(of.reduce((s, r) => s + Number(r.tco2e), 0)), amount: money ? r2(of.reduce((s, r) => s + Number(r.amount || 0), 0)) : null };
     });
-    res.json({ year, month, months: byMonth, costcenter: rows.some((r) => r.costcenter), costcenters: ccs,
-      top: top.map((x) => ({ ...x, qty: r6(qtyOf.get(x.material) || 0) })).sort((a, b) => b.tco2e - a.tco2e).slice(0, 5),
-      total: { tco2e: r6(list.reduce((s, r) => s + Number(r.tco2e), 0)), amount: r2(list.reduce((s, r) => s + Number(r.amount || 0), 0)), lines: list.filter((r) => Number(r.tco2e) > 0).length } });
+    const list = month ? lines.filter((r) => String(r.month).slice(0, 7) === month.slice(0, 7)) : lines;
+    const bucket = (keyOf, make) => {
+      const acc = new Map();
+      for (const r of list) {
+        const g = acc.get(keyOf(r)) || { ...make(r), tco2e: 0, amount: 0, priced: 0, qty: 0 };
+        g.tco2e += Number(r.tco2e);
+        g.qty += Number(r.qty || 0);
+        if (r.amount != null) { g.amount += Number(r.amount); g.priced += 1; }
+        acc.set(keyOf(r), g);
+      }
+      return [...acc.values()].map((g) => ({ ...g, tco2e: r6(g.tco2e), qty: r6(g.qty), amount: g.priced ? r2(g.amount) : null, priced: undefined }));
+    };
+    const costcenters = bucket((r) => r.costcenter || r.department || '', (r) => {
+      const c = centerOf.get(String(r.costcenter || '').toUpperCase());
+      return { costcenter: r.costcenter || '', name: c?.object_name || r.ccName || '', department: r.department || c?.department || '' };
+    }).sort((a, b) => b.tco2e - a.tco2e || (b.amount || 0) - (a.amount || 0));
+    const top = bucket((r) => r.material, (r) => ({ material: r.material, name: r.itemName || r.name || '', unit: r.unit || '', grp: r.grp || '' }))
+      .filter((x) => x.tco2e > 0).sort((a, b) => b.tco2e - a.tco2e).slice(0, 10);
+    const hasMoney = list.some((r) => r.amount != null);
+    res.json({ year, kind, source, month: month || null, months, costcenters, top,
+      total: { tco2e: r6(list.reduce((s, r) => s + Number(r.tco2e), 0)), amount: hasMoney ? r2(list.reduce((s, r) => s + Number(r.amount || 0), 0)) : null, lines: list.filter((r) => Number(r.tco2e) > 0).length } });
   });
   route('delete', '/api/act/:activity/cfo/material-usage/:month', async (req, res, activity, t) => {
     if (!(await requireAdminNow(req, res, activity))) return;

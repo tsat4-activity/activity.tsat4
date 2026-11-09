@@ -731,6 +731,20 @@ body[data-zone] .plan-col.is-today{border-color:var(--zone)}
 .cfo-explain dt{font-weight:600}.cfo-explain dd{margin:0;color:var(--mo-text-muted)}
 .cfo-s3 table{width:100%}.cfo-s3 th{white-space:normal;line-height:1.25}.cfo-s3 td{white-space:normal}.cfo-s3 td:last-child{min-width:140px}.cfo-s3 td:last-child input{width:100%;height:26px}
 .cfo-s3 input[type=checkbox]{width:16px;height:16px;margin:0;vertical-align:middle;accent-color:var(--ch-1)}.cfo-s3 tr.is-significant td{background:color-mix(in srgb,var(--ch-1) 8%,transparent)}
+.cfo-sap{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(0,1.35fr);gap:var(--content-gutter);align-items:stretch}
+.cfo-sap>.cfo-sap-wide{grid-column:1 / -1}
+.cfo-donut{display:grid;grid-template-columns:168px minmax(0,1fr);gap:16px;align-items:center;min-height:188px}
+.cfo-donut-fig{position:relative;width:168px;height:168px}
+.cfo-donut-fig svg{display:block;width:100%;height:100%}
+.cfo-donut-mid{position:absolute;inset:18%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.15}
+.cfo-donut-mid strong{font-size:20px;font-weight:600}
+.cfo-donut-mid small{max-width:78px;overflow:hidden;color:var(--mo-text-muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.cfo-donut-key{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none;font-size:12px}
+.cfo-donut-key li{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:8px;align-items:center}
+.cfo-donut-key i{width:10px;height:10px;border-radius:2px}
+.cfo-donut-key span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfo-donut-key b{font-variant-numeric:tabular-nums;font-weight:600}
+@media (max-width:900px){.cfo-sap{grid-template-columns:1fr}}
 .cfo-inv{max-height:calc(100vh - 260px)}.cfo-inv table{font-size:12px}.cfo-inv td,.cfo-inv th{padding:0 6px}.cfo-inv td{height:26px}
 .table-wrap.cfo-inv{--table-head:58px}.cfo-inv thead tr:first-child th{height:30px;top:0}.cfo-inv thead tr:nth-child(2) th{height:28px;top:30px}.cfo-inv thead th{white-space:normal;line-height:1.25;font-size:11px}
 .cfo-inv tbody td:first-child,.cfo-inv thead tr:first-child th:first-child{position:sticky;left:0;z-index:2;background:var(--mo-surface);min-width:220px;max-width:280px;white-space:normal}
