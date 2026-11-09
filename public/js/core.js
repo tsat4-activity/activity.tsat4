@@ -540,13 +540,17 @@ function setHeaderMeta(content = '') {
 
 // Shell chrome: logo + company names in the fixed header (System Setting can call after load)
 function setAppBranding({ logo, companyEn, companyTh } = {}) {
-  const box = $('header-logo');
-  if (box) {
-    if (logo) box.style.backgroundImage = `url("${String(logo).replace(/"/g, '')}")`;
-    else box.style.removeProperty('background-image');
-  }
+  const paint = (node) => {
+    if (!node) return;
+    if (logo) node.style.backgroundImage = `url("${String(logo).replace(/"/g, '')}")`;
+    else node.style.removeProperty('background-image');
+  };
+  paint($('header-logo'));
+  paint($('login-logo'));
   if (companyEn && $('header-company-en')) $('header-company-en').textContent = companyEn;
+  if (companyEn && $('login-company-en')) $('login-company-en').textContent = companyEn;
   if ($('header-company-th') && companyTh != null) $('header-company-th').textContent = companyTh;
+  if (companyEn) document.title = companyEn;
 }
 
 function loadAppBranding() {

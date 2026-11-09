@@ -113,6 +113,7 @@ paintTheme();
 $('theme-toggle').onclick = toggleTheme;
 document.querySelectorAll('[data-theme-login]').forEach((node) => { node.onclick = toggleTheme; });
 
+if (typeof loadAppBranding === 'function') loadAppBranding();
 api('/api/me').then((data) => {
   me = data.user;
   if (me.passwordExpired) showPassword();
