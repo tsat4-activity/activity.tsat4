@@ -631,9 +631,16 @@ function zoneOf(name) {
 
 let viewRun = 0;
 let viewDrawn = 0;
+// Bare activity id (e.g. 5s) → *-home so header says Dashboard and body[data-dash] applies (AGENTS.md)
+function plantDefaultHome(name) {
+  if (typeof plantOf !== 'function') return name;
+  const unit = plantOf(name);
+  return unit && name === unit.row[0] ? `${name}-home` : name;
+}
 function openView(name) {
   setHeaderMeta('');
   if ((name === 'system' || name === 'access') && !me.creator) name = 'main';
+  name = plantDefaultHome(name);
   view = name;
   // Dashboard pages use the compact sizes (body[data-dash] in app.css).
   if (TITLES[name]?.[0] === 'Dashboard') document.body.dataset.dash = '1';
@@ -757,7 +764,7 @@ const DASH_ROW_MAX = 44;
     const last = card.lastElementChild || card;
     const free = box.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom - parseFloat(getComputedStyle(card).paddingBottom) - 10;
     if (free < 24) return;
-    // Other pages (Transaction / Setting lists): the main table frame reaches the bottom of the page.
+    // Other pages (Edit data / Setting lists): the main table frame reaches the bottom of the page.
     if (!document.body.dataset.dash) {
       if (sheet && sheet.offsetParent) {
         sheet.style.minHeight = `${Math.floor(sheet.getBoundingClientRect().height + free)}px`;

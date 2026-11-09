@@ -11,7 +11,6 @@ const PLANT_PAGES = [
 ];
 for (const [id, label] of ACTIVITIES) {
   const path = `ระบบกิจกรรม > ${label}`;
-  TITLES[id] = [label, path];
   for (const [page, , title] of PLANT_PAGES) TITLES[`${id}-${page}`] = [title, path];
 }
 Object.assign(TITLES, {
@@ -32,14 +31,8 @@ function plantRender(name) {
     if (page) return renderPlantPage(target, id, page);
     const home = VIEWS[`${id}-home`];
     if (home) return home(target);
-    return renderPlant(target, id);
+    target.innerHTML = cardView('Dashboard', `${unit.group} > ${unit.row[1]}`, '<p class="empty">ยังไม่มีหน้า Dashboard</p>');
   };
-}
-
-function renderPlant(target, id) {
-  const unit = plantOf(id);
-  const label = unit.row[1];
-  modulePage(target, label, `${unit.group} > ${label}`, PLANT_PAGES.map(([page, icon, title, text]) => [`${id}-${page}`, icon, title, text]));
 }
 
 function renderPlantPage(target, id, page) {
@@ -51,7 +44,9 @@ function renderPlantPage(target, id, page) {
 }
 
 async function renderActivity(target) {
-  modulePage(target, 'ระบบกิจกรรม', 'Activity', ACTIVITIES.map(([id, label, icon]) => [`${id}-home`, icon, label, 'Dashboard, Edit data, Setting']));
+  const cards = ACTIVITIES.map(([id, label, icon]) => moduleCard(`${id}-home`, icon, label, 'Dashboard, Edit data, Setting')).join('');
+  target.innerHTML = `<div class="view-body"><div class="module-grid">${cards}</div></div>`;
+  bindGo(target);
 }
 
 function unitNav(rows) {
