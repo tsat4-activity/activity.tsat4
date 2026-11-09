@@ -8,7 +8,7 @@
   --mo-border:#d4d4d8;--mo-line:#d4d4d8;--mo-text:#171717;--mo-text-muted:#71717a;
   --mo-radius:6px;--mo-shadow:0 1px 2px rgba(0,0,0,.06);
   --mo-focus:rgba(62,207,142,.28);--mo-row:#e7f8ef;
-  --drive-header:52px;--drive-sidebar:188px;--content-gutter:16px;--view-pad:10px;
+  --drive-header:52px;--drive-sidebar:188px;--content-gutter:16px;--view-pad:10px;--scrollbar:12px;
   --drive-page:#f4f4f5;--drive-selected:#f4f4f5;--drive-hover:#f4f4f5;--drive-font:12px;
 }
 html[data-theme="dark"]{
@@ -97,7 +97,7 @@ html[data-theme="dark"] .nav-btn.active,html[data-theme="dark"] .nav-sub .nav-bt
 html[data-theme="dark"] .nav-btn.active .material-symbols-rounded,html[data-theme="dark"] .nav-sub .nav-btn.active .material-symbols-rounded{color:#e8a020}
 html[data-theme="dark"] .nav-btn.active:hover,html[data-theme="dark"] .nav-sub .nav-btn.active:hover{background:#2a1e0a;color:#f0b429;border-color:#f0b429}
 html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-parent,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-parent .material-symbols-rounded,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-split .nav-parent,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-split .nav-parent .material-symbols-rounded,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-split .nav-caret{color:#e8a020}
-.main{margin-left:var(--drive-sidebar);padding:calc(var(--drive-header) + 10px) var(--content-gutter) var(--content-gutter);height:100vh;overflow:hidden;display:flex;flex-direction:column;min-height:0;min-width:0;transition:margin-left .2s ease;background:var(--drive-page)}
+.main{margin-left:var(--drive-sidebar);padding:calc(var(--drive-header) + var(--content-gutter)) 0 var(--content-gutter) var(--content-gutter);height:100vh;overflow:hidden;display:flex;flex-direction:column;min-height:0;min-width:0;transition:margin-left .2s ease;background:var(--drive-page)}
 .app-view{background:transparent;border:none;border-radius:0;box-shadow:none;flex:1;min-height:0;min-width:0;overflow:hidden;padding:0;display:flex;flex-direction:column;gap:10px}
 .card{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;padding:10px;margin:0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .card h2,.card-title{font-size:13px;font-weight:500;margin:0 0 8px}
@@ -237,15 +237,15 @@ table.mo-data-table tbody tr.row-pick.is-selected td:first-child{box-shadow:inse
 .badge-primary{background:var(--mo-info-soft);color:var(--mo-primary)}
 html[data-theme="dark"] .badge-warning{color:#fbbf24}
 .empty{text-align:center;color:var(--mo-text-muted);padding:36px}
-.view-body{flex:1;min-height:0;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:10px}
-.view-body.view-stack{overflow:hidden;gap:10px}
-.view-stack > .surface-nav{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.04);flex-shrink:0;min-width:0;max-width:100%}
-.view-stack > .surface-tools{background:transparent;border:none;box-shadow:none;padding:0;flex-shrink:0;min-width:0;max-width:100%}
+.view-body{flex:1;min-height:0;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:var(--content-gutter);scrollbar-gutter:stable;padding-right:var(--content-gutter)}
+.view-body.view-stack{overflow:auto;gap:var(--content-gutter)}
+.view-stack > .surface-nav{position:sticky;top:0;z-index:3;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.04);flex-shrink:0;min-width:0;max-width:100%}
+.view-stack > .surface-tools{position:sticky;top:46px;z-index:2;background:var(--drive-page);border:none;box-shadow:none;padding:2px 0;flex-shrink:0;min-width:0;max-width:100%}
 .view-stack > .surface-tools .page-bar{display:block}
-.view-stack > .surface-tools .page-bar-right{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;padding:8px 10px;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.view-stack > .surface-tools .page-bar-right{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;padding:0;background:transparent;border:none;border-radius:0;box-shadow:none}
 .surface-tools .page-bar-right .field label{color:var(--mo-text-muted)}
 .surface-tools .page-bar-right select,.surface-tools .page-bar-right input{background:var(--mo-surface);border-color:var(--mo-border)}
-.view-stack > .surface-main{flex:1 1 auto;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;background:transparent;border:none;box-shadow:none;padding:0 var(--content-gutter) 0 0;scrollbar-gutter:stable;min-width:0;max-width:100%}
+.view-stack > .surface-main{flex:1 1 auto;min-height:0;overflow:visible;display:flex;flex-direction:column;gap:var(--content-gutter);background:transparent;border:none;box-shadow:none;padding:0;min-width:0;max-width:100%}
 .view-stack > .surface-main.plan-card{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .view-stack .page-bar{margin-bottom:0}
 .surface-nav .page-bar-left:has(> .tab-line){flex:1 1 100%;min-width:0;border-bottom:1px solid var(--mo-line)}
@@ -354,7 +354,7 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
 .a5-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .a5-two > .card{min-width:0}
 /* 5S Summary: กราฟซ้าย | ตารางขวา สูงเท่ากันทั้งก้อน · ตารางเป็นการ์ดของตัวเอง */
-.dash-split,.a5-side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}
+.dash-split,.a5-side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--content-gutter);align-items:stretch}
 .dash-split > .card,.dash-split > .a5-charts,.dash-split > .table-wrap,.dash-split > .a5-sum-table,.a5-side > .card{min-width:0}
 .a5-sum-table{padding:0;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;flex-direction:column;min-height:0}
 .a5-sum-table .table-wrap{flex:1 1 auto;min-height:0;border:none;border-radius:0;box-shadow:none;height:auto}
@@ -839,7 +839,7 @@ body[data-zone="work"]{--ch-1:#ea580c}
 .sys-scope-field{grid-column:1/-1}.sys-scopes{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px 12px;margin-top:4px}
 .sys-scopes .check{display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer}.sys-scopes .check input{width:auto;height:auto;margin:0}
 /* Dashboard pages (ผู้ใช้กำหนด 2026-10-28, เล็กลงอีกขั้น 2026-10-29): compact KPI cards, a lower chart, smaller table text and toolbar */
-:where(body[data-dash]) .ch-kpis{gap:8px}
+:where(body[data-dash]) .ch-kpis{gap:var(--content-gutter)}
 :where(body[data-dash]) .ch-kpi{min-height:48px;padding:5px 9px;gap:7px}
 :where(body[data-dash]) .ch-pie,:where(body[data-dash]) .ch-icon{width:28px;height:28px;font-size:15px}
 :where(body[data-dash]) .ch-kpi-label{font-size:10.5px}
@@ -1158,7 +1158,7 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 @media(max-width:700px){.tab-line-btn{padding:7px 9px}}
 /* Dashboard tiles (ผู้ใช้กำหนด 2026-11-08): white rounded tiles, label on top, big number, note below, icon / pie in the
    top-right corner · colors stay the theme's */
-.ch-kpis{gap:12px}
+.ch-kpis{gap:var(--content-gutter)}
 .ch-kpi,:where(body[data-dash]) .ch-kpi{position:relative;display:flex;align-items:center;gap:12px;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:14px 16px;min-height:0}
 /* the pie / icon is a large circle on the right of the tile (ผู้ใช้กำหนด 2026-11-08: ใหญ่ตามวงกลม) */
 .ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{order:2;margin-left:auto;width:72px;height:72px;font-size:34px;border-width:1.5px}
