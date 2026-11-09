@@ -339,7 +339,7 @@ create table if not exists public.mt_${k}_activity (
 -- septic = บ่อเกรอะ (คน × วัน → kg CH4) · tkm = ขนส่ง (ตัน × กม.) · km_fuel = ระยะทาง ÷ กม./ลิตร → ลิตร
 -- sap = กลุ่มวัสดุ × costcenter (Usage SAP): ระบบสร้างและเติมปริมาณให้เองตอนวาง Usage ไม่กรอกมือ
 alter table public.mt_${k}_activity drop constraint if exists mt_${k}_activity_calc_check;
-alter table public.mt_${k}_activity add constraint mt_${k}_activity_calc_check check (calc in ('septic', 'tkm', 'km_fuel', 'sap'));
+alter table public.mt_${k}_activity add constraint mt_${k}_activity_calc_check check (calc in ('septic', 'tkm', 'km_fuel', 'sap', 'usage'));
 
 -- ข้อมูลรายเดือน 1 แถว = 1 กิจกรรม × 1 เดือน · ef_id / gwp_code = ค่าที่ใช้ตอนบันทึก (คัดลอกจากกิจกรรม)
 create table if not exists public.tx_${k}_entry (
@@ -482,6 +482,22 @@ update public.mt_${k}_material t set group_id = g.id
 from mat_group_map x join public.mt_${k}_mat_group g on g.name = x.gname
 where t.material = x.material and g.ef_ref_id is not distinct from x.ef_ref_id;
 drop table mat_group_map;
+
+-- usage_ef (ผู้ใช้กำหนด 2026-11-09, Setting > EF SAP): EF ต่อ 1 หน่วย SAP ของวัสดุที่เตรียมไว้แล้ว (kgCO₂e/unit) รอคูณกับปริมาณ
+-- id = Id_usage (Usage-0001 …) · material = รหัส SAP ที่ใช้จับคู่ไฟล์ sap10 · ref_id = Id_cfp (EF CFP ที่มาของค่า) · grp = กลุ่ม
+-- กิจกรรม calc = usage: 1 กิจกรรม = Id_usage × costcenter · Edit data > Import SAP: Qty in UnE × usage_ef ลงเดือนของกิจกรรมนั้น
+create table if not exists public.mt_${k}_usage_ef (
+  id text primary key check (id ~ '^Usage-[0-9]+$'),
+  material text not null unique,
+  ref_id bigint references public.mt_${k}_ef_ref (id) on delete set null,
+  grp text not null,
+  name text not null,
+  unit text,
+  usage_ef numeric not null check (usage_ef > 0),
+  status text not null default 'Active' check (status in ('Active', 'Inactive'))
+);
+alter table public.mt_${k}_activity add column if not exists usage_id text references public.mt_${k}_usage_ef (id) on update cascade;
+create unique index if not exists mt_${k}_activity_usage on public.mt_${k}_activity (usage_id, costcenter) where usage_id is not null;
 
 -- ผลต่อแถว: tCO2e = qty × kgco2e / 1000 · แยกก๊าซ (Scope 1) = qty × EF ก๊าซ × GWP / 1000
 -- part = main (EF ของกิจกรรม) / upstream (บรรทัด 3-3 จาก ef3_id: tCO2e = qty × kgco2e ของ EF นั้น / 1000)
@@ -801,7 +817,7 @@ group by s.audit_id, c.s_group;
   const qcc = activity === 'qcc';
   const projects = activity === 'smf';
   const tables = [`mt_${k}_team`, `mt_${k}_setting`].concat(planner ? [`mt_${k}_task`] : [], projects ? [`mt_${k}_project`] : [])
-    .concat(kaizen ? [`tx_${k}_entry`] : [], qcc ? [`tx_${k}_project`] : [], extra ? [`mt_${k}_scope`, `mt_${k}_gwp`, `mt_${k}_ef`, `mt_${k}_ef_ref`, `mt_${k}_mat_group`, `mt_${k}_material`, `tx_${k}_material`, `mt_${k}_activity`, `tx_${k}_entry`, `mt_${k}_s3_assess`, `tx_${k}_revision`] : [], audit
+    .concat(kaizen ? [`tx_${k}_entry`] : [], qcc ? [`tx_${k}_project`] : [], extra ? [`mt_${k}_scope`, `mt_${k}_gwp`, `mt_${k}_ef`, `mt_${k}_ef_ref`, `mt_${k}_mat_group`, `mt_${k}_usage_ef`, `mt_${k}_material`, `tx_${k}_material`, `mt_${k}_activity`, `tx_${k}_entry`, `mt_${k}_s3_assess`, `tx_${k}_revision`] : [], audit
     ? [`mt_${k}_area`, `mt_${k}_checklist`, `mt_${k}_audit_plan`, `tx_${k}_audit`, `tx_${k}_audit_score`, `tx_${k}_issue`]
     : []);
   return `-- กิจกรรม ${activity} — รันใน **Tx Data** (รันซ้ำได้) · สร้างจาก scripts/act-sql.js ห้ามแก้มือ

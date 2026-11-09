@@ -243,7 +243,7 @@ create table if not exists public.mt_cfo_activity (
 -- septic = บ่อเกรอะ (คน × วัน → kg CH4) · tkm = ขนส่ง (ตัน × กม.) · km_fuel = ระยะทาง ÷ กม./ลิตร → ลิตร
 -- sap = กลุ่มวัสดุ × costcenter (Usage SAP): ระบบสร้างและเติมปริมาณให้เองตอนวาง Usage ไม่กรอกมือ
 alter table public.mt_cfo_activity drop constraint if exists mt_cfo_activity_calc_check;
-alter table public.mt_cfo_activity add constraint mt_cfo_activity_calc_check check (calc in ('septic', 'tkm', 'km_fuel', 'sap'));
+alter table public.mt_cfo_activity add constraint mt_cfo_activity_calc_check check (calc in ('septic', 'tkm', 'km_fuel', 'sap', 'usage'));
 
 -- ข้อมูลรายเดือน 1 แถว = 1 กิจกรรม × 1 เดือน · ef_id / gwp_code = ค่าที่ใช้ตอนบันทึก (คัดลอกจากกิจกรรม)
 create table if not exists public.tx_cfo_entry (
@@ -387,6 +387,22 @@ from mat_group_map x join public.mt_cfo_mat_group g on g.name = x.gname
 where t.material = x.material and g.ef_ref_id is not distinct from x.ef_ref_id;
 drop table mat_group_map;
 
+-- usage_ef (ผู้ใช้กำหนด 2026-11-09, Setting > EF SAP): EF ต่อ 1 หน่วย SAP ของวัสดุที่เตรียมไว้แล้ว (kgCO₂e/unit) รอคูณกับปริมาณ
+-- id = Id_usage (Usage-0001 …) · material = รหัส SAP ที่ใช้จับคู่ไฟล์ sap10 · ref_id = Id_cfp (EF CFP ที่มาของค่า) · grp = กลุ่ม
+-- กิจกรรม calc = usage: 1 กิจกรรม = Id_usage × costcenter · Edit data > Import SAP: Qty in UnE × usage_ef ลงเดือนของกิจกรรมนั้น
+create table if not exists public.mt_cfo_usage_ef (
+  id text primary key check (id ~ '^Usage-[0-9]+$'),
+  material text not null unique,
+  ref_id bigint references public.mt_cfo_ef_ref (id) on delete set null,
+  grp text not null,
+  name text not null,
+  unit text,
+  usage_ef numeric not null check (usage_ef > 0),
+  status text not null default 'Active' check (status in ('Active', 'Inactive'))
+);
+alter table public.mt_cfo_activity add column if not exists usage_id text references public.mt_cfo_usage_ef (id) on update cascade;
+create unique index if not exists mt_cfo_activity_usage on public.mt_cfo_activity (usage_id, costcenter) where usage_id is not null;
+
 -- ผลต่อแถว: tCO2e = qty × kgco2e / 1000 · แยกก๊าซ (Scope 1) = qty × EF ก๊าซ × GWP / 1000
 -- part = main (EF ของกิจกรรม) / upstream (บรรทัด 3-3 จาก ef3_id: tCO2e = qty × kgco2e ของ EF นั้น / 1000)
 -- Usage จาก SAP นับผ่านกิจกรรม calc = sap (tx_cfo_entry ที่ระบบเติมให้) จึงไม่มีส่วน material แล้ว (ผู้ใช้กำหนด 2026-11-04)
@@ -437,6 +453,7 @@ alter table public.mt_cfo_gwp enable row level security;
 alter table public.mt_cfo_ef enable row level security;
 alter table public.mt_cfo_ef_ref enable row level security;
 alter table public.mt_cfo_mat_group enable row level security;
+alter table public.mt_cfo_usage_ef enable row level security;
 alter table public.mt_cfo_material enable row level security;
 alter table public.tx_cfo_material enable row level security;
 alter table public.mt_cfo_activity enable row level security;

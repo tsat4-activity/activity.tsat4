@@ -33,6 +33,7 @@ export function tablesOf(activity) {
     ef: `mt_${k}_ef`,
     efRef: `mt_${k}_ef_ref`, // reference tables of EF TGO AR5 V2 (energy / chemical / ipcc)
     material: `mt_${k}_material`, // SAP materials + EF match (Scope 3 Store usage)
+    usageEf: `mt_${k}_usage_ef`, // usage_ef: Id_usage · material · Id_cfp · กลุ่ม · ชื่อ · kgCO₂e ต่อหน่วย SAP
     matGroup: `mt_${k}_mat_group`, // กลุ่มวัสดุ: 1 กลุ่ม = 1 EF = กิจกรรม 3-1 ต่อ costcenter
     materialUse: `tx_${k}_material`, // monthly SAP usage that has an EF
     activity: `mt_${k}_activity`,

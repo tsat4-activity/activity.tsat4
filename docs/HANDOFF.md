@@ -6,6 +6,7 @@
 
 ## SQL ที่รอผู้ใช้รัน
 
+- [CFO] `db/act/cfo.sql` (2026-11-09 รอบ 2): ตาราง `mt_cfo_usage_ef` + `mt_cfo_activity.usage_id` + calc `usage` (รันซ้ำได้)
 - [CFO] `inbox/clear_cfo_ef_sap.sql` (2026-11-09, ไม่บังคับ · ลบถาวร): ผู้ใช้สั่งล้างหน้า EF SAP ทั้งหมด (กลุ่ม · วัสดุ · Usage · กิจกรรม calc = sap + ปริมาณรายเดือน) · ขั้น 1 ดูจำนวน ขั้น 2 begin…commit
 - [CFO] `db/act/cfo.sql` (2026-11-09): คอลัมน์ `mt_cfo_material.kgco2e_unit` สำหรับ Import cal_ef (รันซ้ำได้ เพิ่มแค่คอลัมน์)
 - [5S] `inbox/mock_5s_audits_2026.sql`: ข้อมูลจำลองผลการตรวจประเมิน 5S ปี 2026 ตามเงื่อนไขและเอกสารทางการล่าสุด:
@@ -42,6 +43,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-09 · Claude [CFO] · **usage_ef** (ตามแผนภาพผู้ใช้: CFP → usage_ef → Activity): Setting > EF SAP แสดง/Import ตาราง usage_ef แทนกลุ่มวัสดุเดิม (UI เก่าถูกเอาออก route เดิมยังอยู่ให้ Dashboard Usage (SAP)) · กิจกรรม calc = usage = Id_usage × costcenter (ผู้ใช้เลือก) · Edit data ปุ่ม **Import SAP** คูณ Qty × Usage_ef ลงกิจกรรมที่มีอยู่ · แก้ CSS ฟอร์มกิจกรรม: `#cfo-a-up` (EF 3-3) ซ่อนไม่ได้เพราะ display:flex ทับ hidden · spec: docs/specs/act-cfo.md หัวข้อ usage_ef · ทดสอบไฟล์จริงบน mock: cfp 83 → usage_ef 82 → คลอรีน 2 costcenter = 80 KG × 890 = 71.2 t ต่อกิจกรรม
 - 2026-11-09 · Claude [CFO] · แท็บ Setting `Materials (SAP)` เปลี่ยนชื่อเป็น **EF SAP** (ผู้ใช้กำหนด) · รอผู้ใช้บันทึกชีต `usage_ef` ใน `Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx` เพื่อออกแบบตาราง usage_ef
 - 2026-11-09 · Claude [CFO] · **cal_ef**: วัสดุมี `kgco2e_unit` (kgCO₂e ต่อ 1 หน่วย SAP) = คิด Qty × ค่านี้ตรง ไม่ใช้ EF กลุ่ม / ตัวแปลง · `ef_ref_id` ของวัสดุแบบนี้ = Ref (Id_cfp) · กิจกรรม (กลุ่ม × costcenter) ที่มีวัสดุแบบนี้ใช้ EF `sapkg:<scope>` (หน่วย kgCO2e = 1) ปริมาณ = Σ kgCO₂e · Setting > Materials (SAP) ปุ่ม **Import cal_ef** (ชีต cal_ef: Id_cfp · group · material · material_description · bun · kgCO₂e/unit · สร้างกลุ่มที่ยังไม่มี · ตรวจก่อนบันทึก + เตือนค่าน่าสงสัยหน่วย kg/L) · อ่าน Excel เลือกชีตตามชื่อ: Usage = sap10, EF Import = ชื่อตาราง (cfp) · ทดสอบด้วยไฟล์ `Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx`: cfp เพิ่ม 83 · cal_ef 82 วัสดุ 13 กลุ่ม · ต.ค. ส่วน cal_ef 69 บรรทัด 485.333 tCO₂e 47 กิจกรรม ตรงกับคิดด้วย Python
 - 2026-11-09 · Claude [ทุกหน้า] · แท็บเริ่มระดับเดียวกับเมนูแรกของ sidebar (`.main` padding-top = header + 6px) · ช่องแนวตั้งระหว่างกล่อง (แท็บ · ตัวกรอง · tile · กราฟ · ตาราง) ใช้ `--block-gap:10px` ค่าเดียว ส่วนช่องแนวนอน / ขอบซ้ายยังเป็น `--content-gutter` · `.ch-card` ที่อยู่ใน surface-main ไม่มี margin-bottom แล้ว (ใช้ gap แทน)

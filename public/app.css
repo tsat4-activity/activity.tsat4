@@ -1136,6 +1136,7 @@ html[data-theme="dark"] .wfa-prop-pill.is-after{background:rgba(6,95,70,0.42);co
 /* Scope 3-3 block: stack full-width so EF <select> matches other fields (native list width follows longest optgroup/option — keep labels short in JS too) */
 .popup.cfo-activity-popup #cfo-a-up{display:flex;flex-direction:column;gap:10px;min-width:0;width:100%}
 .popup.cfo-activity-popup #cfo-a-up>.field{min-width:0;width:100%}
+.popup.cfo-activity-popup [hidden],.popup.cfo-activity-popup #cfo-a-up[hidden]{display:none}
 .popup.cfo-activity-popup .popup-fields select{min-width:0;max-width:100%;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .popup.cfo-activity-popup .popup-actions{position:sticky;bottom:0;margin-top:14px;margin-left:-16px;margin-right:-16px;margin-bottom:-12px;padding:12px 16px 12px;border-top:1px solid var(--mo-line);background:var(--mo-surface);box-shadow:0 -8px 20px rgba(0,0,0,.06)}
 /* Work Flow list: every column on the page, long text ends in … (the full text is the title) · a phone scrolls inside the frame */

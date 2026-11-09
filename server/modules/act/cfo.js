@@ -322,6 +322,7 @@ export function mountCfo(app) {
       settingsOf(t),
       accessOf(req, activity, thisYear())
     ]);
+    const usageEf = await fetchAll(() => tx.from(t.usageEf).select('*').order('id')).catch(() => []); // before db/act/cfo.sql 2026-11-09
     const usedEf = new Set(used.map((u) => u.ef_id));
     const usedGwp = new Set([...used, ...activities].map((u) => u.gwp_code));
     const usedAct = new Set(used.map((u) => u.activity_id));
@@ -330,8 +331,152 @@ export function mountCfo(app) {
       scopes, settings, refs,
       gwp: gwp.map((g) => ({ ...g, used: usedGwp.has(g.code) })),
       ef: ef.map((e) => ({ ...e, used: usedEf.has(e.id) })),
-      activities: activities.map((a) => ({ ...a, used: usedAct.has(a.id) }))
+      activities: activities.map((a) => ({ ...a, used: usedAct.has(a.id) })),
+      usageEf
     });
+  });
+
+  // ---------- Setting > EF SAP: usage_ef (ผู้ใช้กำหนด 2026-11-09) ----------
+  // Id_usage · Id_cfp · กลุ่ม · ชื่อ · Usage_ef (kgCO₂e ต่อ 1 หน่วย SAP เตรียมไว้แล้ว) · material = รหัส SAP ที่จับคู่ไฟล์ sap10
+  const usageReady = async (t) => !(await tx.from(t.usageEf).select('id').limit(1)).error;
+  const usageNo = (n) => `Usage-${String(n).padStart(4, '0')}`;
+  // EF of a usage activity: a copy in mt_cfo_ef (code usage:<id>:<scope>) · a new value makes a new copy, old entries keep theirs
+  const efUsage = async (t, item, scopeCode) => {
+    const base = `usage:${item.id}:${scopeCode}`;
+    const row = { scope_code: scopeCode, kind: item.grp, name: item.name, unit: item.unit || 'unit', kgco2e: Number(item.usage_ef), ref_id: item.ref_id || null,
+      reference: 'Setting > EF SAP (usage_ef)', detail: `${item.id} · material ${item.material}`, year: thisYear(), status: 'Active' };
+    const copies = must(await tx.from(t.ef).select('id,code,kgco2e,unit,ref_id').like('code', `${base}*`).order('id', { ascending: false }))
+      .filter((c) => /^(:\d+)?$/.test(c.code.slice(base.length)));
+    const same = copies.find((c) => c.unit === row.unit && Number(c.kgco2e) === row.kgco2e && Number(c.ref_id || 0) === Number(row.ref_id || 0));
+    if (same) return same.id;
+    return must(await tx.from(t.ef).insert({ ...row, code: copies.length ? `${base}:${copies.length + 1}` : base }).select('id'))[0].id;
+  };
+  route('get', '/api/act/:activity/cfo/usage-ef', async (req, res, activity, t) => {
+    if (!(await usageReady(t))) return res.json({ ready: false, rows: [], admin: false });
+    const access = await accessOf(req, activity, thisYear());
+    const [rows, acts] = await Promise.all([fetchAll(() => tx.from(t.usageEf).select('*').order('id')), fetchAll(() => tx.from(t.activity).select('usage_id').not('usage_id', 'is', null))]);
+    const n = acts.reduce((m, a) => m.set(a.usage_id, (m.get(a.usage_id) || 0) + 1), new Map());
+    res.json({ ready: true, admin: access.admin || await adminNext(req, activity), rows: rows.map((r) => ({ ...r, activities: n.get(r.id) || 0 })) });
+  });
+  // Import (sheet usage_ef / cal_ef) or the add / edit form: rows [{ id?, material, ref (Id_cfp), group, name, unit, usage_ef }]
+  // · the same material = edit · no Id_usage = the next number · save false = check only
+  route('post', '/api/act/:activity/cfo/usage-ef', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    if (!(await usageReady(t))) return fail(res, 400, 'ให้รัน db/act/cfo.sql ก่อน (ตาราง usage_ef)');
+    const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
+    if (!list.length) return fail(res, 400, 'ยังไม่มีข้อมูล');
+    const [have, refList] = await Promise.all([fetchAll(() => tx.from(t.usageEf).select('*')), fetchAll(() => tx.from(t.efRef).select('id,code,name,unit,total').in('sheet', MAT_SHEETS))]);
+    const refs = new Map(refList.filter((r) => r.code).map((r) => [String(r.code).toUpperCase(), r]));
+    const byMat = new Map(have.map((r) => [r.material, r]));
+    const byId = new Map(have.map((r) => [r.id, r]));
+    let next = Math.max(0, ...have.map((r) => Number(r.id.slice(6)) || 0));
+    const errors = [];
+    const out = [];
+    const seen = new Set();
+    for (const [i, b] of list.entries()) {
+      const at = `แถว ${b.line || i + 1}`;
+      const material = matCode(b.material);
+      const value = Number(String(b.usage_ef ?? '').replace(/,/g, ''));
+      const code = String(b.ref ?? '').trim().toUpperCase();
+      const ref = code ? refs.get(code) : null;
+      const wantId = String(b.id ?? '').trim();
+      if (!material) { errors.push(`${at}: ไม่มี material`); continue; }
+      if (seen.has(material)) { errors.push(`${at}: material ${material} ซ้ำในไฟล์`); continue; }
+      seen.add(material);
+      if (!(value > 0)) { errors.push(`${at}: Usage_ef ต้องเป็นตัวเลขมากกว่า 0`); continue; }
+      if (code && !ref) { errors.push(`${at}: ไม่พบ Id_cfp ${code} ในตาราง EF CFP (Import ชีต cfp ที่ Emission Factor ก่อน)`); continue; }
+      if (wantId && !/^Usage-\d+$/i.test(wantId)) { errors.push(`${at}: Id_usage ต้องเป็นแบบ Usage-0001`); continue; }
+      const old = byMat.get(material) || (wantId && byId.get(usageNo(Number(wantId.slice(6))))) || null;
+      const id = old?.id || (wantId ? usageNo(Number(wantId.slice(6))) : null);
+      if (id && byId.get(id) && byId.get(id).material !== material && !byMat.get(material)) { errors.push(`${at}: ${id} เป็นของ material ${byId.get(id).material}`); continue; }
+      const row = { id, material, ref_id: ref ? ref.id : code === '' && old ? old.ref_id : null, grp: text(b.group, 120) || old?.grp || '', name: text(b.name, 300) || old?.name || material,
+        unit: text(b.unit, 20) || old?.unit || null, usage_ef: value, status: b.status === 'Inactive' ? 'Inactive' : 'Active' };
+      if (!row.grp) { errors.push(`${at}: ระบุกลุ่ม`); continue; }
+      out.push({ row, old, ref });
+    }
+    if (errors.length) return fail(res, 400, `ไม่ได้บันทึก มี ${errors.length} แถวที่ผิด: ${errors.slice(0, 5).join(' · ')}${errors.length > 5 ? ' …' : ''}`);
+    const add = out.filter((x) => !x.old).length;
+    // kg / L: 1 unit is about 1 × its EF · far off (or over 50 kgCO₂e/kg without Id_cfp) is worth a look
+    const odd = out.filter(({ row, ref }) => ['KG', 'L'].includes(String(row.unit || '').toUpperCase())
+      && (ref && String(ref.unit || '').toUpperCase() === String(row.unit).toUpperCase() ? Math.abs(row.usage_ef / Number(ref.total) - 1) > 0.5 : row.usage_ef > 50))
+      .map(({ row, ref }) => ({ material: row.material, name: row.name, unit: row.unit, value: row.usage_ef, ref: ref?.code || '', ef: ref ? Number(ref.total) : null, efUnit: ref?.unit || '' }));
+    const noRef = out.filter((x) => !x.row.ref_id).length;
+    if (req.body?.save === false) return res.json({ ok: true, saved: false, count: out.length, add, update: out.length - add, noRef, odd });
+    for (const x of out) if (!x.row.id) x.row.id = usageNo((next += 1));
+    for (let i = 0; i < out.length; i += 500) must(await tx.from(t.usageEf).upsert(out.slice(i, i + 500).map((x) => x.row), { onConflict: 'id' }));
+    await logRev(t, req, 'EF SAP (usage_ef)', out.length === 1 ? out[0].row.id : `${out.length} รายการ`, `บันทึก usage_ef เพิ่ม ${add} แก้ ${out.length - add}`);
+    res.status(201).json({ ok: true, count: out.length, add });
+  });
+  route('delete', '/api/act/:activity/cfo/usage-ef/:id', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    if (must(await tx.from(t.activity).select('id').eq('usage_id', req.params.id).limit(1)).length) return fail(res, 400, 'มีกิจกรรมใช้ Id_usage นี้แล้ว ลบไม่ได้ ให้ตั้งเป็น Inactive');
+    must(await tx.from(t.usageEf).delete().eq('id', req.params.id));
+    await logRev(t, req, 'EF SAP (usage_ef)', req.params.id, 'ลบ');
+    res.json({ ok: true });
+  });
+
+  // ---------- Edit data > Import SAP (sap10): Qty in UnE × Usage_ef ลงกิจกรรม Id_usage × costcenter ที่มีอยู่ ----------
+  // rows [{ material, qty (issue = plus), unit, costcenter }] netted per costcenter × material · only activities that exist get
+  // the month (no activity = listed, not made) · a confirmed month is left as it is unless the ผู้จัดทำ imports · save false = check
+  route('post', '/api/act/:activity/cfo/usage-import', async (req, res, activity, t) => {
+    const month = monthOf(req.body?.month);
+    if (!month) return fail(res, 400, 'เลือกเดือน');
+    if (!(await usageReady(t))) return fail(res, 400, 'ให้รัน db/act/cfo.sql ก่อน (ตาราง usage_ef)');
+    const access = await accessOf(req, activity, Number(month.slice(0, 4)));
+    if (!access.admin && !access.departments.length) return fail(res, 403, 'Import ได้เฉพาะผู้จัดทำหรือตัวแทนหน่วยงาน');
+    const ccKey = (v) => String(v ?? '').trim().replace(/\.0+$/, '').toUpperCase();
+    const lines = new Map();
+    for (const r of Array.isArray(req.body?.rows) ? req.body.rows : []) {
+      const material = matCode(r.material);
+      const qty = Number(String(r.qty ?? '').replace(/,/g, ''));
+      if (!material || !Number.isFinite(qty)) continue;
+      const key = `${ccKey(r.costcenter)}|${material}|${unitKey(r.unit)}`;
+      const l = lines.get(key) || { costcenter: ccKey(r.costcenter), material, unit: text(r.unit, 20), name: text(r.name, 300), qty: 0 };
+      l.qty += qty;
+      lines.set(key, l);
+    }
+    if (!lines.size) return fail(res, 400, 'ไม่พบแถวที่มี Material และปริมาณ');
+    const [items, acts] = await Promise.all([fetchAll(() => tx.from(t.usageEf).select('*')), fetchAll(() => tx.from(t.activity).select('*').eq('calc', 'usage').eq('status', 'Active'))]);
+    const itemOf = new Map(items.filter((x) => x.status === 'Active').map((x) => [x.material, x]));
+    const actOf = new Map(acts.map((a) => [`${a.usage_id}|${ccKey(a.costcenter)}`, a]));
+    const sums = new Map();
+    const skip = { noItem: [], noActivity: [], unit: [], other: [] };
+    let tco2e = 0;
+    for (const l of lines.values()) {
+      if (!(l.qty > 0)) continue;
+      const item = itemOf.get(l.material);
+      if (!item) { skip.noItem.push(l); continue; }
+      if (l.unit && item.unit && unitKey(l.unit) !== unitKey(item.unit)) { skip.unit.push({ ...l, want: item.unit }); continue; }
+      const a = actOf.get(`${item.id}|${l.costcenter}`);
+      if (!a) { skip.noActivity.push({ ...l, id: item.id, grp: item.grp }); continue; }
+      if (!access.admin && !access.departments.includes(a.department)) { skip.other.push({ ...l, id: item.id, department: a.department }); continue; }
+      const s = sums.get(a.id) || { a, item, qty: 0, lines: 0 };
+      s.qty += l.qty;
+      s.lines += 1;
+      sums.set(a.id, s);
+      tco2e += (l.qty * Number(item.usage_ef)) / 1000;
+    }
+    const ids = [...sums.keys()];
+    const old = ids.length ? await fetchIn(() => tx.from(t.entry).select('id,activity_id,status').eq('month', month), 'activity_id', ids) : [];
+    const locked = new Set(old.filter((e) => e.status === 'CONFIRMED' && !access.admin).map((e) => e.activity_id));
+    let saved = 0;
+    if (req.body?.save === true) {
+      const rows = [];
+      for (const s of sums.values()) {
+        if (locked.has(s.a.id)) continue;
+        const efId = await efUsage(t, s.item, (await tx.from(t.ef).select('scope_code').eq('id', s.a.ef_id).maybeSingle()).data?.scope_code || '3-1');
+        if (efId !== s.a.ef_id) must(await tx.from(t.activity).update({ ef_id: efId }).eq('id', s.a.id));
+        const was = old.find((e) => e.activity_id === s.a.id);
+        rows.push({ activity_id: s.a.id, month, qty: r6(s.qty), ef_id: efId, gwp_code: s.a.gwp_code, status: was?.status || 'DRAFT', inputs: { sap: { lines: s.lines, material: s.item.material } },
+          remark: 'Import SAP (usage_ef)', created_by: req.user.employeeId, updated_by: req.user.employeeId, updated_at: new Date().toISOString() });
+      }
+      for (let i = 0; i < rows.length; i += 500) must(await tx.from(t.entry).upsert(rows.slice(i, i + 500), { onConflict: 'activity_id,month' }));
+      saved = rows.length;
+      await logRev(t, req, 'Import SAP (usage_ef)', month.slice(0, 7), `${lines.size} บรรทัด → ${saved} กิจกรรม ${Math.round(tco2e * 1000) / 1000} tCO2e`);
+    }
+    const top = (list) => ({ count: list.length, top: list.sort((x, y) => y.qty - x.qty).slice(0, 300) });
+    res.json({ ok: true, saved: req.body?.save === true ? saved : null, month, lines: lines.size, activities: sums.size, locked: locked.size, tco2e: Math.round(tco2e * 1000) / 1000,
+      noItem: top(skip.noItem), noActivity: top(skip.noActivity), unitWrong: top(skip.unit), notYours: top(skip.other) });
   });
 
   // EF copies (mt_cfo_ef) are made from the reference tables when an activity is saved (efFromRef): no direct add / edit
@@ -984,9 +1129,24 @@ export function mountCfo(app) {
   };
   // type = Scope 1 / 2 / 3, or sep = การปล่อย GHG โดยตรงที่ทำการรายงานแยก (Scope 1 categories, kept out of the Scope totals)
   const activityInput = async (t, b) => {
-    const row = { ef_id: Number(b.ef_id), gwp_code: text(b.gwp_code, 20) || 'AR5', department: text(b.department, 80), name: text(b.name, 200), detail: text(b.detail, 500), calc: CFO_CALCS[b.calc] ? b.calc : null, status: b.status === 'Inactive' ? 'Inactive' : 'Active' };
-    if (!row.department || !row.name) return { error: 'ระบุหน่วยงานและชื่อกิจกรรม' };
+    const row = { ef_id: Number(b.ef_id), gwp_code: text(b.gwp_code, 20) || 'AR5', department: text(b.department, 80), name: text(b.name, 200), detail: text(b.detail, 500),
+      calc: CFO_CALCS[b.calc] || b.calc === 'usage' ? b.calc : null, status: b.status === 'Inactive' ? 'Inactive' : 'Active' };
     const scopeCode = text(b.scope_code, 10);
+    // Usage (usage_ef, ผู้ใช้กำหนด 2026-11-09): 1 กิจกรรม = Id_usage × costcenter · EF = Usage_ef ของรายการนั้น (kgCO₂e ต่อหน่วย SAP)
+    if (row.calc === 'usage') {
+      const item = must(await tx.from(t.usageEf).select('*').eq('id', String(b.usage_id || '')).maybeSingle());
+      if (!item) return { error: 'เลือก Id_usage' };
+      row.costcenter = text(b.costcenter, 40)?.replace(/\.0+$/, '').toUpperCase() || null;
+      if (!row.costcenter) return { error: 'ระบุ costcenter' };
+      if (!scopeCode || !scopeCode.startsWith('3-')) return { error: 'กิจกรรม Usage ต้องอยู่ Scope 3 (เลือกหมวด เช่น 3-1)' };
+      row.usage_id = item.id;
+      row.name = row.name || item.grp;
+      row.ef_id = await efUsage(t, item, scopeCode);
+      if (!row.department) return { error: 'ระบุหน่วยงาน' };
+      row.ef3_id = null;
+      return { row };
+    }
+    if (!row.department || !row.name) return { error: 'ระบุหน่วยงานและชื่อกิจกรรม' };
     const type = ['1', '2', '3', 'sep'].includes(String(b.type)) ? String(b.type) : null;
     if (type && scopeCode && !scopeCode.startsWith(`${type === 'sep' ? 1 : type}-`)) return { error: 'หมวดไม่ตรงกับ Scope ที่เลือก' };
     if (b.ref_id) {
@@ -1017,6 +1177,7 @@ export function mountCfo(app) {
     if (!(await requireAdminNow(req, res, activity))) return;
     const { row, error } = await activityInput(t, req.body || {});
     if (error) return fail(res, 400, error);
+    if (row.usage_id && must(await tx.from(t.activity).select('id').eq('usage_id', row.usage_id).eq('costcenter', row.costcenter).limit(1)).length) return fail(res, 400, `มีกิจกรรม ${row.usage_id} · costcenter ${row.costcenter} แล้ว`);
     must(await tx.from(t.activity).insert(row));
     await logRev(t, req, 'กิจกรรม', `${row.department} · ${row.name}`, 'เพิ่มกิจกรรม');
     res.status(201).json({ ok: true });
