@@ -1,6 +1,6 @@
 # กฎสำหรับ AI ทุกตัวในโปรเจกต์นี้ (TSAT4 Activity: 5S + CFO + SMF)
 
-TSAT4 Activity = ระบบกิจกรรม 5S · CFO · SMF เว็บเดียว แยกออกมาจาก TSAT4 SMF (2026-10-30) มี GitHub (tsat4-activity/core-activity), Render และ **Supabase ของตัวเอง**
+TSAT4 Activity = ระบบกิจกรรม 5S · CFO · SMF เว็บเดียว แยกออกมาจาก TSAT4 SMF (2026-10-30) มี GitHub (`tsat4-activity/activity.tsat4` — ชื่อเดิม core-activity), Render และ **Supabase ของตัวเอง**
 **ระบบที่ deploy อยู่ต้องไม่พัง** ทุกตัวจึงต้องทำตามกฎนี้ทุกครั้ง
 
 ## 0. ขอบเขต
@@ -14,8 +14,12 @@ TSAT4 Activity = ระบบกิจกรรม 5S · CFO · SMF เว็บ
 
 ## 0.1 หลาย AI ทำงานพร้อมกัน (ผู้ใช้จัดโฟลเดอร์ 2026-11-01)
 
-เว็บเดียว repo เดียว (`tsat4-activity/core-activity`) แต่ละ AI ทำงาน **คนละโฟลเดอร์** (git worktree คนละ branch) แล้วส่งขึ้น `main` ตัวเดียวกัน
+เว็บเดียว repo เดียว (`tsat4-activity/activity.tsat4`) แต่ละ AI ทำงาน **คนละโฟลเดอร์** (git worktree คนละ branch) แล้วส่งขึ้น `main` ตัวเดียวกัน
 ดูว่าตัวเองอยู่โฟลเดอร์ไหนด้วย `git rev-parse --show-toplevel` แล้วทำเฉพาะงานของโฟลเดอร์นั้น
+
+**Push ไปที่ไหน (ผู้ใช้กำหนด 2026-11-09):** มี repo เดียว = `https://github.com/tsat4-activity/activity.tsat4.git` (เปลี่ยนชื่อจาก `core-activity` · ไม่มี repo ใหม่แยก) · push ขึ้น branch `main` ของ repo นี้เสมอ → Render `core-activity.onrender.com` deploy เอง (URL เว็บไม่เปลี่ยน)
+- ตรวจ: `git remote get-url origin` ต้องได้ URL ด้านบน · ถ้ายังเป็น `.../core-activity.git` ให้รัน `git remote set-url origin https://github.com/tsat4-activity/activity.tsat4.git` (ตั้งครั้งเดียวใช้ได้ทุก worktree)
+- ไม่ต้อง push ไป repo อื่น (ไม่ใช่ `tsat4/TSAT4-SMF` ซึ่งเป็นเว็บ Store) · ไม่ต้อง push 2 ที่
 
 | โฟลเดอร์ | branch | ดูแลหลัก (แก้ได้เต็มที่) |
 |---|---|---|
