@@ -6,7 +6,7 @@ const ACTIVITIES = [
 ];
 const PLANT_PAGES = [
   ['home', 'monitoring', 'Dashboard', 'ภาพรวม'],
-  ['edit', 'edit_note', 'Transaction', 'รายการ'],
+  ['edit', 'edit_note', 'Edit data', 'แก้ไขข้อมูล'],
   ['setting', 'settings', 'Setting', 'ข้อมูลตั้งต้น']
 ];
 for (const [id, label] of ACTIVITIES) {
@@ -28,7 +28,12 @@ function plantRender(name) {
   if (!unit) return async (target) => { target.innerHTML = cardView('ไม่พบหน้า', '', '<p class="empty">ไม่มีหน้านี้</p>'); };
   const id = unit.row[0];
   const page = name === id ? '' : name.slice(id.length + 1);
-  return async (target) => (page ? renderPlantPage(target, id, page) : renderPlant(target, id));
+  return async (target) => {
+    if (page) return renderPlantPage(target, id, page);
+    const home = VIEWS[`${id}-home`];
+    if (home) return home(target);
+    return renderPlant(target, id);
+  };
 }
 
 function renderPlant(target, id) {
@@ -46,13 +51,13 @@ function renderPlantPage(target, id, page) {
 }
 
 async function renderActivity(target) {
-  modulePage(target, 'ระบบกิจกรรม', 'Activity', ACTIVITIES.map(([id, label, icon]) => [id, icon, label, 'Dashboard, Transaction, Setting']));
+  modulePage(target, 'ระบบกิจกรรม', 'Activity', ACTIVITIES.map(([id, label, icon]) => [`${id}-home`, icon, label, 'Dashboard, Edit data, Setting']));
 }
 
 function unitNav(rows) {
   return rows.map(([id, label, icon]) => `<div class="nav-acc is-collapsed" data-nav-acc="${id}">
   <div class="nav-split">
-    <button class="nav-btn nav-parent" type="button" data-view="${id}" title="${label}"><span class="material-symbols-rounded">${icon}</span><span>${label}</span></button>
+    <button class="nav-btn nav-parent" type="button" data-view="${id}-home" title="${label} · Dashboard"><span class="material-symbols-rounded">${icon}</span><span>${label}</span></button>
     <button class="nav-caret-btn" type="button" data-nav-toggle="${id}" aria-expanded="false" aria-label="ย่อ ${label}" title="ย่อ/ขยาย"><span class="material-symbols-rounded nav-caret">expand_more</span></button>
   </div>
   <div class="nav-sub" data-nav-panel="${id}">${PLANT_PAGES.map(([page, itemIcon, title]) => `<button class="nav-btn" data-view="${id}-${page}" title="${title}"><span class="material-symbols-rounded">${itemIcon}</span><span>${title}</span></button>`).join('')}</div>

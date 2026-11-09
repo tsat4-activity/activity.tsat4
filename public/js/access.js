@@ -3,10 +3,10 @@
 // ผู้ดูแล · กรรมการ · ผู้ปฏิบัติ · ผู้ชม. Here: the sidebar shows only the pages one may open + the level of each activity,
 // สิทธิ์ของฉัน (user menu), and Setting > สิทธิ์ผู้ใช้ for the creator (every person × activity of a year, roles + sign-in).
 const ACCESS_LEVELS = {
-  admin: ['ผู้ดูแล', 'Dashboard · Transaction · Setting'],
-  committee: ['กรรมการ', 'Dashboard · Transaction (ดูทั้งหมด / ยืนยัน)'],
-  operator: ['ผู้ปฏิบัติ', 'Dashboard · Transaction (เฉพาะขอบเขตของตัวเอง)'],
-  viewer: ['ผู้ชม', 'Dashboard · Transaction (ดูอย่างเดียว)'],
+  admin: ['ผู้ดูแล', 'Dashboard · Edit data · Setting'],
+  committee: ['กรรมการ', 'Dashboard · Edit data (ดูทั้งหมด / ยืนยัน)'],
+  operator: ['ผู้ปฏิบัติ', 'Dashboard · Edit data (เฉพาะขอบเขตของตัวเอง)'],
+  viewer: ['ผู้ชม', 'Dashboard · Edit data (ดูอย่างเดียว)'],
   none: ['', 'Dashboard']
 };
 let myAccess = null;

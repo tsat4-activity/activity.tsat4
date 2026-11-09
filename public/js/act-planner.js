@@ -854,7 +854,7 @@ async function aplSetProjects(body, activity, admin, rerender) {
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('apl-p-add', 'เพิ่มโครงการ', 'primary')}${button('apl-p-edit', 'แก้ไข', 'secondary', 'disabled')}${button('apl-p-del', 'ลบ', 'danger', 'disabled')}${button('apl-p-copy', `คัดลอกจากปี ${a5Year - 1}`)}</div>` : ''}
     <div class="table-wrap sheet" id="apl-p-rows"></div>
-    <p class="sum-meta">${projects.length} โครงการ ปี ${a5Year} · แต่ละโครงการกำหนดรูปแบบ (ทีม/เดี่ยว) การวัดเป้าหมาย (ตามแผน/ตามจำนวน) แผนงาน และเป้าหมาย/ผลงานรายเดือน (Transaction)</p>`;
+    <p class="sum-meta">${projects.length} โครงการ ปี ${a5Year} · แต่ละโครงการกำหนดรูปแบบ (ทีม/เดี่ยว) การวัดเป้าหมาย (ตามแผน/ตามจำนวน) แผนงาน และเป้าหมาย/ผลงานรายเดือน (Edit data)</p>`;
   fillTable('apl-p-rows', ['ลำดับ', 'รหัส', 'ชื่อโครงการ', 'รูปแบบ', 'การวัดเป้าหมาย', 'เป้าหมาย (KPI)', 'หน่วย', 'สถานะ'], projects.map((p) => {
     const isCount = p.target_type === 'count';
     const tgt = isCount ? `ตามจำนวน (${p.target_count || '-'} ${esc(p.unit || 'โครงการ')})` : 'ตามแผน (ระยะเวลา)';
