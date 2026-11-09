@@ -17,6 +17,8 @@ const A5_UNITS_OF = { '5s': A5_UNITS };
 const A5_DASH_TABS = { intro: 'Introduction', summary: 'Summary', ranking: 'Ranking', auditor: 'Auditor', schedule: 'Schedule', audit: 'Audit Plan', team: 'Team' };
 // Setting tabs: ทีม, แผนงาน, then the activity's own tables (ผู้ใช้กำหนด 2026-10-29)
 const A5_SET_TABS = { team: 'Team', gantt: 'Plan', areas: 'Areas', checklist: 'Checklist', plan: 'Audit plan', intro: 'Introduction' }; // English names (ผู้ใช้กำหนด 2026-11-03)
+// Scores stored to 2 decimals (audit.js round2) must keep the zeros, so 87 shows as 87.00% next to 86.58%.
+const a5Pct = (n) => `${Number(n).toFixed(2)}%`;
 let a5Year = new Date().getFullYear();
 let a5DashTab = 'summary';
 let a5SetTab = 'team';
@@ -154,7 +156,7 @@ async function a5DrawSummary(body, activity, me) {
     ]
   }));
   const head = sets.map((set) => `<th colspan="2" class="a5-type-head" style="--team:${set.color}">${esc(set.label)}</th>`).join('');
-  const row = (i) => `<tr><td>${ACT_MONTHS[i]}</td>${sets.map((set) => `<td>${set.months[i].percent}%</td><td>${set.months[i].audits}</td>`).join('')}</tr>`;
+  const row = (i) => `<tr><td>${ACT_MONTHS[i]}</td>${sets.map((set) => `<td>${a5Pct(set.months[i].percent)}</td><td>${set.months[i].audits}</td>`).join('')}</tr>`;
   const kpiPass = a5Summary.type === 'SELF' ? passSelf : passCommittee;
   const targetOptions = [
     { value: 'current', label: `Self ${passSelf}% · Committee ${passCommittee}%` },
@@ -246,7 +248,7 @@ async function a5DrawSummary(body, activity, me) {
   $('a5-type').onchange = () => { a5Summary.type = $('a5-type').value; redraw(); };
   $('a5-atype').onchange = () => { a5Summary.areaType = $('a5-atype').value; a5Summary.area = ''; redraw(); };
   $('a5-area').onchange = () => { a5Summary.area = $('a5-area').value; redraw(); };
-  sets.forEach((set, n) => chartTip(`a5-plot-${n}`, (i) => `<strong>${esc(set.label)} · ${ACT_MONTHS[i]} ${a5Year}</strong><div class="ch-tip-row"><span>Score</span><b>${set.months[i].percent}%</b></div><div class="ch-tip-row"><span>ใบตรวจ</span><b>${set.months[i].audits}</b></div>${set.months[i].audits ? chartPill(set.months[i].percent, set.pass, ' เทียบเกณฑ์', true) : ''}`));
+  sets.forEach((set, n) => chartTip(`a5-plot-${n}`, (i) => `<strong>${esc(set.label)} · ${ACT_MONTHS[i]} ${a5Year}</strong><div class="ch-tip-row"><span>Score</span><b>${a5Pct(set.months[i].percent)}</b></div><div class="ch-tip-row"><span>ใบตรวจ</span><b>${set.months[i].audits}</b></div>${set.months[i].audits ? chartPill(set.months[i].percent, set.pass, ' เทียบเกณฑ์', true) : ''}`));
 }
 
 async function a5DrawRanking(body, activity) {
@@ -360,7 +362,7 @@ async function a5DrawAuditors(body, activity) {
         <td class="num"><strong>${a.actual}</strong></td>
         <td>${progBar(a.percent)}</td>
         ${roundTds}
-        <td class="num"><strong>${a.avgScore != null ? `${a.avgScore}%` : '-'}</strong></td>
+        <td class="num"><strong>${a.avgScore != null ? a5Pct(a.avgScore) : '-'}</strong></td>
         <td>${statusBadge(a)}</td>
         <td><button class="btn btn-sm secondary a5-aud-view-btn" type="button" data-view-aud="${esc(a.employeeId)}">ดูประวัติ</button></td>
       </tr>`;
@@ -412,7 +414,7 @@ async function a5DrawAuditors(body, activity) {
         <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">แผนการเข้าตรวจ</div><div class="a5-aud-kpi-val">${aud.planned} <small>ครั้ง</small></div></div>
         <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">เข้าตรวจจริง</div><div class="a5-aud-kpi-val">${aud.actual} <small>ครั้ง</small></div></div>
         <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">การมีส่วนร่วม</div><div class="a5-aud-kpi-val" style="color:${aud.percent >= passTarget ? 'var(--mo-success)' : 'var(--mo-danger)'}">${aud.percent}%</div></div>
-        <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">คะแนนเฉลี่ยที่ตรวจ</div><div class="a5-aud-kpi-val">${aud.avgScore != null ? `${aud.avgScore}%` : '-'}</div></div>
+        <div class="a5-aud-kpi"><div class="a5-aud-kpi-label">คะแนนเฉลี่ยที่ตรวจ</div><div class="a5-aud-kpi-val">${aud.avgScore != null ? a5Pct(aud.avgScore) : '-'}</div></div>
       </div>
       <div class="table-wrap" style="max-height:360px">
         <table class="mo-data-table">
@@ -427,7 +429,7 @@ async function a5DrawAuditors(body, activity) {
                 <td>${esc(x.areaName)}</td>
                 <td>${esc(x.areaType)}</td>
                 <td><span class="a5-dot is-done" style="--team:${a5TeamColor(x.team)}"></span> ${esc(x.team)}</td>
-                <td class="num"><strong>${x.percentScore}%</strong></td>
+                <td class="num"><strong>${a5Pct(x.percentScore)}</strong></td>
                 <td><span class="badge ${x.result === 'PASS' ? 'badge-success' : 'badge-danger'}">${esc(x.result)}</span></td>
               </tr>`).join('') || '<tr><td colspan="9" class="empty">ยังไม่มีประวัติการเข้าตรวจประเมินในปีนี้</td></tr>'}
           </tbody>

@@ -103,7 +103,7 @@ async function atxAudits(body, activity, me) {
       <td><span class="badge ${a.audit_type === 'COMMITTEE' ? 'badge-primary' : 'badge-warning'}">${esc(a.audit_type)}</span></td>
       <td>${esc(a.areaType || '')}</td><td>${esc(a.areaName || '')}</td>
       <td>${a.team ? `<span class="a5-dot is-done" style="--team:${a5TeamColor(a.team)}"></span> ${esc(a.team)}` : '-'}</td>
-      <td>${Number(a.total_score)}</td><td>${Number(a.percent_score)}%</td>
+      <td>${Number(a.total_score)}</td><td>${Number(a.percent_score).toFixed(2)}%</td>
       <td><span class="badge ${a.result === 'PASS' ? '' : 'badge-danger'}">${esc(a.result || '-')}</span></td>
       <td><span class="badge ${a.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}">${esc(a.status)}</span>${a.openIssues ? ` <span class="sum-meta">Issue ค้าง ${a.openIssues}</span>` : ''}</td></tr>`).join(''), `ยังไม่มีใบตรวจปี ${a5Year}`, headFor(atxHeads.audits, () => draw()));
     setHeaderMeta(`ใบตรวจ ${rows.length} / ${data.audits.length} ใบ (${a5Year})`);
@@ -554,7 +554,7 @@ async function atxSave(activity, state, form, open, onDone, groups, setStepAndDr
       await a5Api(activity, `issues/${issue.id}/photo`, { method: 'POST', body: { kind: 'BEFORE', image: state.photo[issue.checklist_id] } });
     } catch (err) { failedPhotos += 1; toast(`${issue.issue_no}: ${err.message}`, 'error'); }
   }));
-  toast(`บันทึก ${result.auditNo} แล้ว · ${result.percent}%${failedPhotos ? ` · รูปไม่ขึ้น ${failedPhotos} รายการ (แนบใหม่ที่แท็บ Issue)` : ''}`);
+  toast(`บันทึก ${result.auditNo} แล้ว · ${Number(result.percent).toFixed(2)}%${failedPhotos ? ` · รูปไม่ขึ้น ${failedPhotos} รายการ (แนบใหม่ที่แท็บ Issue)` : ''}`);
   closePopup();
   if (onDone) onDone();
 }
