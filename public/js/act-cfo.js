@@ -8,7 +8,7 @@ const CFO_SCOPE_COLORS = CHART_THEMES.cool.series.slice(0, 3);
 const CFO_BASE_COLORS = CHART_THEMES.cool.base;
 const CFO_ROLE_LABEL = { ...ACT_TEAM_ROLES }; // TGO forms call the coordinator ผู้จัดทำ
 const CFO_DASH_TABS = { intro: 'Introduction', summary: 'Summary', scope: 'Scope', usage: 'Usage (SAP)', company: 'Fr-01', team: 'Fr-03.1', fr032: 'Fr-03.2', fr041: 'Fr-04.1', revision: 'บันทึกการปรับปรุง' };
-const CFO_SET_TABS = { team: 'Team', activities: 'Activities', ef: 'Emission Factor', material: 'Materials (SAP)', s3: 'Scope 3 (Fr-03.2)', company: 'Company', intro: 'Introduction' }; // English names (ผู้ใช้กำหนด 2026-11-03)
+const CFO_SET_TABS = { team: 'Team', activities: 'Activities', ef: 'Emission Factor', material: 'EF SAP', s3: 'Scope 3 (Fr-03.2)', company: 'Company', intro: 'Introduction' }; // English names (ผู้ใช้กำหนด 2026-11-03)
 // TGO Fr-03.2 weighted criteria (server s3Rule, ผู้ใช้กำหนด 2026-11-02): level 1–5 per issue · Magnitude comes from the data
 const CFO_S3_LEVELS = [
   ['magnitude', 'Magnitude', '% GHG ของหมวด เทียบ Scope 1+2+3 (ระบบคิดจากข้อมูลจริง)'],
@@ -449,7 +449,7 @@ async function cfoDrawUsage(body) {
     ${chartCard(`Costcenter เรียงจากปล่อยมากไปน้อย · ${title}`, `<div class="table-wrap"><table class="mo-data-table"><thead><tr><th class="num">#</th><th>Costcenter</th><th>ชื่อ</th><th>Section</th><th class="num">รายการ</th><th class="num">tCO₂e</th><th class="num">%</th><th class="num">เงิน (บาท)</th></tr></thead>
       <tbody>${d.costcenters.map((x, i) => `<tr><td class="num">${i + 1}</td><td>${esc(x.costcenter || '-')}</td><td title="${esc(x.name)}">${esc(x.name)}</td><td>${esc(x.department)}</td><td class="num">${x.items}</td>
         <td class="num"><b>${cfoT(x.tco2e)}</b></td><td class="num">${all ? Math.round((x.tco2e / all) * 100) : 0}%</td><td class="num">${cfoBaht(x.amount)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">ยังไม่มี Usage · วางได้ที่ Setting > วัสดุ (SAP) > วาง Usage</td></tr>'}</tbody></table></div>`)}
-    <p class="sum-meta">tCO₂e คิดเฉพาะวัสดุที่อยู่ในกลุ่มที่มี EF + มีตัวแปลง (Setting > Materials (SAP)) · เงิน = ทุกรายการ จากคอลัมน์ Amount ของไฟล์ SAP (ไม่มี = ปริมาณ × ราคา)${d.costcenter || !d.total.lines ? '' : ' · เดือนที่วางก่อนเพิ่มคอลัมน์ costcenter แสดงตาม Section: วางเดือนนั้นใหม่เพื่อแยก costcenter'}</p>`;
+    <p class="sum-meta">tCO₂e คิดเฉพาะวัสดุที่อยู่ในกลุ่มที่มี EF + มีตัวแปลง (Setting > EF SAP) · เงิน = ทุกรายการ จากคอลัมน์ Amount ของไฟล์ SAP (ไม่มี = ปริมาณ × ราคา)${d.costcenter || !d.total.lines ? '' : ' · เดือนที่วางก่อนเพิ่มคอลัมน์ costcenter แสดงตาม Section: วางเดือนนั้นใหม่เพื่อแยก costcenter'}</p>`;
   $('cfo-us-month').onchange = () => { cfoUsageView.month = $('cfo-us-month').value; cfoDrawUsage(body).catch(onErr); };
 }
 
@@ -702,7 +702,7 @@ async function cfoEntries(target) {
     return e ? `<span class="badge ${e.status === 'CONFIRMED' ? 'badge-success' : 'badge-warning'}">${e.status === 'CONFIRMED' ? 'ยืนยันแล้ว' : 'ร่าง'}</span>` : '<span class="sum-meta">ยังไม่บันทึก</span>';
   };
   const groups = [...new Set(list.map((r) => r.category))];
-  // Usage (SAP) rows (calc = sap, กลุ่มวัสดุ × costcenter) come from Setting > Materials (SAP): shown, not recorded here
+  // Usage (SAP) rows (calc = sap, กลุ่มวัสดุ × costcenter) come from Setting > EF SAP: shown, not recorded here
   const row = (r) => `<tr data-pick="${r.id}"${r.canEdit ? '' : ` class="is-muted"${r.calc === 'sap' ? ' title="คิดจาก Usage (SAP) ที่วางแต่ละเดือน"' : ''}`}><td>${esc(r.name)}</td><td>${esc(r.detail || '')}</td><td>${esc(r.source || '')}</td><td class="num">${r.kgco2e == null ? '-' : cfoT(r.kgco2e)}</td>
     <td><div class="cfo-prog"><span><i style="width:${r.percent}%"></i></span>${r.percent}%<b class="cfo-freq" title="รายเดือน">M</b></div></td>
     <td class="num">${cfoT(value(r, 'qty'))}</td><td>${esc(r.unit || '')}</td><td class="num">${cfoT(value(r, 'tco2e'))}</td><td>${status(r)}</td>
@@ -858,7 +858,7 @@ function cfoSetActivities(body, m, rerender) {
   // EF id of an activity = the reference row its EF copy points to (mt_cfo_ef.ref_id → mt_cfo_ef_ref.code)
   const efCode = (a) => refById.get(efById.get(a.ef_id)?.ref_id)?.code || '';
   // SAP activities (calc = sap, ผู้ใช้กำหนด 2026-11-04): กลุ่มวัสดุ × costcenter made by the server from the Usage (SAP);
-  // group, EF and quantities are set in Setting > Materials (SAP), here only the status
+  // group, EF and quantities are set in Setting > EF SAP, here only the status
   const calcLabel = (a) => (a.calc === 'sap' ? 'Usage SAP' : CFO_CALCS[a.calc]?.short || '');
   // 3-3 line (การได้มาของเชื้อเพลิง / ไฟฟ้า): its EF id and kgCO2e per unit (ผู้ใช้กำหนด 2026-11-03)
   const ef3Label = (a) => {
@@ -1054,7 +1054,7 @@ function cfoSetActivities(body, m, rerender) {
     if (!picked) return;
     if (picked.calc !== 'sap') { form(picked); return; }
     const a = picked;
-    openPopup(`${esc(a.name)} · ${esc(a.detail || '')}`, `<p class="sum-meta">กิจกรรมจาก Usage (SAP): กลุ่ม EF และปริมาณ แก้ที่ Setting > Materials (SAP)</p>
+    openPopup(`${esc(a.name)} · ${esc(a.detail || '')}`, `<p class="sum-meta">กิจกรรมจาก Usage (SAP): กลุ่ม EF และปริมาณ แก้ที่ Setting > EF SAP</p>
       ${field('สถานะ', `<select id="cfo-a-sapstatus">${options(['Active', 'Inactive'], a.status)}</select>`)}`, async () => {
       await a5Api(CFO, `cfo/activities/${a.id}`, { method: 'PATCH', body: { status: $('cfo-a-sapstatus').value } });
       toast('บันทึกแล้ว');
@@ -1243,7 +1243,7 @@ function cfoSetRef(body, m, rerender, sheet) {
   });
 }
 
-// Setting > Materials (SAP) (ผู้ใช้กำหนด 2026-11-01 / 2026-11-04): กลุ่มวัสดุ (1 กลุ่ม = 1 EF, EF ไม่เท่ากันแยกกลุ่ม) · วัสดุ SAP หลายรุ่น
+// Setting > EF SAP (ผู้ใช้กำหนด 2026-11-01 / 2026-11-04): กลุ่มวัสดุ (1 กลุ่ม = 1 EF, EF ไม่เท่ากันแยกกลุ่ม) · วัสดุ SAP หลายรุ่น
 // ในกลุ่ม + ตัวแปลง (1 หน่วย SAP = ? หน่วย EF ของกลุ่ม) · Usage รายเดือนจาก SAP (ไฟล์ 7xxxxx หรือวางจาก Excel) → กิจกรรม
 // กลุ่ม × costcenter (calc = sap) ที่ server สร้างและเติมปริมาณให้ · Server: cfo/materials, cfo/mat-groups, cfo/material-usage
 const CFO_PAPER = { A4: 0.06237, A3: 0.12474, A5: 0.031185, F4: 0.0710 }; // m² per sheet

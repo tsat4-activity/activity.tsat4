@@ -234,7 +234,7 @@ export function mountCfo(app) {
     if (!month || !activityId) return fail(res, 400, 'เลือกกิจกรรมและเดือน');
     const act = must(await tx.from(t.activity).select('*').eq('id', activityId).maybeSingle());
     if (!act) return fail(res, 404, 'ไม่พบกิจกรรม');
-    if (act.calc === 'sap') return fail(res, 400, 'กิจกรรมนี้คิดจาก Usage (SAP) ให้วาง Usage ที่ Setting > Materials (SAP)');
+    if (act.calc === 'sap') return fail(res, 400, 'กิจกรรมนี้คิดจาก Usage (SAP) ให้วาง Usage ที่ Setting > EF SAP');
     const access = await accessOf(req, activity, Number(month.slice(0, 4)));
     if (!access.admin && !access.departments.includes(act.department)) return fail(res, 403, `บันทึกได้เฉพาะตัวแทนหน่วยงาน ${act.department} หรือผู้จัดทำ`);
     const current = must(await tx.from(t.entry).select('id,status,doc').eq('activity_id', act.id).eq('month', month).maybeSingle());
@@ -521,7 +521,7 @@ export function mountCfo(app) {
     const found = must(await tx.from(t.ef).select('id').eq('code', code).maybeSingle());
     if (found) return { id: found.id };
     const made = must(await tx.from(t.ef).insert({ code, scope_code: scopeCode, name: 'รวม kgCO₂e ของวัสดุ (Qty SAP × kgCO₂e/หน่วย)', unit: 'kgCO2e', kgco2e: 1,
-      reference: 'Setting > Materials (SAP): kgCO₂e/หน่วย และ Ref ของแต่ละวัสดุ', year: thisYear(), status: 'Active' }).select('id'));
+      reference: 'Setting > EF SAP: kgCO₂e/หน่วย และ Ref ของแต่ละวัสดุ', year: thisYear(), status: 'Active' }).select('id'));
     return { id: made[0].id };
   };
   const sapMaster = async (t) => {

@@ -6,6 +6,7 @@
 
 ## SQL ที่รอผู้ใช้รัน
 
+- [CFO] `inbox/clear_cfo_ef_sap.sql` (2026-11-09, ไม่บังคับ · ลบถาวร): ผู้ใช้สั่งล้างหน้า EF SAP ทั้งหมด (กลุ่ม · วัสดุ · Usage · กิจกรรม calc = sap + ปริมาณรายเดือน) · ขั้น 1 ดูจำนวน ขั้น 2 begin…commit
 - [CFO] `db/act/cfo.sql` (2026-11-09): คอลัมน์ `mt_cfo_material.kgco2e_unit` สำหรับ Import cal_ef (รันซ้ำได้ เพิ่มแค่คอลัมน์)
 - [5S] `inbox/mock_5s_audits_2026.sql`: ข้อมูลจำลองผลการตรวจประเมิน 5S ปี 2026 ตามเงื่อนไขและเอกสารทางการล่าสุด:
   - **แผนตรวจ Committee (`mt_5s_audit_plan`):** 3 รอบ (มี.ค., มิ.ย., ก.ย.) ครบ 34 พื้นที่ รวม 102 แถว จัดสรรเฉลี่ยอย่างสมเหตุสมผลตาม 9 ทีม (34/9 = เฉลี่ยรอบละ ~4 พื้นที่ต่อทีม: 7 ทีมละ 4 พื้นที่ + 2 ทีมละ 3 พื้นที่ ได้แก่ ทีม A: 4, ทีม B: 4, ทีม C: 4, ทีม D: 4, ทีม E: 4, ทีม F: 4, ทีม G: 4, ทีม H: 3, ทีม I: 3)
@@ -41,6 +42,7 @@
 
 ## บันทึก (อันใหม่อยู่บนสุด)
 
+- 2026-11-09 · Claude [CFO] · แท็บ Setting `Materials (SAP)` เปลี่ยนชื่อเป็น **EF SAP** (ผู้ใช้กำหนด) · รอผู้ใช้บันทึกชีต `usage_ef` ใน `Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx` เพื่อออกแบบตาราง usage_ef
 - 2026-11-09 · Claude [CFO] · **cal_ef**: วัสดุมี `kgco2e_unit` (kgCO₂e ต่อ 1 หน่วย SAP) = คิด Qty × ค่านี้ตรง ไม่ใช้ EF กลุ่ม / ตัวแปลง · `ef_ref_id` ของวัสดุแบบนี้ = Ref (Id_cfp) · กิจกรรม (กลุ่ม × costcenter) ที่มีวัสดุแบบนี้ใช้ EF `sapkg:<scope>` (หน่วย kgCO2e = 1) ปริมาณ = Σ kgCO₂e · Setting > Materials (SAP) ปุ่ม **Import cal_ef** (ชีต cal_ef: Id_cfp · group · material · material_description · bun · kgCO₂e/unit · สร้างกลุ่มที่ยังไม่มี · ตรวจก่อนบันทึก + เตือนค่าน่าสงสัยหน่วย kg/L) · อ่าน Excel เลือกชีตตามชื่อ: Usage = sap10, EF Import = ชื่อตาราง (cfp) · ทดสอบด้วยไฟล์ `Activity/CFO/inbox/7xxxxx 01-31.10 Rev.01.xlsx`: cfp เพิ่ม 83 · cal_ef 82 วัสดุ 13 กลุ่ม · ต.ค. ส่วน cal_ef 69 บรรทัด 485.333 tCO₂e 47 กิจกรรม ตรงกับคิดด้วย Python
 - 2026-11-09 · Claude [ทุกหน้า] · แท็บเริ่มระดับเดียวกับเมนูแรกของ sidebar (`.main` padding-top = header + 6px) · ช่องแนวตั้งระหว่างกล่อง (แท็บ · ตัวกรอง · tile · กราฟ · ตาราง) ใช้ `--block-gap:10px` ค่าเดียว ส่วนช่องแนวนอน / ขอบซ้ายยังเป็น `--content-gutter` · `.ch-card` ที่อยู่ใน surface-main ไม่มี margin-bottom แล้ว (ใช้ gap แทน)
 - 2026-11-09 · Claude [5S] · tile อ้วนใน 5S Summary: `.a5-board` (Cursor) ยืดเต็มจอแล้วแบ่งความสูงให้แถว tile ด้วย → `grid-template-rows:auto minmax(0,1fr)` · แถบแท็บ / ตัวกรองที่ sticky ไม่มีช่องให้เนื้อหาโผล่ตอนเลื่อนแล้ว (แต่ละแถบคลุมช่อง gutter ใต้ตัวเอง, หน้าไม่มีแท็บ เช่น หน้าหลัก แถวตัวกรองติดบนสุด top:0) · ถ้าเปลี่ยนความสูงแท็บ (31px) ให้แก้ `top` ของ `.surface-tools` ท้าย app.css ด้วย
