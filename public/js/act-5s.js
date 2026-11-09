@@ -174,10 +174,10 @@ async function a5DrawSummary(body, activity, me) {
       ${field('พื้นที่', `<select id="a5-area"><option value="">ทั้งหมด</option>${areas.map((a) => `<option value="${a.id}"${String(a.id) === String(a5Summary.area) ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)}</option>`).join('')}</select>`, 'grow')}
       ${targetField}
     </div>
+    <div class="a5-board">
     <div class="ch-kpis">${(data.groups.length ? data.groups : [1, 2, 3, 4, 5].map((n) => ({ group: n, percent: 0 }))).map((g, i) => chartKpi({ label: `${esc(a5GroupName(activity, g.group))} · เฉลี่ยทั้งปี`, value: g.percent, unit: '%', pie: g.percent, color: CHART.series[i % CHART.series.length], note: g.percent >= kpiPass ? 'ผ่านเกณฑ์' : g.percent ? `ต่ำกว่าเกณฑ์ ${kpiPass}%` : '' })).join('')}</div>
-    <div class="a5-side dash-split">
-      <div class="a5-charts">${sets.map(chart).join('')}</div>
-      <section class="card a5-sum-table"><div class="table-wrap sheet"><table class="mo-data-table">
+    <div class="a5-charts">${sets.map(chart).join('')}</div>
+    <section class="card a5-sum-table"><div class="table-wrap sheet"><table class="mo-data-table">
         <colgroup><col style="width:22%"><col style="width:19%"><col style="width:19%"><col style="width:20%"><col style="width:20%"></colgroup>
         <thead><tr><th rowspan="2">เดือน</th>${head}</tr><tr>${sets.map(() => '<th>%</th><th>ครั้ง</th>').join('')}</tr></thead>
         <tbody>${ACT_MONTHS.map((_, i) => row(i)).join('')}</tbody>

@@ -1160,30 +1160,38 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 /* Dashboard tiles (ผู้ใช้กำหนด 2026-11-08): white rounded tiles, label on top, big number, note below, icon / pie in the
    top-right corner · colors stay the theme's */
 .ch-kpis{gap:var(--content-gutter)}
-.ch-kpi,:where(body[data-dash]) .ch-kpi{position:relative;display:flex;align-items:center;gap:12px;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:14px 16px;min-height:0}
-/* the pie / icon is a large circle on the right of the tile (ผู้ใช้กำหนด 2026-11-08: ใหญ่ตามวงกลม) */
-.ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{order:2;margin-left:auto;width:72px;height:72px;font-size:34px;border-width:1.5px}
-.ch-kpi-body{flex:1 1 auto;gap:4px}
-.ch-kpi-label,:where(body[data-dash]) .ch-kpi-label{font-size:13px;font-weight:500}
-.ch-kpi-value strong,:where(body[data-dash]) .ch-kpi-value strong{font-size:26px;font-weight:700;line-height:1.15}
-.ch-kpi-value small,:where(body[data-dash]) .ch-kpi-value small{font-size:13px}
-.ch-kpi-foot,:where(body[data-dash]) .ch-kpi-foot{font-size:12px;min-height:16px}
-.a5-aud-kpis{gap:12px}
-.a5-aud-kpi,.kpi{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:14px 16px}
-.a5-aud-kpi-label,.kpi-label{font-size:13px;font-weight:500;color:var(--mo-text-muted)}
-.a5-aud-kpi-val,.kpi-value{font-size:24px;font-weight:700;line-height:1.2;margin-top:4px}
-@media(max-width:700px){.ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{width:52px;height:52px;font-size:26px}.ch-kpi-value strong,:where(body[data-dash]) .ch-kpi-value strong{font-size:21px}.a5-aud-kpi-val,.kpi-value{font-size:20px}}
+.ch-kpi,:where(body[data-dash]) .ch-kpi{position:relative;display:flex;align-items:center;gap:8px;background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:8px 10px;min-height:0}
+.ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{order:2;margin-left:auto;width:46px;height:46px;font-size:22px;border-width:1.5px}
+.ch-kpi-body{flex:1 1 auto;gap:2px}
+.ch-kpi-label,:where(body[data-dash]) .ch-kpi-label{font-size:11.5px;font-weight:500}
+.ch-kpi-value strong,:where(body[data-dash]) .ch-kpi-value strong{font-size:18px;font-weight:700;line-height:1.15}
+.ch-kpi-value small,:where(body[data-dash]) .ch-kpi-value small{font-size:11px}
+.ch-kpi-foot,:where(body[data-dash]) .ch-kpi-foot{font-size:11px;min-height:14px}
+.a5-aud-kpis{gap:var(--content-gutter)}
+.a5-aud-kpi,.kpi{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:8px 10px}
+.a5-aud-kpi-label,.kpi-label{font-size:11.5px;font-weight:500;color:var(--mo-text-muted)}
+.a5-aud-kpi-val,.kpi-value{font-size:18px;font-weight:700;line-height:1.2;margin-top:2px}
+@media(max-width:700px){.ch-kpi > .ch-pie,.ch-kpi > .ch-icon,:where(body[data-dash]) .ch-kpi > .ch-pie,:where(body[data-dash]) .ch-kpi > .ch-icon{width:40px;height:40px;font-size:18px}.ch-kpi-value strong,:where(body[data-dash]) .ch-kpi-value strong{font-size:16px}.a5-aud-kpi-val,.kpi-value{font-size:16px}}
 /* ผู้ใช้กำหนด 2026-11-09: the tab row has no card behind it (like the filter row) · the 5S Summary charts and month table
    fill the screen down to the bottom edge, both columns ending on one line; a short screen scrolls instead */
 .view-stack > .surface-nav:has(.tab-line){background:var(--drive-page);border:none;border-radius:0;box-shadow:none;padding:0}
 .a5-charts{gap:var(--content-gutter)}
 .a5-charts > .ch-card{margin-bottom:0}
+/* 5S Summary: same 5 tracks as the KPI row, so the score table is exactly under cards 4–5 and cannot stick out */
+.a5-board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--content-gutter);align-items:stretch;min-width:0}
+.a5-board > .ch-kpis{grid-column:1 / -1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--content-gutter);margin:0}
+.a5-board > .a5-charts{grid-column:1 / 4;min-width:0}
+.a5-board > .a5-sum-table{grid-column:4 / -1;min-width:0;max-width:100%;overflow:hidden}
+@media(max-width:900px){
+  .a5-board,.a5-board > .ch-kpis{grid-template-columns:1fr}
+  .a5-board > .a5-charts,.a5-board > .a5-sum-table{grid-column:1 / -1}
+}
 @media(min-width:901px){
-  .view-stack > .surface-main:has(> .a5-side){flex:1 1 0}
-  .surface-main > .a5-side{flex:1 1 0;min-height:440px;grid-template-rows:minmax(0,1fr)}
-  .a5-side > .a5-charts > .ch-card{display:flex;flex-direction:column;flex:1 1 0}
-  .a5-side .ch-plot,:where(body[data-dash]) .a5-side .ch-plot{flex:1 1 auto;min-height:0;grid-template-rows:auto minmax(0,1fr) auto}
-  .a5-side .a5-sum-table table{height:100%}
+  .view-stack > .surface-main:has(> .a5-board){flex:1 1 0}
+  .surface-main > .a5-board{flex:1 1 0;min-height:440px}
+  .a5-board > .a5-charts > .ch-card{display:flex;flex-direction:column;flex:1 1 0}
+  .a5-board .ch-plot,:where(body[data-dash]) .a5-board .ch-plot{flex:1 1 auto;min-height:0;grid-template-rows:auto minmax(0,1fr) auto}
+  .a5-board .a5-sum-table table{height:100%}
 }
 /* pages drawn straight into .app-view (System Setting, ...) keep the same right gap as .view-body pages */
 .app-view:not(:has(> .view-body)){padding-right:calc(var(--content-gutter) + 15px)}
