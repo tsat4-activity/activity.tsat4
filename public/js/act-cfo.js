@@ -121,10 +121,12 @@ const cfoMonthIso = (m) => `${a5Year}-${String(m).padStart(2, '0')}`;
 // Page frame shared by the three CFO pages: tabs on the left, year (+ extra) on the right, body below.
 async function cfoFrame(target, tabs, attr, active, rightExtra = '', { year = true, pick = false } = {}) {
   const me = await a5Api(CFO, `me?year=${a5Year}`);
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(tabs ? (pick ? a5SetPick(tabs, active) : a5Pick(attr, tabs, active)) : '', `${year ? `<div class="a5-year">${a5YearSelect(me.years)}</div>` : ''}${rightExtra}`, 'a5')}
-    <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    tabs ? (pick ? a5SetPick(tabs, active) : a5Pick(attr, tabs, active)) : '',
+    `${year ? `<div class="a5-year">${a5YearSelect(me.years)}</div>` : ''}${rightExtra}`,
+    '<div class="empty">กำลังโหลด...</div>',
+    'a5',
+  );
   return { me, body: $('a5-body') };
 }
 

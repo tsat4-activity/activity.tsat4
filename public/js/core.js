@@ -455,8 +455,25 @@ function pageBar(left, right = '', id = 'page') {
   return `<div class="page-bar"><div class="page-bar-left">${left}<span class="page-bar-slot" id="${id}-left"></span></div><div class="page-bar-right">${right}<span class="page-bar-slot" id="${id}-tools"></span></div></div>`;
 }
 
+// Gray main area: separate white surfaces for tabs, tools, then scrollable results (not one wrapping .card).
+function viewShellPageBar(left = '', right = '', body = '', id = 'page', { mainId = '', mainClass = '' } = {}) {
+  const mainAttr = mainId ? ` id="${mainId}"` : (id === 'a5' ? ' id="a5-body"' : '');
+  const mainCls = `surface surface-main${mainClass ? ` ${mainClass}` : ''}`;
+  const parts = ['<div class="view-body view-stack">'];
+  if (left) {
+    parts.push(`<section class="surface surface-nav"><div class="page-bar"><div class="page-bar-left">${left}<span class="page-bar-slot" id="${id}-left"></span></div></div></section>`);
+  }
+  const tools = left || right || id === 'a5' || id === 'smf' || id === 'acc';
+  if (tools) {
+    parts.push(`<section class="surface surface-tools"><div class="page-bar"><div class="page-bar-right">${right}<span class="page-bar-slot" id="${id}-tools"></span></div></div></section>`);
+  }
+  parts.push(`<section class="${mainCls}"${mainAttr}>${body}</section></div>`);
+  return parts.join('');
+}
+
 function cardView(title, meta, body = '') {
-  return `<div class="view-body"><section class="card"><div class="card-title">${title}</div>${meta ? `<p class="sum-meta">${meta}</p>` : ''}${body}</section></div>`;
+  const inner = `${title ? `<div class="card-title">${title}</div>` : ''}${meta ? `<p class="sum-meta">${meta}</p>` : ''}${body}`;
+  return viewShellPageBar('', '', inner, 'card');
 }
 
 function closePopup() {
@@ -768,15 +785,16 @@ const DASH_ROW_MAX = 44;
   };
   const fit = () => {
     const box = view.querySelector(':scope > .view-body');
+    const main = box?.querySelector('.surface-main') || box;
     const plots = box ? [...box.querySelectorAll('.ch-plot')].filter((p) => p.offsetParent && !p.closest('.cfo-report-page')) : [];
     plots.forEach((p) => p.style.removeProperty('grid-template-rows'));
     const dashTables = box ? [...box.querySelectorAll('.table-wrap table')].filter((t) => t.offsetParent) : [];
     dashTables.forEach((t) => t.style.removeProperty('--row-h'));
-    const sheet = box?.querySelector('.table-wrap.sheet');
+    const sheet = main?.querySelector('.table-wrap.sheet');
     sheet?.style.removeProperty('min-height');
-    fitTables(box);
-    if (!box?.lastElementChild) return;
-    const card = box.lastElementChild;
+    fitTables(main);
+    if (!main?.lastElementChild) return;
+    const card = main;
     const last = card.lastElementChild || card;
     const free = box.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom - parseFloat(getComputedStyle(card).paddingBottom) - 10;
     if (free < 24) return;

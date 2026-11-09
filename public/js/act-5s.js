@@ -102,10 +102,12 @@ function a5Lift(body) {
 
 async function a5Dashboard(target, activity) {
   const me = await a5Api(activity, `me?year=${a5Year}`);
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Pick('data-a5dash', A5_DASH_TABS, a5DashTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
-    <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    a5Pick('data-a5dash', A5_DASH_TABS, a5DashTab),
+    `<div class="a5-year">${a5YearSelect(me.years)}</div>`,
+    '<div class="empty">กำลังโหลด...</div>',
+    'a5',
+  );
   const rerender = () => a5Dashboard(target, activity).catch(onErr);
   target.querySelectorAll('[data-a5dash]').forEach((node) => { node.onclick = () => { a5DashTab = node.dataset.a5dash; rerender(); }; });
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
@@ -585,10 +587,12 @@ async function a5DrawTeam(body, activity) {
 async function a5Setting(target, activity) {
   const me = await a5Api(activity, `me?year=${a5Year}`);
   const admin = me.access.admin;
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5SetPick(A5_SET_TABS, a5SetTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
-    <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    a5SetPick(A5_SET_TABS, a5SetTab),
+    `<div class="a5-year">${a5YearSelect(me.years)}</div>`,
+    '<div class="empty">กำลังโหลด...</div>',
+    'a5',
+  );
   const rerender = () => a5Setting(target, activity).catch(onErr);
   $('a5-setpick').onchange = () => { a5SetTab = $('a5-setpick').value; rerender(); };
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };

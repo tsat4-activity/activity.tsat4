@@ -63,7 +63,7 @@ const accessView = { q: '' };
 async function accessPeople(target) {
   if (!me.creator) { openView('main'); return; }
   const now = new Date().getFullYear();
-  target.innerHTML = `<div class="view-body"><section class="card">
+  target.innerHTML = viewShellPageBar('', '', `
     <div class="toolbar a5-filters">
       ${field('ปี', `<select id="acc-year">${options([now - 1, now, now + 1].map(String), String(a5Year))}</select>`)}
       ${searchSlot('ค้นหาพนักงาน', 'acc-q', 'acc-search', { placeholder: 'รหัส หรือชื่อ (เพื่อเพิ่มบทบาทให้คนใหม่)' })}
@@ -71,7 +71,7 @@ async function accessPeople(target) {
     </div>
     <div class="table-wrap sheet" id="acc-rows"><div class="empty">กำลังโหลด...</div></div>
     <p class="sum-meta" id="acc-note"></p>
-  </section></div>`;
+  `, 'a5');
   const rerender = () => accessPeople(target).catch(onErr);
   $('acc-year').onchange = () => { a5Year = Number($('acc-year').value); rerender(); };
   $('acc-q').value = accessView.q;
@@ -87,7 +87,7 @@ async function accessPeople(target) {
     fillTable('acc-rows', ['รหัส', 'ชื่อ', 'หน่วยงาน', ...ACTIVITIES.map(([, l]) => l), 'บัญชีเข้าระบบ'], d.people.map((p) => `<tr data-pick="${esc(p.employeeId)}"><td>${esc(p.employeeId)}</td><td>${esc(p.name)}${p.system ? ` <span class="sum-meta">(${p.system === 'creator' ? 'ผู้ดูแลระบบ' : p.system === 'executive' ? 'ผู้บริหาร' : 'ผู้ดูแลระบบบางส่วน'})</span>` : ''}</td><td>${esc(p.department)}</td>
       ${ACTIVITIES.map(([id]) => `<td>${chips(p, id)}</td>`).join('')}<td>${A5_LOGIN[p.login] || ''}</td></tr>`).join(''), `ไม่มีรายชื่อปี ${a5Year}`);
     $('acc-note').textContent = `ปี ${a5Year} · ${d.people.filter((p) => Object.values(p.roles).some((l) => l.length)).length} คนที่มีบทบาท · เลือกแถวแล้วกด บทบาท เพื่อเพิ่ม แก้ หรือลบ`;
-    a5Lift(target.querySelector('section'));
+    a5Lift($('a5-body'));
     let picked = null;
     bindRowSelect($('acc-rows'), (id) => {
       picked = d.people.find((p) => p.employeeId === id);

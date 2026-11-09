@@ -368,12 +368,7 @@ async function wfaRenderSmfTransaction(target, currentProj, actMe, rerender, pmD
       </div>
     `;
 
-    target.innerHTML = `
-      <div class="view-body"><section class="card">
-        ${pageBar(leftBar, rightBar, 'smf')}
-        ${contentHtml}
-      </section></div>
-    `;
+    target.innerHTML = viewShellPageBar(leftBar, rightBar, contentHtml, 'smf');
 
     bindTxEvents();
   }

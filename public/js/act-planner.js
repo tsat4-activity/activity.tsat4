@@ -282,7 +282,7 @@ async function aplRender(target, activity, opts = {}) {
     $('a5-tools').innerHTML = tools;
     target.innerHTML = content;
   } else {
-    target.innerHTML = `<div class="view-body"><section class="card plan-card">${pageBar('', tools, 'apl')}${content}</section></div>`;
+    target.innerHTML = viewShellPageBar('', tools, content, 'apl', { mainClass: 'plan-card' });
   }
   const box = target.querySelector('.apl-scroll');
   // The scrollbars start below the header row and right of the left columns (app.css .apl-scroll).
@@ -544,10 +544,12 @@ async function aplDashboard(target, activity) {
   const me = await a5Api(activity, `me?year=${a5Year}`);
   const tabs = APL_DASH_TABS_OF[activity] || APL_DASH_TABS;
   const tab = tabs[aplDashTab[activity]] ? aplDashTab[activity] : Object.keys(tabs)[0];
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Pick('data-apldash', tabs, tab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
-    <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    a5Pick('data-apldash', tabs, tab),
+    `<div class="a5-year">${a5YearSelect(me.years)}</div>`,
+    '<div class="empty">กำลังโหลด...</div>',
+    'a5',
+  );
   const rerender = () => aplDashboard(target, activity).catch(onErr);
   target.querySelectorAll('[data-apldash]').forEach((node) => {
     node.onclick = () => { aplDashTab[activity] = node.dataset.apldash; rerender(); };
@@ -989,10 +991,12 @@ async function aplSetting(target, activity) {
   const admin = me.access.admin;
   const tabs = APL_SET_TABS_OF[activity] || APL_SET_TABS;
   const tab = tabs[aplSetTab[activity]] ? aplSetTab[activity] : 'team';
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5SetPick(tabs, tab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
-    <div id="a5-body"><div class="empty">กำลังโหลด...</div></div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    a5SetPick(tabs, tab),
+    `<div class="a5-year">${a5YearSelect(me.years)}</div>`,
+    '<div class="empty">กำลังโหลด...</div>',
+    'a5',
+  );
   const rerender = () => aplSetting(target, activity).catch(onErr);
   $('a5-setpick').onchange = () => { aplSetTab[activity] = $('a5-setpick').value; rerender(); };
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
@@ -1027,7 +1031,7 @@ async function smfTransaction(target, activity = 'smf') {
   try {
     [me, pmData] = await Promise.all([a5Api(activity, `me?year=${a5Year}`), a5Api(activity, `project-months?year=${a5Year}`)]);
   } catch (err) {
-    target.innerHTML = `<div class="view-body"><section class="card"><p class="empty">${esc(err.message)}</p></section></div>`;
+    target.innerHTML = viewShellPageBar('', '', `<p class="empty">${esc(err.message)}</p>`, 'card');
     return;
   }
   const canEdit = !!(me.access?.admin || me.access?.member || me.access?.smart);
@@ -1035,10 +1039,13 @@ async function smfTransaction(target, activity = 'smf') {
   const rerender = () => smfTransaction(target, activity).catch(onErr);
 
   if (!projects.length) {
-    target.innerHTML = `<div class="view-body"><section class="card">
-      ${pageBar('<strong class="plan-label">เป้าหมายและผลงานรายเดือน (SMF)</strong>', `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'smf')}
-      <div id="smf-body"><p class="empty">ยังไม่มีโครงการปี ${a5Year} · เพิ่มโครงการได้ที่ Setting > โครงการ</p></div>
-    </section></div>`;
+    target.innerHTML = viewShellPageBar(
+      '<strong class="plan-label">เป้าหมายและผลงานรายเดือน (SMF)</strong>',
+      `<div class="a5-year">${a5YearSelect(me.years)}</div>`,
+      `<p class="empty">ยังไม่มีโครงการปี ${a5Year} · เพิ่มโครงการได้ที่ Setting > โครงการ</p>`,
+      'smf',
+      { mainId: 'smf-body' },
+    );
     if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
     return;
   }
@@ -1067,9 +1074,10 @@ async function smfTransaction(target, activity = 'smf') {
     </tr>`;
   }).join('');
 
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Pick('data-smfproj', projTabs, currentProj.id, 'โครงการ'), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'smf')}
-    <div id="smf-body" style="padding-top:12px">
+  target.innerHTML = `${viewShellPageBar(
+    a5Pick('data-smfproj', projTabs, currentProj.id, 'โครงการ'),
+    `<div class="a5-year">${a5YearSelect(me.years)}</div>`,
+    `<div style="padding-top:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
         <div>
           <h3 style="margin:0;font-size:1.1rem">${esc(currentProj.name)}</h3>
@@ -1102,8 +1110,10 @@ async function smfTransaction(target, activity = 'smf') {
         </table>
       </div>
       <p class="sum-meta" style="margin-top:10px">บันทึกเป้าหมายและผลงานได้รายเดือน · ผู้ดูแล (Smart Team, ผู้ประสานงาน, สมาชิกโครงการ) สามารถบันทึกได้</p>
-    </div>
-  </section></div>`;
+    </div>`,
+    'smf',
+    { mainId: 'smf-body' },
+  )}`;
 
   target.querySelectorAll('[data-smfproj]').forEach((node) => { node.onclick = () => { smfPickedProj[activity] = Number(node.dataset.smfproj); rerender(); }; });
   if ($('a5-year')) $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
@@ -1369,10 +1379,13 @@ async function aplDrawSmfOverview(body, activity) {
 async function aplHome(target) {
   const now = new Date().getFullYear();
   const years = [...new Set([now - 2, now - 1, now, now + 1, a5Year])].filter((y) => y >= 2000 && y <= 2100).sort();
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar('<strong class="plan-label">ภาพรวมกิจกรรมในโรงงาน</strong>', `<div class="a5-year">${field('ปี', `<select id="ov-year">${options(years, a5Year)}</select>`)}</div>`, 'ov')}
-    <div id="ov-body"><div class="empty">กำลังโหลด...</div></div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    '<strong class="plan-label">ภาพรวมกิจกรรมในโรงงาน</strong>',
+    field('ปี', `<select id="ov-year">${options(years, a5Year)}</select>`),
+    '<div class="empty">กำลังโหลด...</div>',
+    'ov',
+    { mainId: 'ov-body' },
+  );
   $('ov-year').onchange = () => { a5Year = Number($('ov-year').value); aplHome(target).catch(onErr); };
   await aplDrawOverview($('ov-body'));
 }

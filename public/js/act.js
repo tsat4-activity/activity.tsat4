@@ -223,11 +223,13 @@ async function actPlanRender(target) {
   const shown = ACTIVITIES.filter(([id]) => events.some((event) => event.activity === id));
   const legend = shown.map(([id, label]) => `<span class="plan-legend" style="--chip:${actColor(id)}">${esc(label)}</span>`).join('');
   const body = actPlanMode === 'week' ? actWeekBody(events, range.from) : actPlanMode === 'year' ? actYearBody(events) : actMonthBody(events, range.from);
-  target.innerHTML = `<div class="view-body"><section class="card plan-card">
-    ${pageBar('', `<div class="seg" role="group" aria-label="มุมมอง">${Object.entries(ACT_MODES).map(([mode, name]) => `<button class="seg-btn${mode === actPlanMode ? ' is-active' : ''}" type="button" data-mode="${mode}" aria-pressed="${mode === actPlanMode}">${name}</button>`).join('')}</div><div class="plan-nav">${button('act-prev', '‹', 'secondary', 'aria-label="ก่อนหน้า"')}${button('act-today', 'วันนี้')}${button('act-next', '›', 'secondary', 'aria-label="ถัดไป"')}</div><strong class="plan-label">${range.label}</strong>`, 'cal')}
-    ${legend ? `<div class="plan-legends">${legend}</div>` : ''}
-    <div class="plan-body">${body}</div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    '',
+    `<div class="seg" role="group" aria-label="มุมมอง">${Object.entries(ACT_MODES).map(([mode, name]) => `<button class="seg-btn${mode === actPlanMode ? ' is-active' : ''}" type="button" data-mode="${mode}" aria-pressed="${mode === actPlanMode}">${name}</button>`).join('')}</div><div class="plan-nav">${button('act-prev', '‹', 'secondary', 'aria-label="ก่อนหน้า"')}${button('act-today', 'วันนี้')}${button('act-next', '›', 'secondary', 'aria-label="ถัดไป"')}</div><strong class="plan-label">${range.label}</strong>`,
+    `${legend ? `<div class="plan-legends">${legend}</div>` : ''}<div class="plan-body">${body}</div>`,
+    'cal',
+    { mainClass: 'plan-card' },
+  );
   const rerender = () => actPlanRender(target).catch(onErr);
   target.querySelectorAll('[data-mode]').forEach((node) => { node.onclick = () => { actPlanMode = node.dataset.mode; rerender(); }; });
   $('act-prev').onclick = () => { actMove(-1); rerender(); };

@@ -93,7 +93,7 @@ html[data-theme="dark"] .nav-btn.active .material-symbols-rounded,html[data-them
 html[data-theme="dark"] .nav-btn.active:hover,html[data-theme="dark"] .nav-sub .nav-btn.active:hover{background:#2a1e0a;color:#f0b429;border-color:#f0b429}
 html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-parent,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-parent .material-symbols-rounded,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-split .nav-parent,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-split .nav-parent .material-symbols-rounded,html[data-theme="dark"] .nav-acc:has(.nav-btn.active) > .nav-split .nav-caret{color:#e8a020}
 .main{margin-left:var(--drive-sidebar);padding:calc(var(--drive-header) + 10px) var(--content-gutter) var(--content-gutter);height:100vh;overflow:hidden;display:flex;flex-direction:column;min-height:0;min-width:0;transition:margin-left .2s ease;background:var(--drive-page)}
-.app-view{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-height:0;min-width:0;overflow:hidden;padding:var(--view-pad);display:flex;flex-direction:column;gap:8px}
+.app-view{background:transparent;border:none;border-radius:0;box-shadow:none;flex:1;min-height:0;min-width:0;overflow:hidden;padding:0;display:flex;flex-direction:column;gap:10px}
 .card{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;padding:10px;margin:0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .card h2,.card-title{font-size:13px;font-weight:500;margin:0 0 8px}
 .kpi{background:var(--mo-surface-2);border:1px solid var(--mo-border);border-radius:var(--mo-radius);padding:8px 10px}
@@ -233,6 +233,12 @@ table.mo-data-table tbody tr.row-pick.is-selected td:first-child{box-shadow:inse
 html[data-theme="dark"] .badge-warning{color:#fbbf24}
 .empty{text-align:center;color:var(--mo-text-muted);padding:36px}
 .view-body{flex:1;min-height:0;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.view-body.view-stack{overflow:hidden;gap:10px}
+.view-stack > .surface{background:var(--mo-surface);border:1px solid var(--mo-border);border-radius:10px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.04);flex-shrink:0;min-width:0;max-width:100%}
+.view-stack > .surface-main{flex:1 1 auto;min-height:0;overflow:auto;display:flex;flex-direction:column}
+.view-stack .page-bar{margin-bottom:0}
+.surface-nav .page-bar-left:has(> .tab-line){flex:1 1 100%;min-width:0;border-bottom:1px solid var(--mo-line)}
+.surface-tools .page-bar{justify-content:flex-end}
 .view-body > .card{min-width:0;max-width:100%}
 .login-shell{position:fixed;inset:0;z-index:25;display:grid;place-items:center;overflow:auto;padding:12px;background:var(--drive-page)}
 .login-theme{position:absolute;top:8px;right:8px}
@@ -281,7 +287,7 @@ html[data-theme="dark"] .table-wrap::-webkit-scrollbar-thumb,html[data-theme="da
   .header-brand{max-width:46vw}
   .header-page{align-items:flex-start;text-align:left;padding:0 4px}
   .sidebar-open-mobile{display:grid}
-  .app-view{padding:8px;border-radius:10px}
+  .app-view{padding:0}
   .toolbar .field{width:auto;flex:1 1 140px}
 }
 
@@ -1124,10 +1130,8 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 /* pages of a view as a dropdown (a5Pick) */
 .seg-pick{display:flex;align-items:center}.seg-pick>.field{margin:0;flex-direction:row;align-items:center;gap:6px;white-space:nowrap}.seg-pick select{width:auto;min-width:170px}
 /* pages of a view as an underlined tab row (a5Pick / a5SetPick, ผู้ใช้กำหนด 2026-11-08) · text 12px = the sidebar menu */
-/* the tab row takes the full width (its own line, underlined); year / filters go on the line below, on the right */
-.page-bar:has(> .page-bar-left > .tab-line){flex-wrap:wrap;margin-bottom:10px;row-gap:8px}
-.page-bar:has(> .page-bar-left > .tab-line) > .page-bar-left{flex:1 1 100%;min-width:0;border-bottom:1px solid var(--mo-line)}
-.page-bar:has(> .page-bar-left > .tab-line) > .page-bar-right:not(:has(> :not(.page-bar-slot:empty))){display:none}
+/* tab row: full width underline in .surface-nav; filters / year sit in .surface-tools below */
+.page-bar:has(> .page-bar-left > .tab-line){flex-wrap:nowrap;margin-bottom:0}
 .tab-line{display:flex;gap:2px;min-width:0;overflow-x:auto;scrollbar-width:none}.tab-line::-webkit-scrollbar{display:none}
 .tab-line-btn{flex:0 0 auto;border:0;background:none;color:var(--mo-text-muted);font-size:12px;padding:7px 12px;margin-bottom:-1px;border-bottom:2.5px solid transparent;white-space:nowrap;cursor:pointer}
 .tab-line-btn:hover{color:var(--mo-text)}

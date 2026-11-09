@@ -46,10 +46,13 @@ function atxPhotoInput(id, onPick) {
 
 async function atxPage(target, activity) {
   const me = await a5Api(activity, `me?year=${a5Year}`);
-  target.innerHTML = `<div class="view-body"><section class="card">
-    ${pageBar(a5Pick('data-atx', ATX_TABS, atxTab), `<div class="a5-year">${a5YearSelect(me.years)}</div>`, 'a5')}
-    <div id="atx-body"></div>
-  </section></div>`;
+  target.innerHTML = viewShellPageBar(
+    a5Pick('data-atx', ATX_TABS, atxTab),
+    `<div class="a5-year">${a5YearSelect(me.years)}</div>`,
+    '',
+    'a5',
+    { mainId: 'atx-body' },
+  );
   const rerender = () => atxPage(target, activity).catch(onErr);
   target.querySelectorAll('[data-atx]').forEach((node) => { node.onclick = () => { atxTab = node.dataset.atx; rerender(); }; });
   $('a5-year').onchange = () => { a5Year = Number($('a5-year').value); rerender(); };
