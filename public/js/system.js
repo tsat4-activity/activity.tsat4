@@ -15,7 +15,12 @@ let sysDepts = null; // department choices = departments in mt_main_costcenter (
 const SYS_SCOPES = ACTIVITIES.map(([id, label]) => [id, label]);
 const SYS_USER_LABELS = { creator: 'จัดการได้ทั้งหมด', executive: 'ผู้บริหาร', admin_of: 'ผู้ดูแลระบบ' };
 
-const SYS_COMPANY_LABELS = { id: 'รหัส', logo: 'โลโก้ (1:1)', name_en: 'ชื่อบริษัท (อังกฤษ)', name_th: 'ชื่อบริษัท (ไทย)' };
+const SYS_COMPANY_LABELS = {
+  id: 'รหัส', logo: 'โลโก้ (1:1)', name_en: 'ชื่อบริษัท (อังกฤษ)', name_th: 'ชื่อบริษัท (ไทย)',
+  legal_name: 'ชื่อธุรกิจ', address: 'สถานที่ตั้ง', area: 'พื้นที่โรงงาน', business: 'ประเภทธุรกิจ',
+  customers: 'กลุ่มลูกค้าหลัก', employees: 'จำนวนพนักงาน', profile_on: 'อัพเดท (YYYY-MM-DD)',
+  register_on: 'วันที่ขอขึ้นทะเบียน (YYYY-MM-DD)', photo1: 'ลิงก์รูป 1', photo2: 'ลิงก์รูป 2'
+};
 function columnLabel(table, column) {
   if (table?.name === 'mt_main_user' && SYS_USER_LABELS[column.name]) return SYS_USER_LABELS[column.name];
   if (table?.name === 'mt_main_company' && SYS_COMPANY_LABELS[column.name]) return SYS_COMPANY_LABELS[column.name];

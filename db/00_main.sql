@@ -68,17 +68,38 @@ do $$ begin
 end $$;
 
 -- Only the server (service key) reads these tables; the browser never does.
--- ข้อมูลบริษัท 1 แถว (id = main): โลโก้ 1:1 + ชื่ออังกฤษ/ไทย แสดงที่ header (ผู้ใช้กำหนด 2026-11-09)
+-- ข้อมูลบริษัท 1 แถว (id = main): โลโก้ 1:1 + ชื่ออังกฤษ/ไทย ที่ header
+-- และรายละเอียดองค์กรของ Fr-01 (ย้ายจาก mt_cfo_setting company_* เมื่อ 2026-11-09)
 create table if not exists public.mt_main_company (
   id text primary key,
   logo text,
   name_en text not null default '',
   name_th text not null default '',
+  legal_name text not null default '',
+  address text not null default '',
+  area text not null default '',
+  business text not null default '',
+  customers text not null default '',
+  employees text not null default '',
+  profile_on text not null default '',
+  register_on text not null default '',
+  photo1 text not null default '',
+  photo2 text not null default '',
   updated_at timestamptz not null default now()
 );
 insert into public.mt_main_company (id, name_en, name_th)
 values ('main', 'TSAT4 Activity', '')
 on conflict (id) do nothing;
+alter table public.mt_main_company add column if not exists legal_name text not null default '';
+alter table public.mt_main_company add column if not exists address text not null default '';
+alter table public.mt_main_company add column if not exists area text not null default '';
+alter table public.mt_main_company add column if not exists business text not null default '';
+alter table public.mt_main_company add column if not exists customers text not null default '';
+alter table public.mt_main_company add column if not exists employees text not null default '';
+alter table public.mt_main_company add column if not exists profile_on text not null default '';
+alter table public.mt_main_company add column if not exists register_on text not null default '';
+alter table public.mt_main_company add column if not exists photo1 text not null default '';
+alter table public.mt_main_company add column if not exists photo2 text not null default '';
 
 alter table public.mt_main_costcenter enable row level security;
 alter table public.mt_main_employee enable row level security;

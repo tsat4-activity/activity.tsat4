@@ -52,7 +52,7 @@
 | `mt_cfo_activity` | เพิ่ม | `calc` → `method_code` (FK `mt_cfo_method`) · + `params` jsonb (ค่าตั้งต้น เช่น `{"bio_ef_id": 12, "bio_pct": 7}`, `{"leak_pct": 2}`) · + `data_type` (primary / secondary) |
 | `tx_cfo_entry` | เพิ่ม | `inputs` ใช้ตามวิธี (ลิตร + % ไบโอ, ตัน + กม., kg ที่เติม …) · + `quality` (1–3 คะแนนคุณภาพข้อมูล) · ห้ามบันทึกเมื่อปีถูก `locked` |
 | `tx_cfo_evidence` | ใหม่ | ไฟล์หลักฐานต่อรายการ (`entry_id`, path ใน bucket `img_cfo`, ชื่อไฟล์, ผู้อัปโหลด) · แทน `doc` |
-| `mt_cfo_setting` | คงเดิม | เหลือค่าคงที่ (บ่อเกรอะ, เป้าลด %, ข้อมูลบริษัท) |
+| `mt_cfo_setting` | คงเดิม | เหลือค่าคงที่ของ CFO (บ่อเกรอะ, ปีฐาน, เป้าหมาย %) · ข้อมูลบริษัทอยู่ `mt_main_company` |
 
 ### View
 

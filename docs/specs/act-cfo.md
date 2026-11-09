@@ -14,7 +14,7 @@
 | mt_ef_septictank | `mt_cfo_setting` | ค่าคงที่ 4 ตัว (`septic_bod`, `septic_b0`, `septic_mcf`, `septic_i`) |
 | mt_ac_scope1 + 2 + 3 | `mt_cfo_activity` | ตารางเดียว · scope / category / emission_source ดูจาก EF ไม่เก็บซ้ำ · `calc = 'septic'` แทน st_id |
 | mt_org | `mt_cfo_team` (แม่แบบ) | ประธาน = `chairman`, รองประธาน = `vice`, ผู้จัดทำ = `admin`, สมาชิก = `member` + `department` · ชื่อ/ตำแหน่งอ่านจาก Mx Data |
-| mt_company | `mt_cfo_setting` | key `company_*` |
+| mt_company | `mt_main_company` | แถว `id = main` (ชื่อธุรกิจ สถานที่ พื้นที่ ประเภท ลูกค้า พนักงาน รูป) · ปีฐาน / เป้าหมาย / บ่อเกรอะ / Fr-03.2 ยังอยู่ `mt_cfo_setting` |
 | tx_scope1 + 2 + 3 | `tx_cfo_entry` | ตารางเดียว 1 แถว = กิจกรรม × เดือน (`unique (activity_id, month)`) |
 | tx_scope (สรุป) | `v_cfo_month` | view รวมรายเดือนต่อ Scope |
 | คอลัมน์ tGHG / tCO₂e 15 คอลัมน์ | `v_cfo_entry` | view คำนวณจาก qty × EF × GWP ไม่เก็บ |

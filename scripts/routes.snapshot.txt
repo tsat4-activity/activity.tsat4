@@ -110,6 +110,7 @@ POST /api/workflow/ideas/:id/evaluate auth
 POST /api/workflow/ideas/:id/images auth
 PUT /api/act/:activity/areas/:id/owner auth
 PUT /api/act/:activity/audit-plan auth
+PUT /api/act/:activity/cfo/company auth
 PUT /api/act/:activity/cfo/entries auth
 PUT /api/act/:activity/cfo/s3 auth
 PUT /api/act/:activity/cfo/settings auth

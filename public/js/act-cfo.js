@@ -29,11 +29,18 @@ const CFO_CALCS = {
   km_fuel: { label: 'ระยะทาง ÷ อัตราสิ้นเปลือง → ลิตร', short: 'กม. ÷ กม./ลิตร', out: 'ลิตร', unit: /^(l|liter|litre|ลิตร)$/i, fields: [['km', 'ระยะทาง (กม.)', 'any'], ['km_per_l', 'อัตราสิ้นเปลือง (กม./ลิตร)', 'any']], qty: (i) => (i.km_per_l ? i.km / i.km_per_l : 0) }
 };
 const CFO_SOURCE_TYPES = [['self', 'Self collect (1st)'], ['supplier', 'Supplier (1st)'], ['th_lci', 'TH LCI DB (2nd)'], ['tgo', 'TGO EF (2nd)'], ['thai_res', 'Thai Res. (2nd)'], ['int_db', 'Int. DB (2nd)'], ['other', 'Other']];
-const CFO_COMPANY = [['company_name', 'ชื่อธุรกิจ'], ['company_address', 'สถานที่ตั้ง'], ['company_area', 'พื้นที่โรงงาน'], ['company_business', 'ประเภทธุรกิจ'],
-  ['company_customers', 'กลุ่มลูกค้าหลัก'], ['company_employees', 'จำนวนพนักงาน'], ['company_updated', 'อัพเดท (วันที่)'], ['company_register', 'วันที่ขอขึ้นทะเบียน'], ['company_photo1', 'ลิงก์รูป 1'], ['company_photo2', 'ลิงก์รูป 2'],
-  ['base_year', 'ปีฐาน'], ['target_percent', 'เป้าลด (% จากปีฐาน)'], ['septic_bod', 'บ่อเกรอะ BOD (g/คน/วัน)'], ['septic_b0', 'บ่อเกรอะ B0'], ['septic_mcf', 'บ่อเกรอะ MCF'], ['septic_i', 'บ่อเกรอะ I'],
+const CFO_ORG = [['legal_name', 'ชื่อธุรกิจ'], ['address', 'สถานที่ตั้ง'], ['area', 'พื้นที่โรงงาน'], ['business', 'ประเภทธุรกิจ'],
+  ['customers', 'กลุ่มลูกค้าหลัก'], ['employees', 'จำนวนพนักงาน'], ['profile_on', 'อัพเดท (วันที่)'], ['register_on', 'วันที่ขอขึ้นทะเบียน']];
+const CFO_COMPANY = [['base_year', 'ปีฐาน'], ['target_percent', 'เป้าหมาย (% ลดจากปีฐาน)'], ['septic_bod', 'บ่อเกรอะ BOD (g/คน/วัน)'], ['septic_b0', 'บ่อเกรอะ B0'], ['septic_mcf', 'บ่อเกรอะ MCF'], ['septic_i', 'บ่อเกรอะ I'],
   ['s3_w_magnitude', 'Fr-03.2 น้ำหนัก Magnitude (%)'], ['s3_w_influence', 'Fr-03.2 น้ำหนัก Influence (%)'], ['s3_w_risk', 'Fr-03.2 น้ำหนัก Risk (%)'],
   ['s3_w_opportunity', 'Fr-03.2 น้ำหนัก Opportunity (%)'], ['s3_pass', 'Fr-03.2 เกณฑ์มีนัยสำคัญ (คะแนน ≥)'], ['s3_mag_bands', 'Fr-03.2 ช่วง % Magnitude ระดับ 2,3,4,5']];
+function cfoOrg(m) {
+  if (m.company) return m.company;
+  const s = m.settings || {};
+  return { legal_name: s.company_name || '', address: s.company_address || '', area: s.company_area || '', business: s.company_business || '',
+    customers: s.company_customers || '', employees: s.company_employees || '', profile_on: s.company_updated || '', register_on: s.company_register || '',
+    photo1: s.company_photo1 || '', photo2: s.company_photo2 || '', name_th: '', name_en: '' };
+}
 let cfoDashTab = 'summary';
 let cfoSetTab = 'team';
 // Setting > Emission Factor (ผู้ใช้กำหนด 2026-11-01): GWP + separate reference tables of the TGO sheet
@@ -564,11 +571,13 @@ function cfoJpeg(file) {
 
 // Fr-01 รายละเอียดขององค์กร (TGO TCFO_R_01): photos + organisation details on the left, ขอบเขตขององค์กร on the right
 // (each Scope's categories with the activities recorded under them, period and production of this year and the base
-// year), then the GHG per Scope bar chart. ผู้จัดทำ edits the details and photos (Setting values company_*).
+// year), then the GHG per Scope bar chart. ผู้จัดทำ edits the organisation row on mt_main_company.
 async function cfoDrawCompany(body, admin, rerender) {
   const [m, team, sum] = await Promise.all([a5Api(CFO, 'cfo/master'), a5Api(CFO, `team?year=${a5Year}`), a5Api(CFO, `cfo/summary?year=${a5Year}`)]);
   const s = m.settings;
-  const day = (v) => { const d = v ? new Date(`${v}T00:00:00`) : null; return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB') : ''; };
+  const org = cfoOrg(m);
+  const orgName = org.legal_name || org.name_th || '';
+  const day = (v) => { const d = v ? new Date(`${String(v).slice(0, 10)}T00:00:00`) : null; return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB') : ''; };
   const img = (url, cls) => (url ? `<img class="${cls}" src="${esc(cfoPhotoSrc(url))}" alt="" loading="lazy">` : '');
   const makers = team.members.filter((x) => x.role === 'admin' && x.status === 'Active').map((x) => x.name || x.employee_id).join(', ');
   // ขอบเขตขององค์กร: categories that have active activities, with those activities' names
@@ -596,8 +605,8 @@ async function cfoDrawCompany(body, admin, rerender) {
     ['ปีฐาน', baseYear ? `ม.ค. – ธ.ค. ${baseYear}` : 'ยังไม่ได้ตั้ง (Setting > บริษัท)'],
     ['ผลผลิตปีฐาน', baseYear ? pieces(baseYear) : '-', 'ชิ้น']
   ].map(([label, value, unit]) => `<tr class="fr01-tail"><th colspan="2">${label}</th>${unit ? `<td class="num"><b>${esc(value)}</b> <span>${unit}</span></td>` : `<td class="fr01-center">${esc(value)}</td>`}</tr>`).join('');
-  const info = [['ชื่อธุรกิจ', s.company_name], ['ประเภทธุรกิจ', s.company_business], ['พื้นที่โรงงาน', s.company_area], ['กลุ่มลูกค้าหลัก', s.company_customers],
-    ['จำนวนพนักงาน', s.company_employees ? `${s.company_employees} คน${day(s.company_updated) ? ` (อัพเดท ${day(s.company_updated)})` : ''}` : '']];
+  const info = [['ชื่อธุรกิจ', orgName], ['ประเภทธุรกิจ', org.business], ['พื้นที่โรงงาน', org.area], ['กลุ่มลูกค้าหลัก', org.customers],
+    ['จำนวนพนักงาน', org.employees ? `${org.employees} คน${day(org.profile_on) ? ` (อัพเดท ${day(org.profile_on)})` : ''}` : '']];
   const c = sum.compare;
   const chart = chartPlot({
     id: 'cfo-fr01', labels: ['Scope 1', 'Scope 2', 'Scope 3'], left: 'tCO₂e',
@@ -607,15 +616,15 @@ async function cfoDrawCompany(body, admin, rerender) {
   body.innerHTML = `
     ${admin ? `<div class="action-bar a5-actions">${button('cfo-co-edit', 'แก้ไขข้อมูล')}</div>` : ''}
     <div class="cfo-fr01">
-      <section class="card fr01-head"><div><div class="card-title">รายละเอียดขององค์กร</div><strong>${esc(s.company_name || 'ยังไม่มีชื่อองค์กร')}</strong></div>
+      <section class="card fr01-head"><div><div class="card-title">รายละเอียดขององค์กร</div><strong>${esc(orgName || 'ยังไม่มีชื่อองค์กร')}</strong></div>
         <dl><dt>รหัสฟอร์ม</dt><dd>Fr-01</dd><dt>ผู้จัดทำ</dt><dd>${esc(makers || '-')}</dd><dt>ปี</dt><dd>${a5Year}</dd></dl></section>
       <div class="fr01-grid">
         <section class="card fr01-org">
           <div class="card-title">รูปขององค์กร</div>
-          <div class="fr01-photos">${img(s.company_photo2 || s.company_photo1, 'fr01-building') || '<p class="empty">ยังไม่มีรูป</p>'}</div>
+          <div class="fr01-photos">${img(org.photo2 || org.photo1, 'fr01-building') || '<p class="empty">ยังไม่มีรูป</p>'}</div>
           <div class="card-title">ข้อมูลองค์กร</div>
           <ol class="fr01-info">${info.map(([label, value]) => `<li><span>${label}</span><b>${esc(value || '-')}</b></li>`).join('')}</ol>
-          <dl class="fr01-more"><dt>สถานที่ติดต่อ</dt><dd>${esc(s.company_address || '-')}</dd><dt>วันที่ขอขึ้นทะเบียน</dt><dd>${esc(day(s.company_register) || '-')}</dd></dl>
+          <dl class="fr01-more"><dt>สถานที่ติดต่อ</dt><dd>${esc(org.address || '-')}</dd><dt>วันที่ขอขึ้นทะเบียน</dt><dd>${esc(day(org.register_on) || '-')}</dd></dl>
         </section>
         <section class="card fr01-scope">
           <table class="fr01-table"><thead><tr><th colspan="3">ขอบเขตขององค์กร</th></tr></thead><tbody>${scopeRows}${tail}</tbody></table>
@@ -629,14 +638,13 @@ async function cfoDrawCompany(body, admin, rerender) {
   if (!admin) return;
   $('cfo-co-edit').onclick = () => {
     const picked = {};
-    const fields = CFO_COMPANY.filter(([key]) => key.startsWith('company_') && !key.startsWith('company_photo'))
-      .map(([key, label]) => field(label, `<input id="cfo-s-${key}" maxlength="1000" value="${esc(s[key] ?? '')}"${['company_updated', 'company_register'].includes(key) ? ' type="date"' : ''}>`)).join('');
+    const fields = CFO_ORG.map(([key, label]) => field(label, `<input id="cfo-s-${key}" maxlength="1000" value="${esc(org[key] ?? '')}"${['profile_on', 'register_on'].includes(key) ? ' type="date"' : ''}>`)).join('');
     openPopup('แก้ไข Fr-01 รายละเอียดขององค์กร', `${fields}
       ${field('รูปองค์กร (แสดงเต็มกว้าง ตามสัดส่วนที่อัปโหลด)', '<input id="cfo-s-photo2" type="file" accept="image/*">')}
-      <p class="sum-meta">ไม่เลือกรูป = ใช้รูปเดิม · ผลผลิตและปีฐานแก้ที่ Setting > บริษัท</p>`, async () => {
+      <p class="sum-meta">ไม่เลือกรูป = ใช้รูปเดิม · บันทึกลง mt_main_company · ปีฐาน เป้าหมาย บ่อเกรอะ แก้ที่ Setting &gt; Company</p>`, async () => {
       if (picked[2]) await a5Api(CFO, 'cfo/photo', { method: 'POST', body: { slot: 2, image: picked[2] } });
-      const values = Object.fromEntries(CFO_COMPANY.filter(([key]) => $(`cfo-s-${key}`)).map(([key]) => [key, $(`cfo-s-${key}`).value]));
-      await a5Api(CFO, 'cfo/settings', { method: 'PUT', body: values });
+      const values = Object.fromEntries(CFO_ORG.map(([key]) => [key, $(`cfo-s-${key}`).value]));
+      await a5Api(CFO, 'cfo/company', { method: 'PUT', body: values });
       toast('บันทึกแล้ว');
       closePopup();
       rerender();
@@ -1560,7 +1568,8 @@ function cfoSetCompany(body, m, rerender) {
   const keys = [...CFO_COMPANY, ...years.map((y) => [`production_${y}`, `ปริมาณผลิต ปี ${y} (ชิ้น)`])];
   body.innerHTML = `
     ${m.admin ? `<div class="action-bar a5-actions">${button('cfo-save', 'บันทึก', 'primary')}</div>` : ''}
-    <div class="cfo-company">${keys.map(([key, label]) => field(label, `<input id="cfo-s-${key}" maxlength="1000" value="${esc(m.settings[key] ?? '')}"${key === 'company_updated' ? ' type="date"' : ''}${m.admin ? '' : ' readonly'}>`)).join('')}</div>`;
+    <p class="sum-meta">ค่าคำนวณของ CFO · ชื่อธุรกิจ สถานที่ รูปองค์กร แก้ที่ System &gt; Setting &gt; mt_main_company</p>
+    <div class="cfo-company">${keys.map(([key, label]) => field(label, `<input id="cfo-s-${key}" maxlength="1000" value="${esc(m.settings[key] ?? '')}"${m.admin ? '' : ' readonly'}>`)).join('')}</div>`;
   a5Lift(body);
   if (!m.admin) return;
   $('cfo-save').onclick = () => {

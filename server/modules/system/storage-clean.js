@@ -58,7 +58,11 @@ function sourcesOf(tables) {
     }) });
     if (activity === 'cfo') {
       list.push({ client: tx, bucket: t.bucket, prefix: 'evidence/', refs: async () => (await rowsOf(tx, t.entry, 'doc')).map((r) => r.doc) });
-      list.push({ client: tx, bucket: t.bucket, prefix: 'company/', refs: async () => (await settings((k) => k.startsWith('company_photo'))).map((r) => r.value) });
+      list.push({ client: tx, bucket: t.bucket, prefix: 'company/', refs: async () => {
+        const fromSettings = (await settings((k) => k.startsWith('company_photo'))).map((r) => r.value);
+        const { data } = mx ? await mx.from('mt_main_company').select('photo1,photo2').eq('id', 'main').maybeSingle() : { data: null };
+        return [...fromSettings, data?.photo1, data?.photo2];
+      } });
     }
   }
   list.push({ client: tx, bucket: 'img_smf', prefix: 'workflow/', refs: async () => (await rowsOf(tx, 'automation_images', 'image_url')).map((r) => r.image_url) });

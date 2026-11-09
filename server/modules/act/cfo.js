@@ -6,9 +6,13 @@ import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesO
 // CFO (Carbon Footprint for Organization): Dashboard totals, monthly entry, and master data (EF, activities, company).
 // Tables: db/act/cfo.sql (scripts/act-sql.js cfoSql) · spec: docs/specs/act-cfo.md
 export const CFO_ON = ['cfo'];
-const SETTING_KEYS = ['company_name', 'company_address', 'company_area', 'company_business', 'company_customers', 'company_employees', 'company_updated',
-  'company_photo1', 'company_photo2', 'company_register', 'base_year', 'target_percent', 'septic_bod', 'septic_b0', 'septic_mcf', 'septic_i',
+const SETTING_KEYS = ['base_year', 'target_percent', 'septic_bod', 'septic_b0', 'septic_mcf', 'septic_i',
   's3_w_magnitude', 's3_w_influence', 's3_w_risk', 's3_w_opportunity', 's3_pass', 's3_mag_bands'];
+// Fr-01 organisation profile lives on mt_main_company (mx). Old installs still have company_* in mt_cfo_setting.
+const COMPANY_FROM = [['legal_name', 'company_name'], ['address', 'company_address'], ['area', 'company_area'], ['business', 'company_business'],
+  ['customers', 'company_customers'], ['employees', 'company_employees'], ['profile_on', 'company_updated'], ['register_on', 'company_register'],
+  ['photo1', 'company_photo1'], ['photo2', 'company_photo2']];
+const COMPANY_COLS = 'legal_name,name_th,name_en,address,area,business,customers,employees,profile_on,register_on,photo1,photo2';
 // production_<year> = pieces produced that year (Carbon intensity = tCO2e / pieces)
 const settingKey = (k) => SETTING_KEYS.includes(k) || /^production_\d{4}$/.test(k);
 const GWP_GASES = ['co2', 'ch4_fossil', 'ch4', 'n2o', 'sf6', 'nf3'];
@@ -54,6 +58,27 @@ export function mountCfo(app) {
   const route = actRoute(app, { only: CFO_ON });
   const settingsOf = async (t) => Object.fromEntries((must(await tx.from(t.setting).select('key,value'))).map((r) => [r.key, r.value]));
   const thisYear = () => new Date().getFullYear();
+  // One company row. Fills any blank profile column from the old company_* settings once, then Fr-01 reads this row.
+  const companyProfile = async (t) => {
+    if (!mx) return null;
+    const { data, error } = await mx.from('mt_main_company').select(COMPANY_COLS).eq('id', 'main').maybeSingle();
+    if (error || !data) return null;
+    const patch = {};
+    const blank = COMPANY_FROM.some(([col]) => !String(data[col] || '').trim());
+    if (t && blank) {
+      const settings = await settingsOf(t);
+      for (const [col, key] of COMPANY_FROM) {
+        if (String(data[col] || '').trim()) continue;
+        const value = String(settings[key] ?? '').trim();
+        if (value) patch[col] = value;
+      }
+      if (Object.keys(patch).length) {
+        const upd = await mx.from('mt_main_company').update(patch).eq('id', 'main');
+        if (!upd.error) Object.assign(data, patch);
+      }
+    }
+    return Object.fromEntries(COMPANY_COLS.split(',').map((col) => [col, data[col] || '']));
+  };
   // บันทึกการปรับปรุง: written next to an admin change. A missing table (SQL not run yet) never blocks the change.
   const logRev = async (t, req, area, ref, detail) => {
     if (!detail) return;
@@ -312,7 +337,7 @@ export function mountCfo(app) {
     const adminNow = (await accessOf(req, activity, thisYear())).admin;
     await autoFillEf3(t, req, adminNow);
     await autoSyncSap(t, req, adminNow);
-    const [scopes, gwp, ef, refs, activities, used, settings, access] = await Promise.all([
+    const [scopes, gwp, ef, refs, activities, used, settings, access, company] = await Promise.all([
       fetchAll(() => tx.from(t.cfoScope).select('*').order('scope').order('code')),
       fetchAll(() => tx.from(t.gwp).select('*').order('code')),
       fetchAll(() => tx.from(t.ef).select('*').order('scope_code').order('id')),
@@ -320,7 +345,8 @@ export function mountCfo(app) {
       fetchAll(() => tx.from(t.activity).select('*').order('department').order('id')),
       fetchAll(() => tx.from(t.entry).select('ef_id,activity_id,gwp_code').order('id')),
       settingsOf(t),
-      accessOf(req, activity, thisYear())
+      accessOf(req, activity, thisYear()),
+      companyProfile(t)
     ]);
     const usageEf = await fetchAll(() => tx.from(t.usageEf).select('*').order('id')).catch(() => []); // before db/act/cfo.sql 2026-11-09
     const usedEf = new Set(used.map((u) => u.ef_id));
@@ -328,7 +354,7 @@ export function mountCfo(app) {
     const usedAct = new Set(used.map((u) => u.activity_id));
     res.json({
       admin: access.admin || await adminNext(req, activity),
-      scopes, settings, refs,
+      scopes, settings, company, refs,
       gwp: gwp.map((g) => ({ ...g, used: usedGwp.has(g.code) })),
       ef: ef.map((e) => ({ ...e, used: usedEf.has(e.id) })),
       activities: activities.map((a) => ({ ...a, used: usedAct.has(a.id) })),
@@ -1371,14 +1397,39 @@ export function mountCfo(app) {
     const slot = [1, 2].includes(Number(req.body?.slot)) ? Number(req.body.slot) : 0;
     const bytes = imageBytes(req.body?.image);
     if (!slot || !bytes) return fail(res, 400, 'รูปต้องเป็น JPEG ไม่เกิน 700 KB');
+    const col = slot === 1 ? 'photo1' : 'photo2';
     const key = `company/photo${slot}_${Date.now()}.jpg`;
     const uploaded = await tx.storage.from(t.bucket).upload(key, new Uint8Array(bytes), { contentType: 'image/jpeg', upsert: false });
     if (uploaded.error) return fail(res, 400, /bucket/i.test(String(uploaded.error.message)) ? `ยังไม่ได้สร้างที่เก็บรูป ${t.bucket} ใน Tx Data` : 'อัปโหลดรูปไม่ได้');
     const url = tx.storage.from(t.bucket).getPublicUrl(key).data.publicUrl;
-    const was = must(await tx.from(t.setting).select('value').eq('key', `company_photo${slot}`).maybeSingle());
-    must(await tx.from(t.setting).upsert([{ key: `company_photo${slot}`, value: url }], { onConflict: 'key' }));
-    if (was?.value && was.value !== url) await dropFiles(tx, t.bucket, was.value);
+    const was = await mx.from('mt_main_company').select(col).eq('id', 'main').maybeSingle();
+    if (was.error) {
+      await dropFiles(tx, t.bucket, url);
+      return fail(res, 400, 'ยังไม่มีคอลัมน์รูปใน mt_main_company ให้รัน SQL ก่อน');
+    }
+    const { error } = await mx.from('mt_main_company').update({ [col]: url }).eq('id', 'main');
+    if (error) {
+      await dropFiles(tx, t.bucket, url);
+      return fail(res, 400, 'บันทึกรูปบริษัทไม่ได้');
+    }
+    if (was.data?.[col] && was.data[col] !== url) await dropFiles(tx, t.bucket, was.data[col]);
     res.status(201).json({ url });
+  });
+
+  route('put', '/api/act/:activity/cfo/company', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    const before = await companyProfile(null);
+    if (!before) return fail(res, 400, 'ยังไม่มีคอลัมน์ข้อมูลบริษัทใน mt_main_company ให้รัน SQL ก่อน');
+    const patch = {};
+    for (const [col] of COMPANY_FROM) {
+      if (!Object.hasOwn(req.body || {}, col)) continue;
+      patch[col] = String(req.body[col] ?? '').trim().slice(0, col.startsWith('photo') ? 1000 : 500);
+    }
+    if (!Object.keys(patch).length) return fail(res, 400, 'ไม่มีข้อมูลให้บันทึก');
+    const { error } = await mx.from('mt_main_company').update(patch).eq('id', 'main');
+    if (error) return fail(res, 400, 'บันทึกข้อมูลบริษัทไม่ได้');
+    await logRev(t, req, 'ข้อมูลบริษัท', 'mt_main_company', changes(before, patch, Object.keys(patch).filter((k) => !k.startsWith('photo'))));
+    res.json({ ok: true });
   });
 
   route('put', '/api/act/:activity/cfo/settings', async (req, res, activity, t) => {
@@ -1388,8 +1439,7 @@ export function mountCfo(app) {
     const before = await settingsOf(t);
     must(await tx.from(t.setting).upsert(rows, { onConflict: 'key' }));
     const after = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-    await dropFiles(tx, t.bucket, Object.keys(after).filter((k) => k.startsWith('company_photo') && before[k] && before[k] !== after[k]).map((k) => before[k]));
-    await logRev(t, req, 'ตั้งค่า', null, changes(before, after, Object.keys(after).filter((k) => !k.startsWith('company_photo'))));
+    await logRev(t, req, 'ตั้งค่า', null, changes(before, after, Object.keys(after)));
     res.json({ ok: true });
   });
 
