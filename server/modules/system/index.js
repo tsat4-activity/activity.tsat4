@@ -68,6 +68,15 @@ function pngBytes(dataUrl) {
   return bytes;
 }
 
+// img_main was created JPEG-only. A logo PNG is rejected until the bucket allows image/png.
+async function allowPng(client) {
+  const opts = { public: true, fileSizeLimit: 716800, allowedMimeTypes: ['image/jpeg', 'image/png'] };
+  const updated = await client.storage.updateBucket(PHOTO_BUCKET, opts);
+  if (!updated.error) return true;
+  const created = await client.storage.createBucket(PHOTO_BUCKET, opts);
+  return !created.error;
+}
+
 // New photo -> upload and return its link · '' -> null (remove) · not sent -> undefined (unchanged) · bad -> { error }.
 async function photoValue(raw, { client, table, rowId }) {
   if (raw === undefined) return undefined;
@@ -77,7 +86,13 @@ async function photoValue(raw, { client, table, rowId }) {
   if (!bytes) return { error: png ? 'โลโก้ต้องเป็น PNG ไม่เกิน 700 KB' : 'รูปต้องเป็น JPEG ไม่เกิน 700 KB' };
   const ext = png ? 'png' : 'jpg';
   const key = `${table}/${String(rowId).replace(/[^A-Za-z0-9_-]/g, '_')}-${Date.now()}.${ext}`;
-  const uploaded = await client.storage.from(PHOTO_BUCKET).upload(key, new Uint8Array(bytes), { contentType: png ? 'image/png' : 'image/jpeg', upsert: false });
+  const type = png ? 'image/png' : 'image/jpeg';
+  let uploaded = await client.storage.from(PHOTO_BUCKET).upload(key, new Uint8Array(bytes), { contentType: type, upsert: false });
+  if (uploaded.error && png && /mime type/i.test(uploaded.error.message || '')) {
+    if (await allowPng(client)) {
+      uploaded = await client.storage.from(PHOTO_BUCKET).upload(key, new Uint8Array(bytes), { contentType: type, upsert: false });
+    }
+  }
   if (uploaded.error) return { error: `อัปโหลดรูปไม่ได้: ${uploaded.error.message}` };
   return client.storage.from(PHOTO_BUCKET).getPublicUrl(key).data.publicUrl;
 }
