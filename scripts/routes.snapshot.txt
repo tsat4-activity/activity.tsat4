@@ -77,6 +77,7 @@ POST /api/act/:activity/areas auth
 POST /api/act/:activity/audits auth
 POST /api/act/:activity/cfo/activities auth
 POST /api/act/:activity/cfo/activities/fill-ef3 auth
+POST /api/act/:activity/cfo/activities/import auth
 POST /api/act/:activity/cfo/confirm auth
 POST /api/act/:activity/cfo/gwp auth
 POST /api/act/:activity/cfo/mat-groups auth

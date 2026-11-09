@@ -1202,6 +1202,83 @@ export function mountCfo(app) {
     await logRev(t, req, 'กิจกรรม', `${current.department} · ${current.name}`, changes(current, row, Object.keys(row)));
     res.json({ ok: true });
   });
+  // Setting > Activities > Import (ผู้ใช้กำหนด 2026-11-09, ข้อมูลเยอะ): the file of Export · rows [{ id?, department, name, detail,
+  // scope_code, calc, ef_code, usage_id, costcenter, gwp_code, status }] · id of an activity = edit it, empty = add ·
+  // EF = ef_code (EF CFP / CFO id) or, for calc usage, the Usage_ef of usage_id · sap rows (made by the system) are skipped ·
+  // every row is checked first, one wrong row = nothing saved · save false = check only · 3-3 of an activity is left as it is
+  route('post', '/api/act/:activity/cfo/activities/import', async (req, res, activity, t) => {
+    if (!(await requireAdminNow(req, res, activity))) return;
+    const list = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
+    if (!list.length) return fail(res, 400, 'ยังไม่มีข้อมูล');
+    const [acts, refList, efs, scopes, gwps, items] = await Promise.all([
+      fetchAll(() => tx.from(t.activity).select('*')),
+      fetchAll(() => tx.from(t.efRef).select('id,code,sheet,unit,total').not('code', 'is', null)),
+      fetchAll(() => tx.from(t.ef).select('id,ref_id,scope_code,separate')),
+      fetchAll(() => tx.from(t.cfoScope).select('code')),
+      fetchAll(() => tx.from(t.gwp).select('code')),
+      fetchAll(() => tx.from(t.usageEf).select('id,status')).catch(() => [])
+    ]);
+    const actById = new Map(acts.map((a) => [a.id, a]));
+    const refByCode = new Map(refList.map((r) => [String(r.code).toUpperCase(), r]));
+    const efById = new Map(efs.map((e) => [e.id, e]));
+    const scopeOk = new Set(scopes.map((s) => s.code));
+    const gwpOk = new Set(gwps.map((g) => g.code));
+    const itemOk = new Set(items.map((x) => x.id));
+    const pairOf = new Map(acts.filter((a) => a.usage_id).map((a) => [`${a.usage_id}|${String(a.costcenter || '').toUpperCase()}`, a.id]));
+    const errors = [];
+    const work = [];
+    let skipped = 0;
+    for (const [i, b] of list.entries()) {
+      const at = `แถว ${b.line || i + 1}`;
+      const id = Number(b.id) || null;
+      const current = id ? actById.get(id) : null;
+      if (id && !current) { errors.push(`${at}: ไม่พบกิจกรรม id ${id}`); continue; }
+      const calc = String(b.calc || '').trim();
+      if (calc === 'sap' || current?.calc === 'sap') { skipped += 1; continue; }
+      if (calc && !CFO_CALCS[calc] && calc !== 'usage') { errors.push(`${at}: สูตร ${calc} ไม่รู้จัก (septic / tkm / km_fuel / usage หรือว่าง)`); continue; }
+      const scope = String(b.scope_code || '').trim();
+      if (!scopeOk.has(scope)) { errors.push(`${at}: หมวด ${scope || '(ว่าง)'} ไม่ถูกต้อง เช่น 1-1, 3-1`); continue; }
+      const gwp = String(b.gwp_code || '').trim() || 'AR5';
+      if (!gwpOk.has(gwp)) { errors.push(`${at}: ไม่พบ GWP ${gwp}`); continue; }
+      if (!String(b.department || '').trim()) { errors.push(`${at}: ระบุหน่วยงาน`); continue; }
+      const body = { department: b.department, name: b.name, detail: b.detail, gwp_code: gwp, calc, status: b.status, scope_code: scope, type: scope[0] };
+      if (calc === 'usage') {
+        const cc = String(b.costcenter || '').trim().replace(/\.0+$/, '').toUpperCase();
+        if (!itemOk.has(String(b.usage_id || '').trim())) { errors.push(`${at}: ไม่พบ Id_usage ${b.usage_id || '(ว่าง)'} (Setting > EF SAP)`); continue; }
+        if (!cc) { errors.push(`${at}: ระบุ costcenter`); continue; }
+        const other = pairOf.get(`${String(b.usage_id).trim()}|${cc}`);
+        if (other && other !== id) { errors.push(`${at}: ${b.usage_id} · ${cc} มีกิจกรรมแล้ว (id ${other})`); continue; }
+        pairOf.set(`${String(b.usage_id).trim()}|${cc}`, id || -1 - i);
+        Object.assign(body, { usage_id: String(b.usage_id).trim(), costcenter: cc });
+      } else {
+        if (!String(b.name || '').trim()) { errors.push(`${at}: ระบุชื่อกิจกรรม`); continue; }
+        const code = String(b.ef_code || '').trim().toUpperCase();
+        const ref = code ? refByCode.get(code) : null;
+        const ef = current ? efById.get(current.ef_id) : null;
+        if (code && !ref) { errors.push(`${at}: ไม่พบ EF id ${code}`); continue; }
+        if (code && (!ref.unit || ref.total == null)) { errors.push(`${at}: ${code} เป็นหัวข้อ ไม่มีค่า EF`); continue; }
+        // the same EF as now (same reference row and หมวด) keeps its copy, so the months saved keep theirs
+        if (ef && (!code || ef.ref_id === ref?.id) && ef.scope_code === scope) body.ef_id = ef.id;
+        else if (ref) { body.ref_id = ref.id; if (ef?.separate) body.type = 'sep'; }
+        else if (calc !== 'septic') { errors.push(`${at}: ระบุ EF id (เช่น CFP-0001)`); continue; }
+      }
+      work.push({ id, body, current });
+    }
+    if (errors.length) return fail(res, 400, `ไม่ได้บันทึก มี ${errors.length} แถวที่ผิด: ${errors.slice(0, 5).join(' · ')}${errors.length > 5 ? ' …' : ''}`);
+    const add = work.filter((w) => !w.id).length;
+    if (req.body?.save === false) return res.json({ ok: true, saved: false, add, update: work.length - add, skipped });
+    let done = 0;
+    for (const w of work) {
+      const { row, error } = await activityInput(t, w.body);
+      if (error) return fail(res, 400, `บันทึกได้ ${done} แถว แล้วหยุดที่ ${w.id ? `id ${w.id}` : `แถวใหม่ ${w.body.name || w.body.usage_id}`}: ${error}`);
+      if (w.id) must(await tx.from(t.activity).update(row).eq('id', w.id));
+      else must(await tx.from(t.activity).insert(row));
+      done += 1;
+    }
+    await logRev(t, req, 'กิจกรรม', `Import ${work.length} แถว`, `เพิ่ม ${add} · แก้ ${work.length - add}`);
+    res.json({ ok: true, add, update: work.length - add, skipped });
+  });
+
   // Fill the 3-3 line of every fuel activity that has none (ผู้ใช้กำหนด 2026-11-03), the pick the activity form makes:
   // Diesel / B7 → EF CFP น้ำมันดีเซล, Gasohol / gasoline → แก๊สโซลีน, LPG → ก๊าซหุงต้ม (กลั่น) · litres × density (Fuel Properties)
   // · the months already recorded get it too. Scope 1 (1-1, 1-2) and Scope 3 (not 3-3); electricity and refrigerants are left.

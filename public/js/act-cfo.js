@@ -882,7 +882,7 @@ function cfoSetActivities(body, m, rerender) {
       ${field('Scope', `<select id="cfo-f-scope">${options(['', '1', '2', '3'], cfoFilter.scope, (v) => (v ? `Scope ${v}` : 'ทั้งหมด'))}</select>`)}
       ${field('หน่วยงาน', `<select id="cfo-f-dept">${options(['', ...departments], cfoFilter.department, (v) => v || 'ทั้งหมด')}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'ชื่อกิจกรรม' })}
-      ${m.admin ? `<div class="action-bar">${button('cfo-fill3', 'เติม 3-3')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
+      <div class="action-bar">${button('cfo-act-export', 'Export')}${m.admin ? `${button('cfo-act-import', 'Import')}${button('cfo-fill3', 'เติม 3-3')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}` : ''}</div>
     </div>
     <div class="table-wrap sheet" id="cfo-rows"></div>
     <p class="sum-meta">${m.activities.length} กิจกรรม · กิจกรรมที่มีข้อมูลแล้วลบไม่ได้ ให้ตั้งเป็น Inactive</p>`;
@@ -895,7 +895,14 @@ function cfoSetActivities(body, m, rerender) {
   const search = () => { cfoFilter.q = $('cfo-f-q').value; draw(); };
   $('cfo-f-search').onclick = search;
   onEnter('cfo-f-q', search);
+  // Export / Import (ผู้ใช้กำหนด 2026-11-09): row 1 = keys, row 2 = Thai labels · Import: id = edit, empty = add
+  $('cfo-act-export').onclick = () => cfoDownload(`CFO_activities_${new Date().toISOString().slice(0, 10)}.csv`, [
+    CFO_ACT_FILE.map(([k]) => k), CFO_ACT_FILE.map(([, label]) => label),
+    ...m.activities.map((a) => { const ef = efById.get(a.ef_id) || {}; return [a.id, a.department, a.name, a.detail || '', ef.scope_code || '', a.calc || '', a.calc === 'usage' ? '' : efCode(a), a.usage_id || '', a.costcenter || '', a.gwp_code, a.status, cfoEfLabel(ef)]; })]);
   if (!m.admin) return;
+  $('cfo-act-import').onclick = () => cfoFileImport({ title: 'Import กิจกรรม', cols: CFO_ACT_FILE, path: 'cfo/activities/import',
+    hint: 'ใช้ไฟล์จากปุ่ม Export เป็นแบบ · id ที่มีอยู่ = แก้กิจกรรมนั้น · id ว่าง = เพิ่ม · EF id = รหัส EF CFP / CFO (สูตร usage ใช้ Id_usage + costcenter แทน) · กิจกรรม sap ข้าม · ตรวจทุกแถวก่อน ผิดแถวเดียวไม่บันทึกเลย',
+    done: (r) => `เพิ่ม ${r.add} · แก้ ${r.update}${r.skipped ? ` · ข้าม ${r.skipped}` : ''}`, rerender });
   const form = (a) => {
     // Scope → หมวด → Emission factor → สูตร (ผู้ใช้กำหนด 2026-11-01): each list follows the one before it.
     // EF comes from Setting > Emission Factor; an activity saved earlier keeps its own EF on top of the list.
@@ -1291,7 +1298,7 @@ async function cfoSetUsageEf(body, m, rerender) {
     <div class="toolbar a5-filters">
       ${field('กลุ่ม', `<select id="cfo-ue-grp">${options(['', ...groups], cfoUsageFilter.group, (v) => v || 'ทั้งหมด')}</select>`)}
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'Id_usage material ชื่อ กลุ่ม Id_cfp' })}
-      ${d.admin ? `<div class="action-bar">${button('cfo-import', 'Import', 'secondary', 'title="ไฟล์ Excel ชีต usage_ef (หรือ cal_ef): Id_usage · Id_cfp · group · material · material_description · bun · kgCO₂e/unit"')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}</div>` : ''}
+      <div class="action-bar">${button('cfo-ue-export', 'Export')}${d.admin ? `${button('cfo-import', 'Import', 'secondary', 'title="ไฟล์ Excel ชีต usage_ef (หรือ cal_ef): Id_usage · Id_cfp · group · material · material_description · bun · kgCO₂e/unit"')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}` : ''}</div>
     </div>
     <div class="table-wrap sheet cfo-efgrid" id="cfo-rows"></div>
     <p class="sum-meta" id="cfo-ue-count"></p>`;
@@ -1299,6 +1306,10 @@ async function cfoSetUsageEf(body, m, rerender) {
   draw();
   a5Lift(body);
   $('cfo-ue-grp').onchange = () => { cfoUsageFilter.group = $('cfo-ue-grp').value; draw(); };
+  // Export = the same columns Import reads (row 1), so the file goes back in after editing
+  $('cfo-ue-export').onclick = () => cfoDownload(`usage_ef_${new Date().toISOString().slice(0, 10)}.csv`, [
+    ['Id_usage', 'Id_cfp', 'group', 'material', 'material_description', 'bun', 'kgCO₂e/unit', 'status', 'activities'],
+    ...d.rows.map((r) => [r.id, refs.get(r.ref_id)?.code || '', r.grp, r.material, r.name, r.unit || '', r.usage_ef, r.status, r.activities || 0])]);
   const search = () => { cfoUsageFilter.q = $('cfo-f-q').value; draw(); };
   $('cfo-f-search').onclick = search;
   onEnter('cfo-f-q', search);
@@ -1348,11 +1359,11 @@ async function cfoSetUsageEf(body, m, rerender) {
         const head = (cells[0] || []).map(name);
         const at = (...keys) => head.findIndex((h) => keys.includes(h));
         const col = { id: at('id_usage', 'idusage'), ref: at('id_cfp', 'idcfp', 'ref'), group: at('group', 'กลุ่ม'), material: at('material'), name: at('material_description', 'materialdescription', 'ชื่อ', 'name'),
-          unit: at('bun', 'eun', 'unit', 'หน่วย'), value: head.findIndex((h) => h.startsWith('kgco2e') || h === 'usage_ef') };
+          unit: at('bun', 'eun', 'unit', 'หน่วย'), value: head.findIndex((h) => h.startsWith('kgco2e') || h === 'usage_ef'), status: at('status', 'สถานะ') };
         if (col.material < 0 || col.value < 0) throw new Error('ไม่พบคอลัมน์ material หรือ kgCO₂e/unit (Usage_ef) ในแถวแรก');
         const cell = (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '');
         rows = cells.slice(1).map((r, i) => ({ line: i + 2, id: cell(r, col.id), ref: cell(r, col.ref), group: cell(r, col.group), material: cell(r, col.material).replace(/\.0+$/, ''), name: cell(r, col.name),
-          unit: cell(r, col.unit), usage_ef: cell(r, col.value) })).filter((r) => r.material);
+          unit: cell(r, col.unit), usage_ef: cell(r, col.value), ...(col.status >= 0 && cell(r, col.status) ? { status: cell(r, col.status) } : {}) })).filter((r) => r.material);
         if (!rows.length) throw new Error('ไม่พบแถวข้อมูล');
         const c = await a5Api(CFO, 'cfo/usage-ef', { method: 'POST', body: { rows, save: false } });
         $('cfo-ue-result').innerHTML = `<b>${c.count} รายการ: เพิ่ม ${c.add} · แก้ ${c.update}</b>${c.noRef ? `<br>ยังไม่มี Id_cfp ${c.noRef} รายการ (คิดได้ แต่ยังไม่บอกที่มาของค่า)` : ''}
@@ -1416,6 +1427,48 @@ function cfoUsageImport(rerender) {
       ${list('มี Id_usage แต่ยังไม่มีกิจกรรมของ costcenter นี้ (เพิ่มที่ Setting > Activities)', r.noActivity, (x) => ` · ${esc(x.id)} ${esc(x.grp)}`)}${list('หน่วยไม่ตรงกับ usage_ef', r.unitWrong, (x) => ` (usage_ef ใช้ ${esc(x.want)})`)}
       ${list('กิจกรรมของหน่วยงานอื่น (ไม่ใช่ของคุณ)', r.notYours, (x) => ` · ${esc(x.department)}`)}${list('ไม่มีใน usage_ef (ไม่คิด)', r.noItem)}`;
   }).catch(onErr);
+}
+
+// Setting > Activities file (Export / Import): [key, Thai label] · ef_label is for reading only
+const CFO_ACT_FILE = [['id', 'id (ว่าง = เพิ่มใหม่)'], ['department', 'หน่วยงาน'], ['name', 'ชื่อกิจกรรม'], ['detail', 'รายละเอียด'], ['scope_code', 'หมวด (เช่น 1-1, 3-1)'],
+  ['calc', 'สูตร (septic / tkm / km_fuel / usage / ว่าง)'], ['ef_code', 'EF id'], ['usage_id', 'Id_usage'], ['costcenter', 'costcenter'], ['gwp_code', 'GWP'],
+  ['status', 'สถานะ (Active / Inactive)'], ['ef_label', 'Emission factor (ไว้ดู)']];
+
+// Import popup for a file made by Export: row 1 = keys (or the Thai labels), row 2 = labels (skipped) · check → save
+function cfoFileImport({ title, cols, path, hint, done, rerender }) {
+  let rows = null;
+  openPopup(title, `
+    ${field('ไฟล์ Excel (.xlsx) หรือ CSV', '<input id="cfo-fi-file" type="file" accept=".xlsx,.xls,.csv">')}
+    <p class="sum-meta">${hint}</p>
+    <div id="cfo-fi-result" class="sum-meta"></div>`, async () => {
+    if (!rows) throw new Error('เลือกไฟล์ก่อน');
+    const r = await a5Api(CFO, path, { method: 'POST', body: { rows } });
+    toast(`นำเข้าแล้ว ${done(r)}`);
+    closePopup();
+    rerender();
+  }, 'นำเข้า');
+  $('cfo-fi-file').onchange = async () => {
+    const file = $('cfo-fi-file').files[0];
+    rows = null;
+    if (!file) return;
+    $('cfo-fi-result').textContent = 'กำลังอ่านไฟล์...';
+    try {
+      const cells = (await cfoReadSheetFile(file)).filter((r) => r.some((c) => String(c ?? '').trim() !== ''));
+      const name = (h) => String(h ?? '').trim().toLowerCase();
+      const head = (cells[0] || []).map(name);
+      const at = Object.fromEntries(cols.map(([k, label]) => [k, head.findIndex((h) => h === k || h === name(label))]));
+      if (cols.filter(([k]) => k !== 'id' && k !== 'ef_label').every(([k]) => at[k] < 0)) throw new Error('ไม่พบหัวคอลัมน์ในแถวแรก ใช้ไฟล์จากปุ่ม Export เป็นแบบ');
+      const isLabel = (r) => cols.every(([k, label]) => at[k] < 0 || name(r[at[k]]) === name(label) || name(r[at[k]]) === '');
+      rows = cells.slice(1).map((r, i) => ({ r, line: i + 2 })).filter(({ r }) => !isLabel(r))
+        .map(({ r, line }) => ({ line, ...Object.fromEntries(cols.filter(([k]) => at[k] >= 0).map(([k]) => [k, String(r[at[k]] ?? '').trim().replace(/^(\d+)\.0+$/, '$1')])) }));
+      if (!rows.length) throw new Error('ไม่พบแถวข้อมูล');
+      const c = await a5Api(CFO, path, { method: 'POST', body: { rows, save: false } });
+      $('cfo-fi-result').innerHTML = `<b>${rows.length.toLocaleString()} แถว · ${done(c)}</b> · กด นำเข้า เพื่อบันทึก`;
+    } catch (err) {
+      rows = null;
+      $('cfo-fi-result').textContent = err.message;
+    }
+  };
 }
 
 // File columns of a reference table (Export writes them, Import reads them by the key in row 1; row 2 = Thai label, skipped)
