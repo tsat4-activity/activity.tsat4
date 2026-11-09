@@ -93,9 +93,10 @@ function a5Lift(body) {
       else if (child.matches('.action-bar, .btn') || box.classList.contains('a5-actions')) groups.action.push(child);
       else groups.filter.push(child);
     });
-    if (!box.children.length) box.remove();
   });
   tools.append(...groups.filter, ...groups.search, ...groups.action);
+  // drop the emptied boxes only now: an empty box left in the body still took a gap above the tiles
+  body.querySelectorAll(':scope > .a5-actions, :scope > .a5-filters').forEach((box) => { if (!box.children.length) box.remove(); });
 }
 
 // ---------- Dashboard ----------

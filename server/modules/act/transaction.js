@@ -1,5 +1,6 @@
 import { tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
+import { dropFiles } from '../../core/storage.js';
 import { ensure5sMaster } from './audit.js';
 import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, roundTo, tablesOf, viewerOf, yearOf } from './common.js';
 
@@ -174,7 +175,7 @@ export function mountTransaction(app) {
       settingsOf(activity, audit.year),
       tx.from(t.checklist).select('id,item_no,s_group,title,score_max,status').eq('year', audit.year).order('item_no'),
       tx.from(t.score).select('checklist_id,score').eq('audit_id', audit.id),
-      tx.from(t.issue).select('id,checklist_id,score,status,action_description,photo_after').eq('audit_id', audit.id),
+      tx.from(t.issue).select('id,checklist_id,score,status,action_description,photo_before,photo_after').eq('audit_id', audit.id),
       audit.audit_type === 'COMMITTEE' ? openIssuesOf(t, audit.area_id, audit.id, audit.audited_at.slice(0, 10)) : []
     ]);
     const stored = new Map(must(storedRes).map((s) => [s.checklist_id, Number(s.score)]));
@@ -211,7 +212,10 @@ export function mountTransaction(app) {
     must(await tx.from(t.audit).update(auditPatch).eq('id', audit.id));
     must(await tx.from(t.score).delete().eq('audit_id', audit.id));
     must(await tx.from(t.score).insert(items.map((i) => ({ audit_id: audit.id, checklist_id: i.id, score: scores.get(i.id) }))));
-    if (drop.length) must(await tx.from(t.issue).delete().in('id', drop.map((i) => i.id)));
+    if (drop.length) {
+      must(await tx.from(t.issue).delete().in('id', drop.map((i) => i.id)));
+      await dropFiles(tx, t.bucket, drop.map((i) => [i.photo_before, i.photo_after]));
+    }
     const created = await insertIssues(t, { auditId: audit.id, year: audit.year, areaId: audit.area_id, auditedAt, needIssue, scores, described, daysBefore: settings.issue_due_days_before_next });
     // Keep the score on the audit's own remaining Issues in step with the edited item scores.
     await Promise.all(own.filter((x) => !drop.includes(x) && Number(scores.get(x.checklist_id)) !== Number(x.score)).map(async (i) => {
@@ -351,7 +355,9 @@ export function mountTransaction(app) {
     const audit = must(await tx.from(t.audit).select('id,year,audit_no').eq('id', Number(req.params.id)).maybeSingle());
     if (!audit) return fail(res, 404, 'ไม่พบใบตรวจ');
     if (!(await accessOf(req, activity, audit.year)).admin) return fail(res, 403, `ลบได้เฉพาะ admin ปี ${audit.year}`);
+    const photos = must(await tx.from(t.issue).select('photo_before,photo_after').eq('audit_id', audit.id)); // its Issues go with it (on delete cascade)
     must(await tx.from(t.audit).delete().eq('id', audit.id));
+    await dropFiles(tx, t.bucket, photos.map((i) => [i.photo_before, i.photo_after]));
     res.json({ ok: true });
   });
 

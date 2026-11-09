@@ -4,6 +4,8 @@ import { fail, wrap, cleanTerm, adminWriteError, listFilters } from '../../core/
 import { ADMIN_SCOPES, CREATOR_ID, MEMBER_TABLES, creatorOnly, defineModule } from '../../core/access.js';
 import { clearUserCache, requireUser } from '../../core/users.js';
 import { MAIN_TABLES } from '../../core/tables.js';
+import { dropFiles } from '../../core/storage.js';
+import { storageOrphans } from './storage-clean.js';
 import { imageBytes } from '../act/common.js';
 
 // Photo columns (type 'photo', e.g. mt_main_employee.photo 2.5:3): the browser sends a cropped JPEG data URL,
@@ -228,7 +230,8 @@ export default defineModule({
       const key = req.body?.key || {};
       if (!hasKey(spec, key)) return fail(res, 400, 'ไม่พบแถวที่แก้');
       let current = null;
-      if (spec.columns.some((column) => CHOICES[column.type] || column.type === 'dept')) {
+      const photoCols = spec.columns.filter((column) => column.type === 'photo' || column.type === 'logo').map((column) => column.name);
+      if (photoCols.length || spec.columns.some((column) => CHOICES[column.type] || column.type === 'dept')) {
         let read = client.from(req.params.name).select('*');
         for (const column of spec.pk) read = read.eq(column, key[column]);
         current = (await read.maybeSingle()).data || null;
@@ -250,8 +253,18 @@ export default defineModule({
       const { data, error } = await query.select(spec.pk.join(','));
       if (error) return fail(res, 400, adminWriteError(error, 'แก้ไขแถวไม่ได้'));
       if (!data?.length) return fail(res, 400, 'แก้ไขแถวไม่ได้');
+      // a replaced or removed photo / logo leaves the bucket too
+      await dropFiles(client, PHOTO_BUCKET, photoCols.filter((name) => name in changed && current?.[name] && current[name] !== changed[name]).map((name) => current[name]));
       clearUserCache();
       res.json({ ok: true });
+    }));
+
+    // ล้างไฟล์ค้าง: GET counts the left-over files, POST removes them (storage-clean.js)
+    app.get('/api/system/storage/orphans', wrap(requireUser), creatorOnly, wrap(async (_req, res) => {
+      res.json(await storageOrphans(tables));
+    }));
+    app.post('/api/system/storage/orphans', wrap(requireUser), creatorOnly, wrap(async (_req, res) => {
+      res.json(await storageOrphans(tables, { remove: true }));
     }));
 
     app.delete('/api/system/tables/:name', wrap(requireUser), creatorOnly, wrap(async (req, res) => {
@@ -263,8 +276,10 @@ export default defineModule({
       if (isAccount(req.params.name) && String(key.employee_id) === CREATOR_ID) return fail(res, 400, 'ลบผู้สร้างระบบไม่ได้');
       let query = client.from(req.params.name).delete();
       for (const column of spec.pk) query = query.eq(column, key[column]);
-      const { error } = await query;
+      const { data: gone, error } = await query.select('*');
       if (error) return fail(res, 400, adminWriteError(error, 'ลบแถวไม่ได้'));
+      const photoCols = spec.columns.filter((column) => column.type === 'photo' || column.type === 'logo').map((column) => column.name);
+      await dropFiles(client, PHOTO_BUCKET, (gone || []).flatMap((row) => photoCols.map((name) => row[name])));
       clearUserCache();
       res.json({ ok: true });
     }));

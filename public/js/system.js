@@ -109,7 +109,8 @@ async function renderSystem(target) {
     ${field('งาน / กิจกรรม', '<select id="sys-unit"></select>')}
     ${field('ตาราง', '<select id="sys-table"></select>', 'grow')}
     ${searchSlot('ค้นหา', 'sys-q', 'sys-search', { grow: true })}
-    ${crudBar('sys')}`);
+    ${crudBar('sys')}
+    ${button('sys-clean', 'ล้างไฟล์ค้าง', 'secondary', 'title="ลบรูป / ไฟล์ใน Storage ที่ไม่มีข้อมูลไหนใช้แล้ว"')}`);
   const tableOf = () => catalog.tables.find((table) => table.name === $('sys-table').value);
   const tablesIn = (group, unit) => catalog.tables.filter((table) => { const [g, u] = sysUnitOf(table.name); return g === group && u === unit; });
   // งาน / กิจกรรม list with its table count; ตาราง list of the chosen unit only.
@@ -221,8 +222,24 @@ async function renderSystem(target) {
       await loadRows();
     });
   };
+  $('sys-clean').onclick = () => sysCleanStorage().catch(onErr);
   bindPager('sys', state, loadRows);
   await loadRows();
+}
+
+// ล้างไฟล์ค้าง (ผู้ใช้กำหนด 2026-11-09): count first, then remove after the creator confirms.
+const sysSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
+async function sysCleanStorage() {
+  toast('กำลังตรวจไฟล์ใน Storage...');
+  const scan = await api('/api/system/storage/orphans');
+  const rows = scan.folders.filter((f) => f.files || f.error);
+  const lines = rows.map((f) => `${esc(f.bucket)}/${esc(f.prefix)} · ${f.files} ไฟล์ ${sysSize(f.bytes)}${f.error ? ` · ข้าม (${esc(f.error)})` : f.left ? ` · <b>ค้าง ${f.left} ไฟล์ ${sysSize(f.leftBytes)}</b>` : ''}`).join('<br>');
+  const head = `ไฟล์ทั้งหมด ${sysSize(scan.bytes)} จากพื้นที่ฟรี 1 GB`;
+  if (!scan.left) return openPopup('ล้างไฟล์ค้าง', `<p class="sum-meta">${head} · ไม่มีไฟล์ค้าง<br><br>${lines}</p>`, async () => closePopup(), 'ปิด');
+  confirmPopup('ล้างไฟล์ค้าง', `${head} · พบไฟล์ที่ไม่มีข้อมูลไหนใช้แล้ว <b>${scan.left} ไฟล์ ${sysSize(scan.leftBytes)}</b> (นับเฉพาะไฟล์ที่เก่ากว่า 1 วัน)<br><br>${lines}<br><br>ลบแล้วกู้คืนไม่ได้`, async () => {
+    const done = await api('/api/system/storage/orphans', { method: 'POST' });
+    toast(`ลบไฟล์ค้างแล้ว ${done.removed || 0} ไฟล์`);
+  }, `ลบ ${scan.left} ไฟล์`);
 }
 
 VIEWS.system = renderSystem;

@@ -123,6 +123,7 @@ TSAT4 Activity = ระบบกิจกรรม 5S · CFO · SMF เว็บ
 - ไฟล์ใน `public/js/` ใช้ global scope ร่วมกัน ชื่อ top-level ห้ามซ้ำกันข้ามไฟล์ ให้ใส่ prefix ของโมดูล เช่น `a5Render`, `A5_ROLE_LABEL`
 - ฐานข้อมูล: client `mx` = ตารางกลาง `mt_main_*` · client `tx` = ตารางกิจกรรม `mt_<กิจกรรม>_*` / `tx_<กิจกรรม>_*` (ตอนนี้ทั้งคู่ชี้ Supabase โปรเจกต์เดียวกัน)
 - รูปของกิจกรรมเก็บใน Supabase Storage ของ Tx Data แยก bucket ต่อกิจกรรม ชื่อ `img_<กิจกรรม>` (เช่น `img_5s`) สร้างมาพร้อม `db/act/<กิจกรรม>.sql` · ชื่อในโค้ดใช้ `tablesOf(กิจกรรม).bucket`
+- ลบแถว / เปลี่ยนรูปที่มีไฟล์ใน Storage ต้องลบไฟล์ด้วย `dropFiles(client, bucket, links)` จาก `server/core/storage.js` หลังลบข้อมูลสำเร็จ (ผู้ใช้กำหนด 2026-11-09) · อัปโหลดโฟลเดอร์ใหม่ใน bucket ให้เพิ่มที่มาของลิงก์ใน `server/modules/system/storage-clean.js` ด้วย ไม่งั้นปุ่ม ล้างไฟล์ค้าง จะข้ามโฟลเดอร์นั้น
 - ตารางกิจกรรมสร้างจากแม่แบบเท่านั้น: `node scripts/act-sql.js <กิจกรรม>` → `db/act/<กิจกรรม>.sql` ห้ามแก้ไฟล์ใน db/act/ ด้วยมือ (แก้ที่ scripts/act-sql.js แล้วสร้างใหม่) และชื่อตารางในโค้ดมาจาก `tablesOf()` ใน server/modules/act/common.js
 
 ### ฐานข้อมูล

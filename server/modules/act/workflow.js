@@ -1,11 +1,13 @@
 import { tx } from '../../core/db.js';
 import { fail, wrap } from '../../core/http.js';
+import { dropFiles } from '../../core/storage.js';
 import { requireUser } from '../../core/users.js';
 import { accessOf } from './common.js';
 
 const T_IDEAS = 'automation_ideas';
 const T_IMAGES = 'automation_images';
 const T_EVALS = 'automation_evaluations';
+const BUCKET = 'img_smf'; // photos uploaded under workflow/
 
 // Work Flow belongs to SMF: its ผู้ดูแล of this year (Smart Team, ผู้ประสานงาน), or the ผู้ดูแลระบบ. A ผู้บริหาร reads only.
 const isAdmin = async (req) => (await accessOf(req, 'smf', new Date().getFullYear())).admin;
@@ -79,7 +81,7 @@ export function mountWorkflow(app) {
             const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
             const buffer = Buffer.from(matches[2], 'base64');
             const fileName = `workflow/${ideaId}_${(img.image_type === 'AFTER' ? 'after' : 'before').toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-            const bucket = 'img_smf';
+            const bucket = BUCKET;
             const up = await tx.storage.from(bucket).upload(fileName, buffer, { contentType: `image/${matches[1]}`, upsert: true });
             if (!up.error) {
               finalUrl = tx.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
@@ -426,12 +428,14 @@ export function mountWorkflow(app) {
       const fresh = b.images.filter((img) => img?.image_url && !img.id);
       if (fresh.some((img) => !imageUrl(img.image_url))) return fail(res, 400, 'รูปภาพไม่ถูกต้อง');
       const kept = new Set(b.images.filter((img) => img?.id).map((img) => Number(img.id)));
-      const table = tx ? await tx.from(T_IMAGES).select('id').eq('idea_id', id) : { data: [] };
+      const table = tx ? await tx.from(T_IMAGES).select('id,image_url').eq('idea_id', id) : { data: [] };
       if (table.error && !tableMissing(table.error)) throw table.error;
-      const gone = (table.data || []).map((img) => img.id).filter((x) => !kept.has(x));
+      const goneRows = (table.data || []).filter((img) => !kept.has(img.id));
+      const gone = goneRows.map((img) => img.id);
       if (gone.length) {
         const removed = await tx.from(T_IMAGES).delete().in('id', gone);
         if (removed.error) throw removed.error;
+        await dropFiles(tx, BUCKET, goneRows.map((img) => img.image_url));
       }
       await savePictures(id, fresh, useMem || !tx);
     }
@@ -448,12 +452,15 @@ export function mountWorkflow(app) {
 
     if (tx) {
       try {
+        const pics = await tx.from(T_IMAGES).select('image_url').eq('idea_id', id); // removed with the idea (on delete cascade)
         let query = tx.from(T_IDEAS).delete().eq('id', id);
         if (!admin) query = query.eq('employee_id', req.user.employeeId);
-        const { error } = await query;
+        const { data: gone, error } = await query.select('id');
         if (error) {
           if (error.code === 'PGRST205' || error.code === '42P01') useMem = true;
           else throw error;
+        } else if (gone?.length) {
+          await dropFiles(tx, BUCKET, (pics.data || []).map((img) => img.image_url));
         }
       } catch (err) {
         if (!tableMissing(err)) throw err;
@@ -496,7 +503,7 @@ export function mountWorkflow(app) {
           const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
           const buffer = Buffer.from(matches[2], 'base64');
           const fileName = `workflow/${id}_${type.toLowerCase()}_${Date.now()}.${ext}`;
-          const bucket = 'img_smf';
+          const bucket = BUCKET;
           const up = await tx.storage.from(bucket).upload(fileName, buffer, { contentType: `image/${matches[1]}`, upsert: true });
           if (!up.error) {
             finalUrl = tx.storage.from(bucket).getPublicUrl(fileName).data.publicUrl;
@@ -549,7 +556,7 @@ export function mountWorkflow(app) {
     if (!id) return fail(res, 400, 'ID ไม่ถูกต้อง');
     let image = mem.images.find((img) => img.id === id) || null;
     if (!image && tx) {
-      const found = await tx.from(T_IMAGES).select('id,idea_id').eq('id', id).maybeSingle();
+      const found = await tx.from(T_IMAGES).select('id,idea_id,image_url').eq('id', id).maybeSingle();
       if (found.error && !tableMissing(found.error)) throw found.error;
       image = found.data || null;
     }
@@ -563,6 +570,8 @@ export function mountWorkflow(app) {
         if (error) {
           if (error.code === 'PGRST205' || error.code === '42P01') useMem = true;
           else throw error;
+        } else {
+          await dropFiles(tx, BUCKET, image.image_url);
         }
       } catch (err) {
         if (!tableMissing(err)) throw err;

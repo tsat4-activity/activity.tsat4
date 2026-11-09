@@ -49,6 +49,7 @@ GET /api/company auth
 GET /api/health
 GET /api/me auth
 GET /api/system/choices auth creator
+GET /api/system/storage/orphans auth creator
 GET /api/system/tables auth creator
 GET /api/system/tables/:name auth creator
 GET /api/workflow/export auth
@@ -97,6 +98,7 @@ POST /api/act/:activity/team/copy auth
 POST /api/login
 POST /api/logout
 POST /api/password auth
+POST /api/system/storage/orphans auth creator
 POST /api/system/tables/:name auth creator
 POST /api/workflow/ideas auth
 POST /api/workflow/ideas/:id/evaluate auth

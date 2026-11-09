@@ -1,5 +1,6 @@
 import { mx, tx } from '../../core/db.js';
 import { fail } from '../../core/http.js';
+import { dropFiles } from '../../core/storage.js';
 import { accessOf, actRoute, dateOf, fetchAll, fetchIn, imageBytes, must, namesOf, requireAdmin, tablesOf, yearOf } from './common.js';
 
 // CFO (Carbon Footprint for Organization): Dashboard totals, monthly entry, and master data (EF, activities, company).
@@ -236,7 +237,7 @@ export function mountCfo(app) {
     if (act.calc === 'sap') return fail(res, 400, 'กิจกรรมนี้คิดจาก Usage (SAP) ให้วาง Usage ที่ Setting > Materials (SAP)');
     const access = await accessOf(req, activity, Number(month.slice(0, 4)));
     if (!access.admin && !access.departments.includes(act.department)) return fail(res, 403, `บันทึกได้เฉพาะตัวแทนหน่วยงาน ${act.department} หรือผู้จัดทำ`);
-    const current = must(await tx.from(t.entry).select('id,status').eq('activity_id', act.id).eq('month', month).maybeSingle());
+    const current = must(await tx.from(t.entry).select('id,status,doc').eq('activity_id', act.id).eq('month', month).maybeSingle());
     if (current?.status === 'CONFIRMED' && !access.admin) return fail(res, 400, 'เดือนนี้ยืนยันแล้ว แก้ได้เฉพาะผู้จัดทำ');
     let inputs = null;
     let qty = numOrNull(req.body?.qty);
@@ -274,11 +275,12 @@ export function mountCfo(app) {
       ...(act.ef3_id !== undefined ? { ef3_id: act.ef3_id } : {}) }; // ef3_id: column from db/act/cfo.sql 2026-11-01
     if (current) must(await tx.from(t.entry).update(row).eq('id', current.id));
     else must(await tx.from(t.entry).insert({ ...row, activity_id: act.id, month, created_by: req.user.employeeId }));
+    if (current?.doc && current.doc !== doc) await dropFiles(tx, t.bucket, current.doc); // the evidence photo was replaced or removed
     res.json({ ok: true, qty });
   });
 
   route('delete', '/api/act/:activity/cfo/entries/:id', async (req, res, activity, t) => {
-    const entry = must(await tx.from(t.entry).select('id,month,status,activity_id').eq('id', Number(req.params.id)).maybeSingle());
+    const entry = must(await tx.from(t.entry).select('id,month,status,activity_id,doc').eq('id', Number(req.params.id)).maybeSingle());
     if (!entry) return fail(res, 404, 'ไม่พบรายการ');
     const [actRes, access] = await Promise.all([
       tx.from(t.activity).select('department').eq('id', entry.activity_id).single(),
@@ -287,6 +289,7 @@ export function mountCfo(app) {
     const act = must(actRes);
     if (!access.admin && (entry.status === 'CONFIRMED' || !access.departments.includes(act.department))) return fail(res, 403, 'ลบรายการนี้ไม่ได้');
     must(await tx.from(t.entry).delete().eq('id', entry.id));
+    await dropFiles(tx, t.bucket, entry.doc);
     res.json({ ok: true });
   });
 
@@ -1057,7 +1060,9 @@ export function mountCfo(app) {
     const uploaded = await tx.storage.from(t.bucket).upload(key, new Uint8Array(bytes), { contentType: 'image/jpeg', upsert: false });
     if (uploaded.error) return fail(res, 400, /bucket/i.test(String(uploaded.error.message)) ? `ยังไม่ได้สร้างที่เก็บรูป ${t.bucket} ใน Tx Data` : 'อัปโหลดรูปไม่ได้');
     const url = tx.storage.from(t.bucket).getPublicUrl(key).data.publicUrl;
+    const was = must(await tx.from(t.setting).select('value').eq('key', `company_photo${slot}`).maybeSingle());
     must(await tx.from(t.setting).upsert([{ key: `company_photo${slot}`, value: url }], { onConflict: 'key' }));
+    if (was?.value && was.value !== url) await dropFiles(tx, t.bucket, was.value);
     res.status(201).json({ url });
   });
 
@@ -1068,6 +1073,7 @@ export function mountCfo(app) {
     const before = await settingsOf(t);
     must(await tx.from(t.setting).upsert(rows, { onConflict: 'key' }));
     const after = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    await dropFiles(tx, t.bucket, Object.keys(after).filter((k) => k.startsWith('company_photo') && before[k] && before[k] !== after[k]).map((k) => before[k]));
     await logRev(t, req, 'ตั้งค่า', null, changes(before, after, Object.keys(after).filter((k) => !k.startsWith('company_photo'))));
     res.json({ ok: true });
   });
