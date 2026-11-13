@@ -1245,3 +1245,29 @@ table.mo-data-table.wfa-list-table{table-layout:fixed;width:100%;min-width:900px
 .cfo-efgrid .cfo-ue-table :is(td,th).c-act{width:92px;min-width:92px;max-width:92px}
 .cfo-efgrid .cfo-ue-table :is(td,th).c-formula{width:150px;min-width:150px;max-width:150px}
 .cfo-efgrid .cfo-ue-table :is(td,th).c-num{width:100px;min-width:100px;max-width:100px}
+/* จอโน้ตบุ๊ก 16:9 (ผู้ใช้กำหนด 2026-11-13): พื้นที่จริง ~1030–1300px ที่ 1280 / 1366 · ตารางที่กว้างคงที่เกินจอ ให้คอลัมน์ข้อความ
+   ยืดหดได้ (ตัดเป็น … ชี้เมาส์ดูเต็ม) · ตารางที่กว้างโดยธรรมชาติ (Fr-04.1, EF) ยังเลื่อนแนวนอน แต่แคบลงบนจอกลาง */
+/* CFO Edit data: Activity · Description · emission source ยืดหด ตัวเลขคงที่ */
+.cfo-scope-table{table-layout:fixed;width:100%;min-width:880px}
+.cfo-scope-table :is(td,th):nth-child(2),.cfo-scope-table :is(td,th):nth-child(3){width:auto;max-width:none}
+.cfo-scope-table td:is(:nth-child(1),:nth-child(2),:nth-child(3)){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfo-scope-table td[colspan]{overflow:visible;white-space:nowrap}
+/* CFO Setting > Activities */
+.cfo-acts table{table-layout:fixed;width:100%;min-width:900px}
+.cfo-acts td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfo-acts :is(th,td):nth-child(1){width:90px}.cfo-acts :is(th,td):nth-child(4){width:100px}.cfo-acts :is(th,td):nth-child(6){width:160px}
+.cfo-acts :is(th,td):nth-child(7){width:150px}.cfo-acts :is(th,td):nth-child(8){width:80px}
+@media(max-width:1600px){
+  /* Setting > Scope 3 (Fr-03.2): dropdown ระดับแคบลง */
+  .cfo-s3 select{min-width:92px;width:100%}.cfo-s3 td:nth-child(2){min-width:160px}.cfo-s3 td:last-child{min-width:100px}
+  /* ตาราง EF: ชื่อ / รายละเอียด / แหล่งข้อมูล แคบลง */
+  .cfo-efgrid :is(td,th).c-name{width:220px;min-width:220px;max-width:220px}.cfo-efgrid :is(td,th).c-formula{width:150px;min-width:150px;max-width:150px}
+  .cfo-efgrid :is(td,th).c-reference{width:220px;min-width:220px;max-width:220px}.cfo-efgrid :is(td,th).c-remark{width:150px;min-width:150px;max-width:150px}
+  .cfo-efgrid .cfo-ue-table :is(td,th).c-name{width:auto;min-width:160px;max-width:none}
+}
+@media(max-width:1440px){
+  /* 5S Audit Plan / Schedule: 48 สัปดาห์พอดีจอ */
+  .a5-sched th,.a5-sched td{padding:3px 1px}
+  .a5-dot{width:13px;height:13px;font-size:7px}
+  .a5-sticky2{left:44px;min-width:110px}
+}

@@ -767,7 +767,7 @@ async function cfoEntries(target) {
   };
   const groups = [...new Set(list.map((r) => r.category))];
   // Usage (SAP) rows (calc = sap, กลุ่มวัสดุ × costcenter) come from Setting > EF SAP: shown, not recorded here
-  const row = (r) => `<tr data-pick="${r.id}"${r.canEdit ? '' : ` class="is-muted"${r.calc === 'sap' ? ' title="คิดจาก Usage (SAP) ที่วางแต่ละเดือน"' : ''}`}><td>${esc(r.name)}</td><td>${esc(r.detail || '')}</td><td>${esc(r.source || '')}</td><td class="num">${r.kgco2e == null ? '-' : cfoT(r.kgco2e)}</td>
+  const row = (r) => `<tr data-pick="${r.id}"${r.canEdit ? '' : ` class="is-muted"${r.calc === 'sap' ? ' title="คิดจาก Usage (SAP) ที่วางแต่ละเดือน"' : ''}`}><td title="${esc(r.name)}">${esc(r.name)}</td><td title="${esc(r.detail || '')}">${esc(r.detail || '')}</td><td title="${esc(r.source || '')}">${esc(r.source || '')}</td><td class="num">${r.kgco2e == null ? '-' : cfoT(r.kgco2e)}</td>
     <td><div class="cfo-prog"><span><i style="width:${r.percent}%"></i></span>${r.percent}%<b class="cfo-freq" title="รายเดือน">M</b></div></td>
     <td class="num">${cfoT(value(r, 'qty'))}</td><td>${esc(r.unit || '')}</td><td class="num">${cfoT(value(r, 'tco2e'))}</td><td>${status(r)}</td>
     <td><button class="icon-btn" type="button" data-hist="${r.id}" title="ประวัติการบันทึก" aria-label="ประวัติการบันทึก ${esc(r.name)}"><span class="material-symbols-rounded">history</span></button></td></tr>`;
@@ -937,7 +937,7 @@ function cfoSetActivities(body, m, rerender) {
       && (!cfoFilter.scope || String(efById.get(a.ef_id)?.scope_code || '').startsWith(`${cfoFilter.scope}-`))
       && (!term || `${a.name} ${a.detail || ''} ${efCode(a)}`.toLowerCase().includes(term))), cfoHeads.activities, (a, key) => (key === 'ef' ? cfoEfLabel(efById.get(a.ef_id)) : key === 'efcode' ? efCode(a) : key === 'ef3' ? ef3Label(a) : key === 'calc' ? calcLabel(a) : a[key] ?? ''));
     fillTable('cfo-rows', [{ label: 'หน่วยงาน', key: 'department' }, { label: 'กิจกรรม', key: 'name' }, { label: 'รายละเอียด', key: 'detail' }, { label: 'EF id', key: 'efcode' }, { label: 'Emission factor', key: 'ef' }, { label: '3-3 (EF id · kgCO₂e)', key: 'ef3' }, { label: 'สูตร', key: 'calc' }, { label: 'สถานะ', key: 'status' }],
-      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td>${esc(a.name)}</td><td>${esc(a.detail || '')}</td><td><b>${esc(efCode(a))}</b></td><td>${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td>${esc(ef3Label(a))}</td><td>${esc(calcLabel(a))}</td><td>${esc(a.status)}</td></tr>`).join(''), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
+      list.map((a) => `<tr data-pick="${a.id}"><td>${esc(a.department)}</td><td title="${esc(a.name)}">${esc(a.name)}</td><td title="${esc(a.detail || '')}">${esc(a.detail || '')}</td><td><b>${esc(efCode(a))}</b></td><td title="${esc(cfoEfLabel(efById.get(a.ef_id)))}">${esc(cfoEfLabel(efById.get(a.ef_id)))}</td><td title="${esc(ef3Label(a))}">${esc(ef3Label(a))}</td><td title="${esc(calcLabel(a))}">${esc(calcLabel(a))}</td><td>${esc(a.status)}</td></tr>`).join(''), 'ยังไม่มีกิจกรรม', headFor(cfoHeads.activities, draw));
     bindRowSelect($('cfo-rows'), (id) => { picked = m.activities.find((a) => String(a.id) === id); ['cfo-edit', 'cfo-del'].forEach((b) => { if ($(b)) $(b).disabled = !picked; }); });
   };
   let picked = null;
@@ -948,7 +948,7 @@ function cfoSetActivities(body, m, rerender) {
       ${searchSlot('ค้นหา', 'cfo-f-q', 'cfo-f-search', { placeholder: 'ชื่อกิจกรรม' })}
       <div class="action-bar">${button('cfo-act-export', 'Export')}${m.admin ? `${button('cfo-act-import', 'Import')}${button('cfo-fill3', 'เติม 3-3')}${button('cfo-add', 'เพิ่ม', 'primary')}${button('cfo-edit', 'แก้ไข', 'secondary', 'disabled')}${button('cfo-del', 'ลบ', 'danger', 'disabled')}` : ''}</div>
     </div>
-    <div class="table-wrap sheet" id="cfo-rows"></div>
+    <div class="table-wrap sheet cfo-acts" id="cfo-rows"></div>
     <p class="sum-meta">${m.activities.length} กิจกรรม · กิจกรรมที่มีข้อมูลแล้วลบไม่ได้ ให้ตั้งเป็น Inactive</p>`;
   $('cfo-f-q').value = cfoFilter.q;
   draw();
